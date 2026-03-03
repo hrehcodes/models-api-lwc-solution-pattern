@@ -1,4 +1,5 @@
 import { LightningElement, api, track, wire } from 'lwc';
+import AGENTFORCE_ICON from '@salesforce/resourceUrl/Agentforce_Icon';
 import sendMessage from '@salesforce/apex/RecordAdvisorController.sendMessage';
 import sendCompareMessage from '@salesforce/apex/RecordAdvisorController.sendCompareMessage';
 import generateFollowUpPrompts from '@salesforce/apex/RecordAdvisorController.generateFollowUpPrompts';
@@ -42,6 +43,8 @@ const SUGGESTED_PROMPTS = {
 const MODEL_CREDIT_MAP = {};
 
 export default class ChatPanel extends LightningElement {
+    agentforceIcon = AGENTFORCE_ICON;
+
     @api recordContextJson;
     @api objectApiName;
     @api recordName;

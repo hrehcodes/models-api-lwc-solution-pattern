@@ -25,8 +25,10 @@
     <div class="chat-messages" lwc:ref="chatContainer">
         <template lwc:if={showWelcome}>
             <div class="welcome-container slds-text-align_center slds-p-around_medium">
-                <lightning-icon icon-name="utility:einstein" size="large" class="welcome-icon slds-m-bottom_small"></lightning-icon>
-                <h2 class="slds-text-heading_small slds-m-bottom_x-small">Agentforce Record Insights</h2>
+                <div class="header-with-icon slds-grid slds-grid_vertical-align-center slds-grid_align-center slds-m-bottom_x-small">
+                    <img src={agentforceIcon} alt="Agentforce" class="agentforce-header-icon slds-m-right_x-small" />
+                    <h2 class="slds-text-heading_small slds-m-bottom_none">Agentforce Record Insights</h2>
+                </div>
                 <p class="slds-text-body_regular slds-text-color_weak slds-m-bottom_medium">
                     Ask me anything about <strong>{recordName}</strong>. I can see the fields and related records you've selected in the context panel.
                 </p>

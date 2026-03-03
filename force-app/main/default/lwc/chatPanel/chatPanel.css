@@ -37,6 +37,16 @@
     --sds-c-icon-color-foreground-default: #0070d2;
 }
 
+.header-with-icon {
+    gap: 0;
+}
+
+.agentforce-header-icon {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
 .suggested-prompts {
     display: flex;
     flex-wrap: wrap;
