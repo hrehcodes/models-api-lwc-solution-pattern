@@ -1,0 +1,39 @@
+.category-card {
+    border-radius: 8px;
+    transition: border-color 0.2s, background-color 0.2s;
+}
+
+.category-selected {
+    border-color: #0070d2;
+    background-color: #f0f8ff;
+}
+
+.category-unselected {
+    border-color: #d8dde6;
+    background-color: #ffffff;
+}
+
+.category-header {
+    display: flex;
+    align-items: center;
+}
+
+.field-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border-top: 1px solid #e5e5e5;
+}
+
+.field-item {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #f3f3f3;
+}
+
+.field-item:last-child {
+    border-bottom: none;
+}
+
+.expand-btn {
+    --sds-c-button-text-font-size: 0.75rem;
+}

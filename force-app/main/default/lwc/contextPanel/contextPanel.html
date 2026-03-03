@@ -1,0 +1,152 @@
+<template>
+    <div class="context-container slds-p-around_small">
+        <!-- Record Header -->
+        <div class="slds-m-bottom_small">
+            <div class="slds-text-title_caps slds-text-color_weak slds-m-bottom_xx-small">Context</div>
+            <template lwc:if={availableContext}>
+                <div class="record-header">
+                    <lightning-icon icon-name={objectIconName} size="x-small" class="slds-m-right_xx-small"></lightning-icon>
+                    <span class="slds-text-body_small slds-text-color_weak">{availableContext.objectLabel}</span>
+                </div>
+                <div class="slds-text-heading_small slds-m-top_xx-small slds-truncate" title={availableContext.recordName}>
+                    {availableContext.recordName}
+                </div>
+            </template>
+        </div>
+
+        <!-- Depth Selector -->
+        <div class="slds-m-bottom_small">
+            <div class="depth-selector">
+                <span class="slds-text-title slds-m-right_x-small">Depth</span>
+                <lightning-helptext
+                    content="Controls how many levels of related records are included. Depth 1 = direct children (e.g., Account's Opportunities). Depth 2 = grandchildren (e.g., each Opportunity's Products). Depth 3 = great-grandchildren. Higher depth provides richer context but uses more tokens."
+                    class="slds-m-right_x-small"
+                ></lightning-helptext>
+                <lightning-button-group>
+                    <lightning-button label="1" variant={depth1Variant} onclick={handleDepth1} class="depth-btn" title="Direct children only"></lightning-button>
+                    <lightning-button label="2" variant={depth2Variant} onclick={handleDepth2} class="depth-btn" title="Include grandchildren"></lightning-button>
+                    <lightning-button label="3" variant={depth3Variant} onclick={handleDepth3} class="depth-btn" title="Include great-grandchildren"></lightning-button>
+                </lightning-button-group>
+            </div>
+            <div class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small">{depthDescription}</div>
+        </div>
+
+        <div class="divider slds-m-bottom_small"></div>
+
+        <!-- Field Categories -->
+        <div class="slds-m-bottom_small">
+            <div class="section-header" onclick={toggleFieldsSection}>
+                <lightning-icon icon-name={fieldsExpandIcon} size="xx-small" class="slds-m-right_xx-small"></lightning-icon>
+                <span class="slds-text-title_bold">Fields</span>
+                <span class="slds-text-color_weak slds-m-left_xx-small count-badge">{totalFieldCount}</span>
+                <lightning-helptext
+                    content="Field categories control which record fields are sent to the AI as context. More fields = richer insights but higher token usage. Use the edit button to see individual fields in each category."
+                    class="slds-m-left_xx-small"
+                ></lightning-helptext>
+                <lightning-button-icon
+                    icon-name="utility:edit"
+                    alternative-text="Edit field selection"
+                    title="Open detailed field selector"
+                    size="x-small"
+                    onclick={handleFieldSelect}
+                    class="slds-m-left_auto edit-btn"
+                ></lightning-button-icon>
+            </div>
+
+            <template lwc:if={fieldsExpanded}>
+                <div class="select-all-row slds-m-top_xx-small slds-m-bottom_xx-small">
+                    <label class="slds-checkbox">
+                        <input type="checkbox" checked={allFieldsSelected} data-select-all="fields" onchange={handleSelectAllFields} />
+                        <span class="slds-checkbox_faux"></span>
+                        <span class="slds-form-element__label category-label select-all-label">Select All</span>
+                    </label>
+                </div>
+                <ul class="category-list">
+                    <template for:each={fieldCategoriesWithState} for:item="cat">
+                        <li key={cat.name} class="category-item">
+                            <label class="slds-checkbox">
+                                <input type="checkbox" checked={cat.isIncluded} data-category={cat.name} onchange={handleCategoryToggle} />
+                                <span class="slds-checkbox_faux"></span>
+                                <span class="slds-form-element__label category-label">
+                                    {cat.label}
+                                    <span class="slds-text-color_weak slds-m-left_xx-small">({cat.fieldCount})</span>
+                                </span>
+                            </label>
+                        </li>
+                    </template>
+                </ul>
+            </template>
+        </div>
+
+        <div class="divider slds-m-bottom_small"></div>
+
+        <!-- Related Records -->
+        <div>
+            <div class="section-header" onclick={toggleRelationshipsSection}>
+                <lightning-icon icon-name={relsExpandIcon} size="xx-small" class="slds-m-right_xx-small"></lightning-icon>
+                <span class="slds-text-title_bold">Related Records</span>
+                <span class="slds-text-color_weak slds-m-left_xx-small count-badge">{includedRelCount}</span>
+                <lightning-helptext
+                    content="Related records are child objects linked to this record (e.g., Opportunities on an Account). Toggle them on/off to control what context the AI receives. The number in parentheses is how many related records exist."
+                    class="slds-m-left_xx-small"
+                ></lightning-helptext>
+            </div>
+
+            <template lwc:if={relationshipsExpanded}>
+                <div class="select-all-row slds-m-top_xx-small slds-m-bottom_xx-small">
+                    <label class="slds-checkbox">
+                        <input type="checkbox" checked={allRelsSelected} data-select-all="rels" onchange={handleSelectAllRels} />
+                        <span class="slds-checkbox_faux"></span>
+                        <span class="slds-form-element__label category-label select-all-label">Select All</span>
+                    </label>
+                </div>
+                <ul class="category-list">
+                    <template for:each={relationshipsWithState} for:item="rel">
+                        <li key={rel.relationshipName} class="category-item">
+                            <label class="slds-checkbox">
+                                <input type="checkbox" checked={rel.isIncluded} data-relationship={rel.relationshipName} onchange={handleRelationshipToggle} />
+                                <span class="slds-checkbox_faux"></span>
+                                <span class="slds-form-element__label category-label">
+                                    {rel.childObjectLabel}
+                                    <span class="slds-text-color_weak slds-m-left_xx-small">{rel.displayCount}</span>
+                                </span>
+                            </label>
+                        </li>
+                    </template>
+                </ul>
+            </template>
+        </div>
+
+        <!-- Usage Metrics -->
+        <div class="divider slds-m-vertical_small"></div>
+        <div class="usage-section">
+            <div class="usage-header">
+                <span class="slds-text-title_bold">Usage Estimate</span>
+                <lightning-helptext
+                    content="Token estimate is approximate context size sent per message. Flex Credits are cumulative for this session. Each prompt is metered in 2,000-token chunks (rounded up). Credit cost per chunk depends on model tier: Basic models (GPT-4o Mini, Gemini Flash, Claude Haiku) = 2 flex credits per chunk. Standard models (GPT-5, GPT-4o, Gemini Pro, Claude Sonnet) = 4 flex credits per chunk. Advanced models = 16 flex credits per chunk. Example: a 6,500-token prompt on a Standard model = 4 chunks x 4 credits = 16 flex credits. Clearing the conversation resets the counter."
+                ></lightning-helptext>
+            </div>
+
+            <!-- Context token estimate -->
+            <template lwc:if={tokenEstimate}>
+                <div class="usage-row slds-m-top_xx-small">
+                    <span class="slds-text-body_small slds-text-color_weak">Context size</span>
+                    <span class="slds-text-body_small">~{tokenEstimate} tokens</span>
+                </div>
+                <div class="token-meter slds-m-top_xx-small">
+                    <div class={tokenMeterFillClass} style={tokenMeterWidth}></div>
+                </div>
+            </template>
+
+            <!-- Cumulative session usage -->
+            <div class="usage-row slds-m-top_x-small">
+                <span class="slds-text-body_small slds-text-color_weak">Session tokens</span>
+                <span class="slds-text-body_small">{sessionTokens}</span>
+            </div>
+            <div class="usage-row slds-m-top_xx-small">
+                <span class="slds-text-body_small slds-text-color_weak">Flex credits used</span>
+                <span class="slds-text-body_small usage-credits">{sessionCredits}</span>
+            </div>
+        </div>
+    </div>
+</template>

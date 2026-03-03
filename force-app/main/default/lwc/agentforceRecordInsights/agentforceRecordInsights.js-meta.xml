@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>66.0</apiVersion>
+    <isExposed>true</isExposed>
+    <masterLabel>Agentforce Record Insights</masterLabel>
+    <description>AI-powered conversational insights grounded in live Salesforce record data. Drop on any record page or app page.</description>
+    <targets>
+        <target>lightning__RecordPage</target>
+        <target>lightning__AppPage</target>
+        <target>lightning__HomePage</target>
+    </targets>
+    <targetConfigs>
+        <targetConfig targets="lightning__RecordPage">
+            <property name="cardTitle" type="String" default="Agentforce Record Insights" label="Card Title" />
+            <property name="defaultDepth" type="Integer" default="1" label="Default Relationship Depth (1-3)" />
+        </targetConfig>
+        <targetConfig targets="lightning__AppPage,lightning__HomePage">
+            <property name="cardTitle" type="String" default="Agentforce Record Insights" label="Card Title" />
+            <property name="defaultMode" type="String" default="compare" label="Default Mode" datasource="insights,compare" />
+        </targetConfig>
+    </targetConfigs>
+</LightningComponentBundle>

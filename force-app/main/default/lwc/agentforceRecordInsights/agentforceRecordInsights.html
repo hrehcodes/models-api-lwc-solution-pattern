@@ -1,0 +1,142 @@
+<template>
+    <lightning-card title={cardTitle} icon-name="standard:einstein">
+        <!-- Mode Toggle -->
+        <div slot="actions">
+            <lightning-button-group>
+                <lightning-button
+                    label="Insights"
+                    variant={insightsButtonVariant}
+                    onclick={handleInsightsMode}
+                    icon-name="utility:preview"
+                    title="Chat about this record's data"
+                ></lightning-button>
+                <lightning-button
+                    label="Compare"
+                    variant={compareButtonVariant}
+                    onclick={handleCompareMode}
+                    icon-name="utility:side_list"
+                    title="Compare multiple records side by side"
+                ></lightning-button>
+            </lightning-button-group>
+            <template lwc:if={showSettingsButton}>
+                <lightning-button-icon
+                    icon-name="utility:settings"
+                    alternative-text="Toggle context panel"
+                    title="Show or hide the context settings panel"
+                    class="slds-m-left_x-small"
+                    onclick={handleToggleContext}
+                    variant={contextToggleVariant}
+                ></lightning-button-icon>
+            </template>
+        </div>
+
+        <div class="main-container">
+            <!-- Insights Mode -->
+            <template lwc:if={isInsightsMode}>
+                <!-- No record context (app page) -->
+                <template lwc:if={needsRecordSelection}>
+                    <div class="slds-p-around_medium slds-text-align_center">
+                        <lightning-icon icon-name="utility:info" size="small" class="slds-m-bottom_small"></lightning-icon>
+                        <p class="slds-text-body_regular slds-m-bottom_medium">
+                            Place this component on a record page for automatic context detection, or select a record below.
+                        </p>
+                        <div class="slds-m-bottom_small">
+                            <lightning-combobox
+                                label="Object Type"
+                                value={selectedObjectType}
+                                options={objectTypeOptions}
+                                onchange={handleObjectTypeChange}
+                                placeholder="Select object type..."
+                            ></lightning-combobox>
+                        </div>
+                        <template lwc:if={selectedObjectType}>
+                            <lightning-input
+                                label="Record ID"
+                                value={manualRecordId}
+                                onchange={handleManualRecordIdChange}
+                                placeholder="Paste a record ID..."
+                            ></lightning-input>
+                            <lightning-button
+                                label="Load Record"
+                                variant="brand"
+                                onclick={handleLoadManualRecord}
+                                disabled={loadRecordDisabled}
+                                class="slds-m-top_small"
+                            ></lightning-button>
+                        </template>
+                    </div>
+                </template>
+
+                <!-- Has record context -->
+                <template lwc:if={hasRecordContext}>
+                    <div class={layoutClass}>
+                        <template lwc:if={contextPanelOpen}>
+                            <div class="context-pane">
+                                <c-context-panel
+                                    record-id={activeRecordId}
+                                    available-context={availableContext}
+                                    included-categories={includedCategories}
+                                    included-relationships={includedRelationships}
+                                    depth={currentDepth}
+                                    session-tokens={sessionTokens}
+                                    session-credits={sessionCredits}
+                                    oncontextchange={handleContextChange}
+                                    ondepthchange={handleDepthChange}
+                                    onfieldselect={handleOpenFieldSelector}
+                                ></c-context-panel>
+                            </div>
+                        </template>
+                        <div class="chat-pane">
+                            <c-chat-panel
+                                record-context-json={recordContextJson}
+                                object-api-name={activeObjectApiName}
+                                record-name={activeRecordName}
+                                mode="insights"
+                                storage-key={storageKey}
+                                onusageupdate={handleUsageUpdate}
+                            ></c-chat-panel>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Loading -->
+                <template lwc:if={isLoadingContext}>
+                    <div class="slds-p-around_large slds-text-align_center">
+                        <lightning-spinner alternative-text="Loading context..." size="medium"></lightning-spinner>
+                        <p class="slds-m-top_medium slds-text-color_weak">Discovering record context...</p>
+                    </div>
+                </template>
+
+                <!-- Error -->
+                <template lwc:if={contextError}>
+                    <div class="slds-p-around_medium">
+                        <div class="slds-notify slds-notify_alert slds-alert_error" role="alert">
+                            <span class="slds-assistive-text">error</span>
+                            <h2>{contextError}</h2>
+                        </div>
+                    </div>
+                </template>
+            </template>
+
+            <!-- Compare Mode -->
+            <template lwc:if={isCompareMode}>
+                <c-record-compare
+                    record-id={recordId}
+                    object-api-name={objectApiName}
+                    storage-key={compareStorageKey}
+                    onusageupdate={handleUsageUpdate}
+                ></c-record-compare>
+            </template>
+        </div>
+    </lightning-card>
+
+    <!-- Field Selector Modal -->
+    <template lwc:if={showFieldSelectorSafe}>
+        <c-insights-field-selector
+            field-categories={availableContext.fieldCategories}
+            included-categories={includedCategories}
+            oncategorieschange={handleCategoriesChange}
+            onclose={handleCloseFieldSelector}
+        ></c-insights-field-selector>
+    </template>
+</template>

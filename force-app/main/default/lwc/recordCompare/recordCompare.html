@@ -1,0 +1,177 @@
+<template>
+    <div class="compare-wrapper">
+
+        <!-- ── Collapsed Selection Bar ── -->
+        <template lwc:if={selectionCollapsed}>
+            <div class="selection-collapsed">
+                <button class="collapse-toggle" onclick={toggleSelectionCollapsed} type="button">
+                    <lightning-icon icon-name="utility:chevronright" size="xx-small" class="toggle-chevron"></lightning-icon>
+                    <span class="slds-text-heading_small">Compare Records</span>
+                </button>
+                <span class="slds-text-color_weak slds-text-body_small collapsed-count">{selectionCount} of 5</span>
+                <div class="collapsed-pills">
+                    <template for:each={selectedRecords} for:item="rec">
+                        <lightning-pill key={rec.id} label={rec.name} onremove={handleRemoveRecordCollapsed} data-id={rec.id}>
+                            <lightning-icon icon-name={objectIconName}></lightning-icon>
+                        </lightning-pill>
+                    </template>
+                </div>
+            </div>
+        </template>
+
+        <!-- ── Expanded Selection Area ── -->
+        <template lwc:if={selectionExpanded}>
+            <div class="selection-area slds-p-around_small">
+                <div class="slds-grid slds-grid_align-spread slds-m-bottom_small">
+                    <button class="collapse-toggle" onclick={toggleSelectionCollapsed} type="button">
+                        <lightning-icon icon-name={collapseChevronIcon} size="xx-small" class="toggle-chevron"></lightning-icon>
+                        <h3 class="slds-text-heading_small">Compare Records</h3>
+                    </button>
+                    <span class="slds-text-color_weak slds-text-body_small">{selectionCount} of 5 selected</span>
+                </div>
+
+                <!-- Object Type Picker (app page only, when no objectApiName) -->
+                <template lwc:if={showObjectPicker}>
+                    <lightning-combobox
+                        label="Object Type"
+                        value={selectedObjectType}
+                        options={objectTypeOptions}
+                        onchange={handleObjectTypeChange}
+                        placeholder="Select object type to compare..."
+                        class="slds-m-bottom_small"
+                    ></lightning-combobox>
+                </template>
+
+                <!-- Suggested Records -->
+                <template lwc:if={showSuggestions}>
+                    <div class="suggested-section slds-m-bottom_small">
+                        <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_xx-small">
+                            <span class="slds-text-title_bold slds-text-color_weak">Suggested</span>
+                            <lightning-helptext
+                                content="Records related to the current record (e.g. sibling Opportunities on the same Account) or recently modified records of this type."
+                                class="slds-m-left_xx-small"
+                            ></lightning-helptext>
+                        </div>
+                        <template lwc:if={isLoadingSuggestions}>
+                            <div class="slds-text-align_center slds-p-around_x-small">
+                                <lightning-spinner alternative-text="Loading suggestions..." size="x-small"></lightning-spinner>
+                            </div>
+                        </template>
+                        <template lwc:if={hasSuggestions}>
+                            <div class="suggestion-pills">
+                                <template for:each={suggestedRecords} for:item="rec">
+                                    <lightning-pill
+                                        key={rec.id}
+                                        label={rec.name}
+                                        onclick={handleAddSuggested}
+                                        data-id={rec.id}
+                                        data-name={rec.name}
+                                        class="suggestion-pill"
+                                    >
+                                        <lightning-icon icon-name={objectIconName}></lightning-icon>
+                                    </lightning-pill>
+                                </template>
+                            </div>
+                        </template>
+                        <template lwc:if={noSuggestions}>
+                            <p class="slds-text-body_small slds-text-color_weak">No related records found.</p>
+                        </template>
+                    </div>
+                </template>
+
+                <!-- Search for records -->
+                <template lwc:if={canSearch}>
+                    <div class="search-row slds-m-bottom_small">
+                        <lightning-input
+                            type="search"
+                            label="Search Records"
+                            value={searchTerm}
+                            onchange={handleSearchChange}
+                            placeholder={searchPlaceholder}
+                            variant="label-hidden"
+                            class="search-input"
+                        ></lightning-input>
+                    </div>
+
+                    <!-- Search Results -->
+                    <template lwc:if={searchResults.length}>
+                        <ul class="search-results slds-m-bottom_small">
+                            <template for:each={searchResults} for:item="rec">
+                                <li key={rec.id} class="result-item" onclick={handleAddRecord} data-id={rec.id} data-name={rec.name}>
+                                    <lightning-icon icon-name="utility:add" size="xx-small" class="slds-m-right_x-small"></lightning-icon>
+                                    <span>{rec.name}</span>
+                                </li>
+                            </template>
+                        </ul>
+                    </template>
+                </template>
+
+                <!-- Selected Records -->
+                <template lwc:if={selectedRecords.length}>
+                    <div class="selected-records">
+                        <template for:each={selectedRecords} for:item="rec">
+                            <lightning-pill key={rec.id} label={rec.name} onremove={handleRemoveRecord} data-id={rec.id}>
+                                <lightning-icon icon-name={objectIconName}></lightning-icon>
+                            </lightning-pill>
+                        </template>
+                    </div>
+                </template>
+
+                <!-- Compare Button -->
+                <template lwc:if={canCompare}>
+                    <div class="slds-m-top_small slds-text-align_center">
+                        <lightning-button
+                            label="Load Comparison"
+                            variant="brand"
+                            onclick={handleLoadComparison}
+                            disabled={isLoadingComparison}
+                        ></lightning-button>
+                    </div>
+                </template>
+
+                <!-- Loading -->
+                <template lwc:if={isLoadingComparison}>
+                    <div class="slds-text-align_center slds-p-around_medium">
+                        <lightning-spinner alternative-text="Loading comparison..." size="small"></lightning-spinner>
+                        <p class="slds-m-top_small slds-text-color_weak">Loading records for comparison...</p>
+                    </div>
+                </template>
+
+                <!-- Error -->
+                <template lwc:if={compareError}>
+                    <div class="slds-m-top_small">
+                        <div class="slds-notify slds-notify_alert slds-alert_error" role="alert">
+                            <span class="slds-assistive-text">error</span>
+                            <h2>{compareError}</h2>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </template>
+
+        <!-- Chat + Usage area (shown after comparison loaded) -->
+        <template lwc:if={comparisonLoaded}>
+            <div class="compare-body">
+                <div class="compare-chat">
+                    <c-chat-panel
+                        comparison-context-json={comparisonContextJson}
+                        object-api-name={activeObjectType}
+                        record-name={comparisonLabel}
+                        mode="compare"
+                        storage-key={storageKey}
+                        onusageupdate={handleChatUsageUpdate}
+                    ></c-chat-panel>
+                </div>
+                <!-- Inline usage footer -->
+                <div class="usage-footer slds-p-horizontal_small slds-p-vertical_xx-small">
+                    <span class="slds-text-body_small slds-text-color_weak">
+                        Session: ~{displaySessionTokens} tokens
+                    </span>
+                    <span class="slds-text-body_small usage-credits">
+                        {displaySessionCredits} flex credits
+                    </span>
+                </div>
+            </div>
+        </template>
+    </div>
+</template>

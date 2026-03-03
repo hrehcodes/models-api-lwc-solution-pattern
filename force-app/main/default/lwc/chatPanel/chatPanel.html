@@ -1,0 +1,141 @@
+<template>
+    <!-- Model Selector (collapsed into bar) -->
+    <div class="model-bar slds-p-horizontal_small slds-p-vertical_xx-small">
+        <lightning-combobox
+            label="Model"
+            value={selectedModel}
+            options={modelOptions}
+            onchange={handleModelChange}
+            variant="label-hidden"
+            class="model-picker"
+        ></lightning-combobox>
+        <template lwc:if={hasMessages}>
+            <lightning-button-icon
+                icon-name="utility:clear"
+                alternative-text="Clear conversation"
+                title="Clear conversation"
+                onclick={handleClearConversation}
+                class="slds-m-left_x-small"
+                size="small"
+            ></lightning-button-icon>
+        </template>
+    </div>
+
+    <!-- Chat Messages -->
+    <div class="chat-messages" lwc:ref="chatContainer">
+        <template lwc:if={showWelcome}>
+            <div class="welcome-container slds-text-align_center slds-p-around_medium">
+                <lightning-icon icon-name="utility:einstein" size="large" class="welcome-icon slds-m-bottom_small"></lightning-icon>
+                <h2 class="slds-text-heading_small slds-m-bottom_x-small">Agentforce Record Insights</h2>
+                <p class="slds-text-body_regular slds-text-color_weak slds-m-bottom_medium">
+                    Ask me anything about <strong>{recordName}</strong>. I can see the fields and related records you've selected in the context panel.
+                </p>
+
+                <!-- Suggested Prompts -->
+                <div class="suggested-prompts">
+                    <template for:each={suggestedPrompts} for:item="prompt">
+                        <lightning-button
+                            key={prompt.id}
+                            label={prompt.text}
+                            onclick={handleSuggestedPrompt}
+                            data-prompt={prompt.text}
+                            variant="neutral"
+                            class="prompt-chip slds-m-around_xx-small"
+                        ></lightning-button>
+                    </template>
+                </div>
+            </div>
+        </template>
+
+        <template for:each={messages} for:item="msg">
+            <div key={msg.id} class={msg.containerClass}>
+                <div class={msg.bubbleClass}>
+                    <!-- User message -->
+                    <template lwc:if={msg.isUser}>
+                        <p class="message-text">{msg.text}</p>
+                    </template>
+
+                    <!-- Assistant message (with markdown) -->
+                    <template lwc:if={msg.isAssistant}>
+                        <lightning-formatted-rich-text value={msg.htmlContent} class="message-text"></lightning-formatted-rich-text>
+                        <div class="message-actions slds-m-top_xx-small">
+                            <lightning-button-icon
+                                icon-name="utility:copy_to_clipboard"
+                                alternative-text="Copy"
+                                title="Copy to clipboard"
+                                data-index={msg.index}
+                                onclick={handleCopyMessage}
+                                size="x-small"
+                            ></lightning-button-icon>
+                            <template lwc:if={msg.isLastAssistant}>
+                                <lightning-button-icon
+                                    icon-name="utility:refresh"
+                                    alternative-text="Regenerate"
+                                    title="Regenerate response"
+                                    onclick={handleRegenerate}
+                                    size="x-small"
+                                    class="slds-m-left_xx-small"
+                                ></lightning-button-icon>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
+
+        <!-- Loading indicator -->
+        <template lwc:if={isLoading}>
+            <div class="message-row assistant-row">
+                <div class="message-bubble assistant-bubble loading-bubble">
+                    <div class="typing-indicator">
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Follow-up Prompts -->
+    <template lwc:if={followUpPromptsKeyed.length}>
+        <div class="follow-up-bar slds-p-horizontal_small slds-p-vertical_xx-small">
+            <template for:each={followUpPromptsKeyed} for:item="fp">
+                <lightning-button
+                    key={fp.id}
+                    label={fp.text}
+                    onclick={handleFollowUpPrompt}
+                    data-prompt={fp.text}
+                    variant="neutral"
+                    class="follow-up-chip slds-m-right_xx-small"
+                ></lightning-button>
+            </template>
+        </div>
+    </template>
+
+    <!-- Input Area -->
+    <div class="input-area slds-p-around_small">
+        <div class="input-row">
+            <lightning-input
+                type="text"
+                value={userInput}
+                placeholder={inputPlaceholder}
+                onchange={handleInputChange}
+                onkeyup={handleKeyUp}
+                variant="label-hidden"
+                label="Message"
+                class="input-field"
+                disabled={isLoading}
+            ></lightning-input>
+            <lightning-button-icon
+                icon-name="utility:send"
+                alternative-text="Send"
+                variant="brand"
+                onclick={handleSend}
+                disabled={sendDisabled}
+                class="send-btn slds-m-left_x-small"
+                size="medium"
+            ></lightning-button-icon>
+        </div>
+    </div>
+</template>
