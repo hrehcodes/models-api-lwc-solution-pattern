@@ -1,8 +1,11 @@
 import { LightningElement, api } from 'lwc';
+import AGENTFORCE_ICON from '@salesforce/resourceUrl/Agentforce_Icon';
 import getAvailableContext from '@salesforce/apex/RecordContextService.getAvailableContext';
 import getRecordContext from '@salesforce/apex/RecordContextService.getRecordContext';
 
 export default class AgentforceRecordInsights extends LightningElement {
+    agentforceIcon = AGENTFORCE_ICON;
+
     @api recordId;
     @api objectApiName;
     @api cardTitle = 'Agentforce Record Insights';

@@ -1,5 +1,9 @@
 <template>
-    <lightning-card title={cardTitle} icon-name="standard:einstein">
+    <lightning-card>
+        <div slot="title" class="card-title-with-icon">
+            <img src={agentforceIcon} alt="Agentforce" class="agentforce-card-icon" />
+            <span class="slds-card__header-title slds-truncate">{cardTitle}</span>
+        </div>
         <!-- Mode Toggle -->
         <div slot="actions">
             <lightning-button-group>

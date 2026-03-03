@@ -1,3 +1,15 @@
+.card-title-with-icon {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.agentforce-card-icon {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
 .main-container {
     height: 600px;
     display: flex;
