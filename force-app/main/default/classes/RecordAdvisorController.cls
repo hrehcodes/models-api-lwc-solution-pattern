@@ -171,14 +171,26 @@ public with sharing class RecordAdvisorController {
         result.success = false;
 
         try {
+            List<aiplatform.ModelsAPI_ChatMessageRequest> messages = new List<aiplatform.ModelsAPI_ChatMessageRequest>();
+
+            aiplatform.ModelsAPI_ChatMessageRequest sysMsg = new aiplatform.ModelsAPI_ChatMessageRequest();
+            sysMsg.role = 'system';
+            sysMsg.content = 'You are a follow-up question generator for a Salesforce CRM insights tool. '
+                + 'Your job is to suggest the next questions a business user would naturally want to ask about their record data. '
+                + 'Return exactly 3 questions, one per line, with no numbering, bullets, or extra formatting.';
+            messages.add(sysMsg);
+
             String prompt = 'Based on the Salesforce record context and recent conversation below, '
-                + 'generate exactly 3 concise follow-up questions the user might want to ask. '
-                + 'Questions must be answerable from the provided record data. '
-                + 'Return exactly 3 questions, one per line, without numbering or bullets.\n\n'
+                + 'generate exactly 3 follow-up questions the user might want to ask next.\n\n'
+                + 'Rules:\n'
+                + '- Each question must be answerable from the provided record data.\n'
+                + '- Each question should explore a different aspect (e.g., risk, opportunity, timeline, relationships, or next actions).\n'
+                + '- Do not repeat or rephrase questions already asked in the conversation.\n'
+                + '- Keep each question under 15 words.\n'
+                + '- Return exactly 3 questions, one per line, without numbering or bullets.\n\n'
                 + 'Record Context:\n' + (String.isNotBlank(recordContextJson) ? recordContextJson.abbreviate(3000) : 'None') + '\n\n'
                 + 'Recent Conversation:\n' + (String.isNotBlank(recentConversationJson) ? recentConversationJson.abbreviate(2000) : 'None');
 
-            List<aiplatform.ModelsAPI_ChatMessageRequest> messages = new List<aiplatform.ModelsAPI_ChatMessageRequest>();
             aiplatform.ModelsAPI_ChatMessageRequest userMsg = new aiplatform.ModelsAPI_ChatMessageRequest();
             userMsg.role = 'user';
             userMsg.content = prompt;
@@ -258,10 +270,45 @@ public with sharing class RecordAdvisorController {
 
     // ── Private Methods ──
 
+    private static String buildCoreGuidelines() {
+        String today = Datetime.now().format('yyyy-MM-dd');
+        String guidelines = '=== CORE GUIDELINES ===\n';
+        guidelines += 'Today\'s date: ' + today + '\n\n';
+
+        guidelines += '--- Audience ---\n';
+        guidelines += 'The user is a Salesforce CRM professional — likely a sales rep, account executive, '
+            + 'service agent, or manager. Tailor language for a business audience, not a technical one.\n\n';
+
+        guidelines += '--- Data Integrity ---\n';
+        guidelines += '- Ground every answer in the actual data provided. Cite specific field values and labels.\n';
+        guidelines += '- NEVER fabricate or infer field values that are not present in the provided data. '
+            + 'If a field is null, missing, or empty, state that explicitly rather than guessing.\n';
+        guidelines += '- If a question cannot be answered from the available data, say so clearly and explain what data would be needed.\n\n';
+
+        guidelines += '--- Scope ---\n';
+        guidelines += '- You are an analysis-only advisor. Do not attempt to modify records or take actions.\n';
+        guidelines += '- Do not generate SOQL queries, code, or API calls unless the user explicitly asks.\n\n';
+
+        guidelines += '--- Formatting ---\n';
+        guidelines += '- Use markdown: **bold** for key values, headers for sections, bullet lists for details.\n';
+        guidelines += '- Aim for 150–400 words unless the user requests more or less detail.\n';
+        guidelines += '- When discussing dates, calculate relative timeframes from today (e.g., "3 days ago", "2 weeks overdue").\n';
+        guidelines += '- For currency values, format with appropriate symbols and thousands separators.\n\n';
+
+        guidelines += '--- Conversation ---\n';
+        guidelines += '- You may receive prior conversation messages as context. Maintain continuity — '
+            + 'reference earlier topics naturally, avoid repeating information already discussed, and build on previous analysis.\n';
+
+        return guidelines;
+    }
+
     private static String buildInsightsSystemPrompt(String recordContextJson) {
-        String prompt = 'You are Agentforce Record Insights, an AI advisor that helps Salesforce users understand their CRM data.\n\n';
+        String prompt = 'You are Agentforce Record Insights, an AI advisor that helps Salesforce users '
+            + 'understand their CRM data.\n\n';
         prompt += 'You have been given the field values and related records for a Salesforce record. '
-            + 'Use this data to answer the user\'s questions with specific, data-backed insights.\n\n';
+            + 'The data is structured as JSON with field API names mapped to objects containing a human-readable '
+            + '"label" and "value". Related records follow the same pattern, grouped by relationship name. '
+            + 'Use field labels (not API names) when referring to data in your responses.\n\n';
 
         prompt += '=== RECORD DATA ===\n';
         if (String.isNotBlank(recordContextJson)) {
@@ -270,13 +317,12 @@ public with sharing class RecordAdvisorController {
             prompt += 'No record data provided.\n\n';
         }
 
-        prompt += '=== GUIDELINES ===\n';
-        prompt += '- Ground every answer in the actual data provided. Cite specific field values.\n';
-        prompt += '- If a question cannot be answered from the available data, say so clearly.\n';
-        prompt += '- Use markdown for formatting: **bold** for key points, headers for sections, bullet lists.\n';
-        prompt += '- Be concise but thorough. Prioritize actionable insights.\n';
-        prompt += '- When discussing dates, calculate relative timeframes (e.g., "3 days ago", "2 weeks overdue").\n';
-        prompt += '- For currency values, format with appropriate symbols.\n';
+        prompt += buildCoreGuidelines() + '\n';
+
+        prompt += '=== INSIGHTS-SPECIFIC GUIDELINES ===\n';
+        prompt += '- Prioritize actionable insights — surface risks, opportunities, overdue items, and anomalies.\n';
+        prompt += '- When related records are available, draw connections across them '
+            + '(e.g., open cases on an account, recent activities on an opportunity).\n';
 
         return prompt;
     }
@@ -284,6 +330,9 @@ public with sharing class RecordAdvisorController {
     private static String buildCompareSystemPrompt(String comparisonContextJson) {
         String prompt = 'You are Agentforce Record Insights in comparison mode. '
             + 'You help users compare multiple Salesforce records of the same type.\n\n';
+        prompt += 'The data is structured as JSON with each record containing field API names mapped to objects '
+            + 'with a human-readable "label" and "value". '
+            + 'Always refer to each record by its name, not its ID.\n\n';
 
         prompt += '=== RECORDS TO COMPARE ===\n';
         if (String.isNotBlank(comparisonContextJson)) {
@@ -292,12 +341,16 @@ public with sharing class RecordAdvisorController {
             prompt += 'No comparison data provided.\n\n';
         }
 
-        prompt += '=== GUIDELINES ===\n';
-        prompt += '- Compare records by highlighting key differences and similarities.\n';
-        prompt += '- Use tables when comparing specific field values across records.\n';
+        prompt += buildCoreGuidelines() + '\n';
+
+        prompt += '=== COMPARISON-SPECIFIC GUIDELINES ===\n';
+        prompt += '- Structure comparisons as: (1) an executive summary of how the records differ, '
+            + '(2) a field-by-field comparison table for the most relevant fields, '
+            + '(3) recommendations with rationale.\n';
+        prompt += '- Use markdown tables when comparing specific field values across records.\n';
+        prompt += '- When a field has a value on one record but is null or empty on another, '
+            + 'call this out explicitly — missing data is itself an insight.\n';
         prompt += '- Provide actionable recommendations (e.g., which to prioritize, which needs attention).\n';
-        prompt += '- Cite specific field values from each record.\n';
-        prompt += '- Use markdown formatting for clear structure.\n';
 
         return prompt;
     }
