@@ -12,7 +12,7 @@
     <targetConfigs>
         <targetConfig targets="lightning__RecordPage">
             <property name="cardTitle" type="String" default="Agentforce Record Insights" label="Card Title" />
-            <property name="defaultDepth" type="Integer" default="1" min="1" max="3" label="Default Relationship Depth" description="Sets the starting relationship depth for insights mode." />
+            <property name="defaultDepth" type="Integer" default="1" label="Default Relationship Depth" description="Sets the starting relationship depth for insights mode." />
             <property name="defaultMode" type="String" default="insights" label="Default Mode" datasource="insights,compare" />
             <property name="availableModes" type="String" default="both" label="Available Modes" datasource="both,insightsOnly,compareOnly" />
             <property name="startWithContextPanelOpen" type="Boolean" default="true" label="Start With Context Panel Open" />
@@ -29,7 +29,7 @@
         </targetConfig>
         <targetConfig targets="lightning__AppPage,lightning__HomePage">
             <property name="cardTitle" type="String" default="Agentforce Record Insights" label="Card Title" />
-            <property name="defaultDepth" type="Integer" default="1" min="1" max="3" label="Default Relationship Depth" description="Sets the starting relationship depth for insights mode." />
+            <property name="defaultDepth" type="Integer" default="1" label="Default Relationship Depth" description="Sets the starting relationship depth for insights mode." />
             <property name="defaultMode" type="String" default="compare" label="Default Mode" datasource="insights,compare" />
             <property name="availableModes" type="String" default="both" label="Available Modes" datasource="both,insightsOnly,compareOnly" />
             <property name="startWithContextPanelOpen" type="Boolean" default="true" label="Start With Context Panel Open" />
