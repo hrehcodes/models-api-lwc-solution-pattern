@@ -201,11 +201,30 @@
 
 .input-row {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
 }
 
 .input-field {
     flex: 1;
+}
+
+.input-textarea {
+    min-height: 2.5rem;
+    max-height: 4.5rem;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid #747474;
+    border-radius: 0.75rem;
+    font: inherit;
+    line-height: 1.4;
+    resize: none;
+    overflow-y: hidden;
+    background-color: #ffffff;
+}
+
+.input-textarea:focus {
+    outline: none;
+    border-color: #0176d3;
+    box-shadow: 0 0 3px #0176d3;
 }
 
 .send-btn {

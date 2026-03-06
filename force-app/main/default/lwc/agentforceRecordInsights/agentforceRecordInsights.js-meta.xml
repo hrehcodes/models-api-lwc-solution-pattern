@@ -11,38 +11,38 @@
     </targets>
     <targetConfigs>
         <targetConfig targets="lightning__RecordPage">
-            <property name="cardTitle" type="String" default="Agentforce Record Insights" label="Card Title" />
-            <property name="defaultDepth" type="Integer" default="1" label="Default Relationship Depth" description="Sets the starting relationship depth for insights mode." />
-            <property name="defaultMode" type="String" default="insights" label="Default Mode" datasource="insights,compare" />
-            <property name="availableModes" type="String" default="both" label="Available Modes" datasource="both,insightsOnly,compareOnly" />
-            <property name="startWithContextPanelOpen" type="Boolean" default="true" label="Start With Context Panel Open" />
-            <property name="maxDepthAllowed" type="Integer" default="3" min="1" max="3" label="Maximum Relationship Depth" description="Limits the highest depth users can select in insights mode." />
-            <property name="defaultFieldCategoriesCsv" type="String" label="Default Field Categories (CSV)" description="Optional comma-separated category API names to include by default, for example: core,status,financial." />
-            <property name="defaultRelationshipsCsv" type="String" label="Default Relationships (CSV)" description="Optional comma-separated relationship API names to include by default." />
-            <property name="showModelPicker" type="Boolean" default="true" label="Show Model Picker" />
-            <property name="defaultModelApiName" type="String" label="Default Model API Name" description="Optional model API name to preselect when it is available." />
-            <property name="showSuggestedPrompts" type="Boolean" default="true" label="Show Suggested Prompts" />
-            <property name="showUsageMetrics" type="Boolean" default="true" label="Show Usage Metrics" />
-            <property name="persistConversation" type="Boolean" default="true" label="Persist Conversation" description="Stores conversation history and usage metrics in browser local storage." />
-            <property name="showSuggestedComparisonRecords" type="Boolean" default="true" label="Show Suggested Comparison Records" />
-            <property name="enableSuggestedFollowUps" type="Boolean" default="true" label="Enable Suggested Follow-Ups" description="Generates suggested follow-up questions after each response. This makes an additional AI call and typically consumes about 2 extra flex credits per message turn." />
+            <property name="cardTitle" type="String" default="Agentforce Record Insights" label="Card Title" description="Controls the title shown at the top of the component. Example: Opportunity Insights Assistant." />
+            <property name="defaultDepth" type="Integer" default="1" label="Default Relationship Depth" description="Sets the starting relationship depth for insights mode. Use 1 for direct child records only, 2 for children plus grandchildren, or 3 for the deepest context." />
+            <property name="defaultMode" type="String" default="insights" label="Default Mode" datasource="insights,compare" description="Chooses which experience opens first when both modes are available. Select Insights for chat on the current record or Compare for side-by-side record analysis." />
+            <property name="availableModes" type="String" default="both" label="Available Modes" datasource="both,insightsOnly,compareOnly" description="Controls which modes users can access. Both shows Insights and Compare, insightsOnly shows only the record chat experience, and compareOnly shows only the compare experience." />
+            <property name="startWithContextPanelOpen" type="Boolean" default="true" label="Start With Context Panel Open" description="If enabled, the context settings panel is expanded when the component first loads in insights mode." />
+            <property name="maxDepthAllowed" type="Integer" default="3" min="1" max="3" label="Maximum Relationship Depth" description="Limits the highest depth users can select in insights mode. Set this to 1, 2, or 3 to control how much related-record context can be included." />
+            <property name="defaultFieldCategoriesCsv" type="String" label="Default Field Categories (CSV)" description="Optional comma-separated field category API names to preselect for insights mode. Valid categories are core, financial, status, dates, relationships, custom, and other. Example: core,status,financial,custom." />
+            <property name="defaultRelationshipsCsv" type="String" label="Default Relationships (CSV)" description="Optional comma-separated child relationship API names to preselect for insights mode. Values depend on the object. Example for Account: Contacts,Opportunities,Cases." />
+            <property name="showModelPicker" type="Boolean" default="true" label="Show Model Picker" description="If enabled, users can choose the AI model from the header of the chat panel." />
+            <property name="defaultModelApiName" type="String" label="Default Model API Name" description="Optional model API name to preselect when it is available in the org. Example: sfdc_ai__DefaultVertexAIGeminiPro30 or sfdc_ai__DefaultGPT4Omni." />
+            <property name="showSuggestedPrompts" type="Boolean" default="true" label="Show Suggested Prompts" description="If enabled, the welcome state shows built-in starter prompts that users can click to begin the conversation." />
+            <property name="showUsageMetrics" type="Boolean" default="true" label="Show Usage Metrics" description="If enabled, the component shows token and flex-credit usage estimates in insights and compare mode." />
+            <property name="persistConversation" type="Boolean" default="true" label="Persist Conversation" description="If enabled, conversation history and usage metrics are stored in browser local storage so they can be restored when the user returns to the same record." />
+            <property name="showSuggestedComparisonRecords" type="Boolean" default="true" label="Show Suggested Comparison Records" description="If enabled, compare mode shows suggested related records, such as sibling records or recently modified records of the same type." />
+            <property name="enableSuggestedFollowUps" type="Boolean" default="true" label="Enable Suggested Follow-Ups" description="If enabled, the component generates suggested follow-up questions after each AI response. This makes an additional AI call and typically consumes about 2 extra flex credits per message turn." />
         </targetConfig>
         <targetConfig targets="lightning__AppPage,lightning__HomePage">
-            <property name="cardTitle" type="String" default="Agentforce Record Insights" label="Card Title" />
-            <property name="defaultDepth" type="Integer" default="1" label="Default Relationship Depth" description="Sets the starting relationship depth for insights mode." />
-            <property name="defaultMode" type="String" default="compare" label="Default Mode" datasource="insights,compare" />
-            <property name="availableModes" type="String" default="both" label="Available Modes" datasource="both,insightsOnly,compareOnly" />
-            <property name="startWithContextPanelOpen" type="Boolean" default="true" label="Start With Context Panel Open" />
-            <property name="maxDepthAllowed" type="Integer" default="3" min="1" max="3" label="Maximum Relationship Depth" description="Limits the highest depth users can select in insights mode." />
-            <property name="defaultFieldCategoriesCsv" type="String" label="Default Field Categories (CSV)" description="Optional comma-separated category API names to include by default, for example: core,status,financial." />
-            <property name="defaultRelationshipsCsv" type="String" label="Default Relationships (CSV)" description="Optional comma-separated relationship API names to include by default." />
-            <property name="showModelPicker" type="Boolean" default="true" label="Show Model Picker" />
-            <property name="defaultModelApiName" type="String" label="Default Model API Name" description="Optional model API name to preselect when it is available." />
-            <property name="showSuggestedPrompts" type="Boolean" default="true" label="Show Suggested Prompts" />
-            <property name="showUsageMetrics" type="Boolean" default="true" label="Show Usage Metrics" />
-            <property name="persistConversation" type="Boolean" default="true" label="Persist Conversation" description="Stores conversation history and usage metrics in browser local storage." />
-            <property name="showSuggestedComparisonRecords" type="Boolean" default="true" label="Show Suggested Comparison Records" />
-            <property name="enableSuggestedFollowUps" type="Boolean" default="true" label="Enable Suggested Follow-Ups" description="Generates suggested follow-up questions after each response. This makes an additional AI call and typically consumes about 2 extra flex credits per message turn." />
+            <property name="cardTitle" type="String" default="Agentforce Record Insights" label="Card Title" description="Controls the title shown at the top of the component. Example: Pipeline Comparison Assistant." />
+            <property name="defaultDepth" type="Integer" default="1" label="Default Relationship Depth" description="Sets the starting relationship depth for insights mode after a record is loaded. Use 1 for direct child records only, 2 for children plus grandchildren, or 3 for the deepest context." />
+            <property name="defaultMode" type="String" default="compare" label="Default Mode" datasource="insights,compare" description="Chooses which experience opens first when the component loads. Select Insights for record chat or Compare for side-by-side record analysis." />
+            <property name="availableModes" type="String" default="both" label="Available Modes" datasource="both,insightsOnly,compareOnly" description="Controls which modes users can access. Both shows Insights and Compare, insightsOnly shows only the record chat experience, and compareOnly shows only the compare experience." />
+            <property name="startWithContextPanelOpen" type="Boolean" default="true" label="Start With Context Panel Open" description="If enabled, the context settings panel is expanded when insights mode is opened." />
+            <property name="maxDepthAllowed" type="Integer" default="3" min="1" max="3" label="Maximum Relationship Depth" description="Limits the highest depth users can select in insights mode. Set this to 1, 2, or 3 to control how much related-record context can be included." />
+            <property name="defaultFieldCategoriesCsv" type="String" label="Default Field Categories (CSV)" description="Optional comma-separated field category API names to preselect for insights mode. Valid categories are core, financial, status, dates, relationships, custom, and other. Example: core,status,financial,custom." />
+            <property name="defaultRelationshipsCsv" type="String" label="Default Relationships (CSV)" description="Optional comma-separated child relationship API names to preselect for insights mode after a record is loaded. Values depend on the object. Example for Account: Contacts,Opportunities,Cases." />
+            <property name="showModelPicker" type="Boolean" default="true" label="Show Model Picker" description="If enabled, users can choose the AI model from the header of the chat panel." />
+            <property name="defaultModelApiName" type="String" label="Default Model API Name" description="Optional model API name to preselect when it is available in the org. Example: sfdc_ai__DefaultVertexAIGeminiPro30 or sfdc_ai__DefaultGPT4Omni." />
+            <property name="showSuggestedPrompts" type="Boolean" default="true" label="Show Suggested Prompts" description="If enabled, the welcome state shows built-in starter prompts that users can click to begin the conversation." />
+            <property name="showUsageMetrics" type="Boolean" default="true" label="Show Usage Metrics" description="If enabled, the component shows token and flex-credit usage estimates in insights and compare mode." />
+            <property name="persistConversation" type="Boolean" default="true" label="Persist Conversation" description="If enabled, conversation history and usage metrics are stored in browser local storage so they can be restored when the user returns to the same record or app context." />
+            <property name="showSuggestedComparisonRecords" type="Boolean" default="true" label="Show Suggested Comparison Records" description="If enabled, compare mode shows suggested related records, such as sibling records or recently modified records of the same type." />
+            <property name="enableSuggestedFollowUps" type="Boolean" default="true" label="Enable Suggested Follow-Ups" description="If enabled, the component generates suggested follow-up questions after each AI response. This makes an additional AI call and typically consumes about 2 extra flex credits per message turn." />
         </targetConfig>
     </targetConfigs>
 </LightningComponentBundle>
