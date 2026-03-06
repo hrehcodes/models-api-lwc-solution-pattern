@@ -24,8 +24,12 @@
                 ></lightning-helptext>
                 <lightning-button-group>
                     <lightning-button label="1" variant={depth1Variant} onclick={handleDepth1} class="depth-btn" title="Direct children only"></lightning-button>
-                    <lightning-button label="2" variant={depth2Variant} onclick={handleDepth2} class="depth-btn" title="Include grandchildren"></lightning-button>
-                    <lightning-button label="3" variant={depth3Variant} onclick={handleDepth3} class="depth-btn" title="Include great-grandchildren"></lightning-button>
+                    <template lwc:if={showDepth2Button}>
+                        <lightning-button label="2" variant={depth2Variant} onclick={handleDepth2} class="depth-btn" title="Include grandchildren"></lightning-button>
+                    </template>
+                    <template lwc:if={showDepth3Button}>
+                        <lightning-button label="3" variant={depth3Variant} onclick={handleDepth3} class="depth-btn" title="Include great-grandchildren"></lightning-button>
+                    </template>
                 </lightning-button-group>
             </div>
             <div class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small">{depthDescription}</div>
@@ -118,35 +122,37 @@
         </div>
 
         <!-- Usage Metrics -->
-        <div class="divider slds-m-vertical_small"></div>
-        <div class="usage-section">
-            <div class="usage-header">
-                <span class="slds-text-title_bold">Usage Estimate</span>
-                <lightning-helptext
-                    content="Token estimate is approximate context size sent per message. Flex Credits are cumulative for this session. Each prompt is metered in 2,000-token chunks (rounded up). Credit cost per chunk depends on model tier: Basic models (GPT-4o Mini, Gemini Flash, Claude Haiku) = 2 flex credits per chunk. Standard models (GPT-5, GPT-4o, Gemini Pro, Claude Sonnet) = 4 flex credits per chunk. Advanced models = 16 flex credits per chunk. Example: a 6,500-token prompt on a Standard model = 4 chunks x 4 credits = 16 flex credits. Clearing the conversation resets the counter."
-                ></lightning-helptext>
-            </div>
+        <template lwc:if={showUsageMetrics}>
+            <div class="divider slds-m-vertical_small"></div>
+            <div class="usage-section">
+                <div class="usage-header">
+                    <span class="slds-text-title_bold">Usage Estimate</span>
+                    <lightning-helptext
+                        content="Token estimate is approximate context size sent per message. Flex Credits are cumulative for this session. Each prompt is metered in 2,000-token chunks (rounded up). Credit cost per chunk depends on model tier: Basic models (GPT-4o Mini, Gemini Flash, Claude Haiku) = 2 flex credits per chunk. Standard models (GPT-5, GPT-4o, Gemini Pro, Claude Sonnet) = 4 flex credits per chunk. Advanced models = 16 flex credits per chunk. Example: a 6,500-token prompt on a Standard model = 4 chunks x 4 credits = 16 flex credits. Clearing the conversation resets the counter."
+                    ></lightning-helptext>
+                </div>
 
-            <!-- Context token estimate -->
-            <template lwc:if={tokenEstimate}>
+                <!-- Context token estimate -->
+                <template lwc:if={tokenEstimate}>
+                    <div class="usage-row slds-m-top_xx-small">
+                        <span class="slds-text-body_small slds-text-color_weak">Context size</span>
+                        <span class="slds-text-body_small">~{tokenEstimate} tokens</span>
+                    </div>
+                    <div class="token-meter slds-m-top_xx-small">
+                        <div class={tokenMeterFillClass} style={tokenMeterWidth}></div>
+                    </div>
+                </template>
+
+                <!-- Cumulative session usage -->
+                <div class="usage-row slds-m-top_x-small">
+                    <span class="slds-text-body_small slds-text-color_weak">Session tokens</span>
+                    <span class="slds-text-body_small">{sessionTokens}</span>
+                </div>
                 <div class="usage-row slds-m-top_xx-small">
-                    <span class="slds-text-body_small slds-text-color_weak">Context size</span>
-                    <span class="slds-text-body_small">~{tokenEstimate} tokens</span>
+                    <span class="slds-text-body_small slds-text-color_weak">Flex credits used</span>
+                    <span class="slds-text-body_small usage-credits">{sessionCredits}</span>
                 </div>
-                <div class="token-meter slds-m-top_xx-small">
-                    <div class={tokenMeterFillClass} style={tokenMeterWidth}></div>
-                </div>
-            </template>
-
-            <!-- Cumulative session usage -->
-            <div class="usage-row slds-m-top_x-small">
-                <span class="slds-text-body_small slds-text-color_weak">Session tokens</span>
-                <span class="slds-text-body_small">{sessionTokens}</span>
             </div>
-            <div class="usage-row slds-m-top_xx-small">
-                <span class="slds-text-body_small slds-text-color_weak">Flex credits used</span>
-                <span class="slds-text-body_small usage-credits">{sessionCredits}</span>
-            </div>
-        </div>
+        </template>
     </div>
 </template>

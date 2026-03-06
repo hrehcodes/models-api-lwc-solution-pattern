@@ -50,6 +50,11 @@ export default class ChatPanel extends LightningElement {
     @api recordName;
     @api mode = 'insights';
     @api comparisonContextJson;
+    @api showModelPicker = true;
+    @api defaultModelApiName;
+    @api showSuggestedPrompts = true;
+    @api persistConversation = true;
+    @api enableSuggestedFollowUps = true;
 
     @track messages = [];
     userInput = '';
@@ -86,21 +91,25 @@ export default class ChatPanel extends LightningElement {
                 label: `${m.label} (${m.provider}) [${m.creditType}]`,
                 value: m.apiName
             }));
-            const defaultModel = data.find(m => m.isDefault);
-            if (defaultModel) {
-                this.selectedModel = defaultModel.apiName;
-            }
             data.forEach(m => { MODEL_CREDIT_MAP[m.apiName] = m.creditType; });
+            this.applyPreferredModelSelection(data.map(m => m.apiName), data.find(m => m.isDefault)?.apiName);
         }
         if (error) {
             this.modelOptions = [
                 { label: 'Gemini 3.0 Pro (Google) [standard]', value: 'sfdc_ai__DefaultVertexAIGeminiPro30' },
                 { label: 'GPT-4o (OpenAI) [standard]', value: 'sfdc_ai__DefaultGPT4Omni' }
             ];
+            this.applyPreferredModelSelection(
+                this.modelOptions.map(option => option.value),
+                this.modelOptions[0]?.value
+            );
         }
     }
 
     connectedCallback() {
+        if (!this.persistConversation) {
+            this.clearPersistedState();
+        }
         this.loadConversation();
         this.loadUsageMetrics();
     }
@@ -127,6 +136,10 @@ export default class ChatPanel extends LightningElement {
         return this.messages.length > 0;
     }
 
+    get showModelBar() {
+        return this.showModelPicker || this.hasMessages;
+    }
+
     get sendDisabled() {
         return !this.userInput?.trim() || this.isLoading;
     }
@@ -142,8 +155,16 @@ export default class ChatPanel extends LightningElement {
         return SUGGESTED_PROMPTS[this.objectApiName] || SUGGESTED_PROMPTS.default;
     }
 
+    get showSuggestedPromptButtons() {
+        return this.showSuggestedPrompts && this.suggestedPrompts.length > 0;
+    }
+
     get followUpPromptsKeyed() {
         return this.followUpPrompts.map((text, idx) => ({ id: `fp_${idx}`, text }));
+    }
+
+    get hasFollowUpPrompts() {
+        return this.enableSuggestedFollowUps && this.followUpPromptsKeyed.length > 0;
     }
 
     // ── Event Handlers ──
@@ -153,11 +174,13 @@ export default class ChatPanel extends LightningElement {
     }
 
     handleInputChange(event) {
-        this.userInput = event.detail.value;
+        this.userInput = event.target.value;
+        this.resizeInput(event.target);
     }
 
-    handleKeyUp(event) {
+    handleKeyDown(event) {
         if (event.key === 'Enter' && !event.shiftKey && !this.sendDisabled) {
+            event.preventDefault();
             this.handleSend();
         }
     }
@@ -181,6 +204,7 @@ export default class ChatPanel extends LightningElement {
         this.userInput = '';
         this.followUpPrompts = [];
         this.isLoading = true;
+        this.resetInputHeight();
         this.scrollToBottom();
 
         try {
@@ -207,7 +231,9 @@ export default class ChatPanel extends LightningElement {
             if (result.success) {
                 this.addMessage('assistant', result.response);
                 this.trackUsage(text, result.response);
-                this.generateFollowUps();
+                if (this.enableSuggestedFollowUps) {
+                    this.generateFollowUps();
+                }
             } else {
                 this.addMessage('assistant', `Error: ${result.error || 'Failed to get response.'}`);
             }
@@ -343,6 +369,10 @@ export default class ChatPanel extends LightningElement {
     // ── Follow-up Generation ──
 
     async generateFollowUps() {
+        if (!this.enableSuggestedFollowUps) {
+            return;
+        }
+
         try {
             const contextJson = this.mode === 'compare' ? this.comparisonContextJson : this.recordContextJson;
             const recentMessages = this.messages.slice(-4).map(m => `${m.role}: ${m.text}`).join('\n');
@@ -361,7 +391,10 @@ export default class ChatPanel extends LightningElement {
     // ── localStorage Persistence ──
 
     saveConversation() {
-        if (!this.storageKey) return;
+        if (!this.storageKey || !this.persistConversation) {
+            this.clearPersistedState();
+            return;
+        }
         try {
             const data = this.messages.map(m => ({ role: m.role, text: m.text, timestamp: m.timestamp }));
             localStorage.setItem(this.storageKey, JSON.stringify(data));
@@ -369,7 +402,10 @@ export default class ChatPanel extends LightningElement {
     }
 
     loadConversation() {
-        if (!this.storageKey) return;
+        if (!this.storageKey || !this.persistConversation) {
+            this.messages = [];
+            return;
+        }
         try {
             const stored = localStorage.getItem(this.storageKey);
             if (stored) {
@@ -400,7 +436,10 @@ export default class ChatPanel extends LightningElement {
     }
 
     saveUsageMetrics() {
-        if (!this.storageKey) return;
+        if (!this.storageKey || !this.persistConversation) {
+            this.clearPersistedState();
+            return;
+        }
         try {
             localStorage.setItem(`${this.storageKey}_usage`, JSON.stringify({
                 sessionTokens: this.sessionTokens,
@@ -410,7 +449,12 @@ export default class ChatPanel extends LightningElement {
     }
 
     loadUsageMetrics() {
-        if (!this.storageKey) return;
+        if (!this.storageKey || !this.persistConversation) {
+            this.sessionTokens = 0;
+            this.sessionCredits = 0;
+            this.dispatchUsageUpdate();
+            return;
+        }
         try {
             const stored = localStorage.getItem(`${this.storageKey}_usage`);
             if (stored) {
@@ -420,6 +464,31 @@ export default class ChatPanel extends LightningElement {
                 this.dispatchUsageUpdate();
             }
         } catch (e) { /* ignore */ }
+    }
+
+    clearPersistedState() {
+        if (!this.storageKey) {
+            return;
+        }
+
+        try {
+            localStorage.removeItem(this.storageKey);
+            localStorage.removeItem(`${this.storageKey}_usage`);
+        } catch (e) { /* ignore */ }
+    }
+
+    applyPreferredModelSelection(availableModels, fallbackModel) {
+        if (this.selectedModel && availableModels.includes(this.selectedModel)) {
+            return;
+        }
+
+        const configuredModel = (this.defaultModelApiName || '').trim();
+        if (configuredModel && availableModels.includes(configuredModel)) {
+            this.selectedModel = configuredModel;
+            return;
+        }
+
+        this.selectedModel = fallbackModel || availableModels[0] || null;
     }
 
     // ── Markdown Rendering ──
@@ -543,5 +612,26 @@ export default class ChatPanel extends LightningElement {
                 container.scrollTop = container.scrollHeight;
             }
         }, 100);
+    }
+
+    resizeInput(textarea) {
+        if (!textarea) {
+            return;
+        }
+
+        const maxHeight = 72;
+        textarea.style.height = 'auto';
+        textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+        textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
+    }
+
+    resetInputHeight() {
+        const textarea = this.refs?.messageInput;
+        if (!textarea) {
+            return;
+        }
+
+        textarea.value = this.userInput || '';
+        this.resizeInput(textarea);
     }
 }

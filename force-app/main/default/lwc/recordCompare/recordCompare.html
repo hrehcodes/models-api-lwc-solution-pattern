@@ -159,18 +159,25 @@
                         record-name={comparisonLabel}
                         mode="compare"
                         storage-key={storageKey}
+                        show-model-picker={showModelPicker}
+                        default-model-api-name={defaultModelApiName}
+                        show-suggested-prompts={showSuggestedPrompts}
+                        persist-conversation={persistConversation}
+                        enable-suggested-follow-ups={enableSuggestedFollowUps}
                         onusageupdate={handleChatUsageUpdate}
                     ></c-chat-panel>
                 </div>
                 <!-- Inline usage footer -->
-                <div class="usage-footer slds-p-horizontal_small slds-p-vertical_xx-small">
-                    <span class="slds-text-body_small slds-text-color_weak">
-                        Session: ~{displaySessionTokens} tokens
-                    </span>
-                    <span class="slds-text-body_small usage-credits">
-                        {displaySessionCredits} flex credits
-                    </span>
-                </div>
+                <template lwc:if={showUsageMetrics}>
+                    <div class="usage-footer slds-p-horizontal_small slds-p-vertical_xx-small">
+                        <span class="slds-text-body_small slds-text-color_weak">
+                            Session: ~{displaySessionTokens} tokens
+                        </span>
+                        <span class="slds-text-body_small usage-credits">
+                            {displaySessionCredits} flex credits
+                        </span>
+                    </div>
+                </template>
             </div>
         </template>
     </div>

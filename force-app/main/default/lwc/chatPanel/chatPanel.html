@@ -1,25 +1,29 @@
 <template>
     <!-- Model Selector (collapsed into bar) -->
-    <div class="model-bar slds-p-horizontal_small slds-p-vertical_xx-small">
-        <lightning-combobox
-            label="Model"
-            value={selectedModel}
-            options={modelOptions}
-            onchange={handleModelChange}
-            variant="label-hidden"
-            class="model-picker"
-        ></lightning-combobox>
-        <template lwc:if={hasMessages}>
-            <lightning-button-icon
-                icon-name="utility:clear"
-                alternative-text="Clear conversation"
-                title="Clear conversation"
-                onclick={handleClearConversation}
-                class="slds-m-left_x-small"
-                size="small"
-            ></lightning-button-icon>
-        </template>
-    </div>
+    <template lwc:if={showModelBar}>
+        <div class="model-bar slds-p-horizontal_small slds-p-vertical_xx-small">
+            <template lwc:if={showModelPicker}>
+                <lightning-combobox
+                    label="Model"
+                    value={selectedModel}
+                    options={modelOptions}
+                    onchange={handleModelChange}
+                    variant="label-hidden"
+                    class="model-picker"
+                ></lightning-combobox>
+            </template>
+            <template lwc:if={hasMessages}>
+                <lightning-button-icon
+                    icon-name="utility:clear"
+                    alternative-text="Clear conversation"
+                    title="Clear conversation"
+                    onclick={handleClearConversation}
+                    class="slds-m-left_x-small"
+                    size="small"
+                ></lightning-button-icon>
+            </template>
+        </div>
+    </template>
 
     <!-- Chat Messages -->
     <div class="chat-messages" lwc:ref="chatContainer">
@@ -33,18 +37,20 @@
                 </p>
 
                 <!-- Suggested Prompts -->
-                <div class="suggested-prompts">
-                    <template for:each={suggestedPrompts} for:item="prompt">
-                        <lightning-button
-                            key={prompt.id}
-                            label={prompt.text}
-                            onclick={handleSuggestedPrompt}
-                            data-prompt={prompt.text}
-                            variant="neutral"
-                            class="prompt-chip slds-m-around_xx-small"
-                        ></lightning-button>
-                    </template>
-                </div>
+                <template lwc:if={showSuggestedPromptButtons}>
+                    <div class="suggested-prompts">
+                        <template for:each={suggestedPrompts} for:item="prompt">
+                            <lightning-button
+                                key={prompt.id}
+                                label={prompt.text}
+                                onclick={handleSuggestedPrompt}
+                                data-prompt={prompt.text}
+                                variant="neutral"
+                                class="prompt-chip slds-m-around_xx-small"
+                            ></lightning-button>
+                        </template>
+                    </div>
+                </template>
             </div>
         </template>
 
@@ -99,7 +105,7 @@
     </div>
 
     <!-- Follow-up Prompts -->
-    <template lwc:if={followUpPromptsKeyed.length}>
+    <template lwc:if={hasFollowUpPrompts}>
         <div class="follow-up-bar slds-p-horizontal_small slds-p-vertical_xx-small">
             <template for:each={followUpPromptsKeyed} for:item="fp">
                 <lightning-button
@@ -117,17 +123,16 @@
     <!-- Input Area -->
     <div class="input-area slds-p-around_small">
         <div class="input-row">
-            <lightning-input
-                type="text"
-                value={userInput}
+            <textarea
+                lwc:ref="messageInput"
+                class="input-field input-textarea"
                 placeholder={inputPlaceholder}
-                onchange={handleInputChange}
-                onkeyup={handleKeyUp}
-                variant="label-hidden"
-                label="Message"
-                class="input-field"
+                oninput={handleInputChange}
+                onkeydown={handleKeyDown}
                 disabled={isLoading}
-            ></lightning-input>
+                rows="2"
+                aria-label="Message"
+            ></textarea>
             <lightning-button-icon
                 icon-name="utility:send"
                 alternative-text="Send"

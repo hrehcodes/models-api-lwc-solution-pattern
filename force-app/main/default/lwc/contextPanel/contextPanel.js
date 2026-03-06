@@ -25,8 +25,10 @@ export default class ContextPanel extends LightningElement {
     @api includedCategories = [];
     @api includedRelationships = [];
     @api depth = 1;
+    @api maxDepthAllowed = 3;
     @api sessionTokens = 0;
     @api sessionCredits = 0;
+    @api showUsageMetrics = true;
 
     fieldsExpanded = false;
     relationshipsExpanded = false;
@@ -50,9 +52,17 @@ export default class ContextPanel extends LightningElement {
     get depth1Variant() { return this.depth === 1 ? 'brand' : 'neutral'; }
     get depth2Variant() { return this.depth === 2 ? 'brand' : 'neutral'; }
     get depth3Variant() { return this.depth === 3 ? 'brand' : 'neutral'; }
+    get showDepth2Button() { return this.normalizedMaxDepth >= 2; }
+    get showDepth3Button() { return this.normalizedMaxDepth >= 3; }
 
     get depthDescription() {
         return DEPTH_DESCRIPTIONS[this.depth] || '';
+    }
+
+    get normalizedMaxDepth() {
+        const parsedDepth = parseInt(this.maxDepthAllowed, 10);
+        const safeDepth = Number.isNaN(parsedDepth) ? 3 : parsedDepth;
+        return Math.min(Math.max(safeDepth, 1), 3);
     }
 
     get fieldsExpandIcon() {
@@ -163,8 +173,14 @@ export default class ContextPanel extends LightningElement {
     // ── Event Handlers ──
 
     handleDepth1() { this.dispatchEvent(new CustomEvent('depthchange', { detail: { depth: 1 } })); }
-    handleDepth2() { this.dispatchEvent(new CustomEvent('depthchange', { detail: { depth: 2 } })); }
-    handleDepth3() { this.dispatchEvent(new CustomEvent('depthchange', { detail: { depth: 3 } })); }
+    handleDepth2() {
+        if (this.normalizedMaxDepth < 2) return;
+        this.dispatchEvent(new CustomEvent('depthchange', { detail: { depth: 2 } }));
+    }
+    handleDepth3() {
+        if (this.normalizedMaxDepth < 3) return;
+        this.dispatchEvent(new CustomEvent('depthchange', { detail: { depth: 3 } }));
+    }
 
     toggleFieldsSection() { this.fieldsExpanded = !this.fieldsExpanded; }
     toggleRelationshipsSection() { this.relationshipsExpanded = !this.relationshipsExpanded; }

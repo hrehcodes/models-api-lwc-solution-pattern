@@ -7,47 +7,49 @@
             </div>
 
             <div class="header-actions-row">
-                <template lwc:if={useModeMenu}>
-                    <lightning-button-menu
-                        label={modeMenuLabel}
-                        title="Switch mode"
-                        alternative-text="Switch between Insights and Compare"
-                        icon-name="utility:chevrondown"
-                        icon-position="right"
-                        variant="border-filled"
-                        menu-alignment="right"
-                        class="mode-switch-menu"
-                        onselect={handleModeSelect}
-                    >
-                        <lightning-menu-item
-                            value="insights"
-                            label="Insights"
-                            icon-name={insightsMenuItemIcon}
-                        ></lightning-menu-item>
-                        <lightning-menu-item
-                            value="compare"
-                            label="Compare"
-                            icon-name={compareMenuItemIcon}
-                        ></lightning-menu-item>
-                    </lightning-button-menu>
-                </template>
-                <template lwc:else>
-                    <lightning-button-group>
-                        <lightning-button
-                            label="Insights"
-                            variant={insightsButtonVariant}
-                            onclick={handleInsightsMode}
-                            icon-name="utility:preview"
-                            title="Chat about this record's data"
-                        ></lightning-button>
-                        <lightning-button
-                            label="Compare"
-                            variant={compareButtonVariant}
-                            onclick={handleCompareMode}
-                            icon-name="utility:side_list"
-                            title="Compare multiple records side by side"
-                        ></lightning-button>
-                    </lightning-button-group>
+                <template lwc:if={showModeSwitcher}>
+                    <template lwc:if={useModeMenu}>
+                        <lightning-button-menu
+                            label={modeMenuLabel}
+                            title="Switch mode"
+                            alternative-text="Switch between Insights and Compare"
+                            icon-name="utility:chevrondown"
+                            icon-position="right"
+                            variant="border-filled"
+                            menu-alignment="right"
+                            class="mode-switch-menu"
+                            onselect={handleModeSelect}
+                        >
+                            <lightning-menu-item
+                                value="insights"
+                                label="Insights"
+                                icon-name={insightsMenuItemIcon}
+                            ></lightning-menu-item>
+                            <lightning-menu-item
+                                value="compare"
+                                label="Compare"
+                                icon-name={compareMenuItemIcon}
+                            ></lightning-menu-item>
+                        </lightning-button-menu>
+                    </template>
+                    <template lwc:else>
+                        <lightning-button-group>
+                            <lightning-button
+                                label="Insights"
+                                variant={insightsButtonVariant}
+                                onclick={handleInsightsMode}
+                                icon-name="utility:preview"
+                                title="Chat about this record's data"
+                            ></lightning-button>
+                            <lightning-button
+                                label="Compare"
+                                variant={compareButtonVariant}
+                                onclick={handleCompareMode}
+                                icon-name="utility:side_list"
+                                title="Compare multiple records side by side"
+                            ></lightning-button>
+                        </lightning-button-group>
+                    </template>
                 </template>
                 <template lwc:if={showSettingsButton}>
                     <lightning-button-icon
@@ -110,8 +112,10 @@
                                     included-categories={includedCategories}
                                     included-relationships={includedRelationships}
                                     depth={currentDepth}
+                                max-depth-allowed={normalizedMaxDepth}
                                     session-tokens={sessionTokens}
                                     session-credits={sessionCredits}
+                                show-usage-metrics={showUsageMetrics}
                                     oncontextchange={handleContextChange}
                                     ondepthchange={handleDepthChange}
                                     onfieldselect={handleOpenFieldSelector}
@@ -125,6 +129,11 @@
                                 record-name={activeRecordName}
                                 mode="insights"
                                 storage-key={storageKey}
+                                show-model-picker={showModelPicker}
+                                default-model-api-name={defaultModelApiName}
+                                show-suggested-prompts={showSuggestedPrompts}
+                                persist-conversation={persistConversation}
+                                enable-suggested-follow-ups={enableSuggestedFollowUps}
                                 onusageupdate={handleUsageUpdate}
                             ></c-chat-panel>
                         </div>
@@ -156,6 +165,13 @@
                     record-id={recordId}
                     object-api-name={objectApiName}
                     storage-key={compareStorageKey}
+                    show-model-picker={showModelPicker}
+                    default-model-api-name={defaultModelApiName}
+                    show-suggested-prompts={showSuggestedPrompts}
+                    show-usage-metrics={showUsageMetrics}
+                    persist-conversation={persistConversation}
+                    show-suggested-comparison-records={showSuggestedComparisonRecords}
+                    enable-suggested-follow-ups={enableSuggestedFollowUps}
                     onusageupdate={handleUsageUpdate}
                 ></c-record-compare>
             </template>

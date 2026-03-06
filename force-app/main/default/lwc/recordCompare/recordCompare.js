@@ -15,6 +15,13 @@ export default class RecordCompare extends LightningElement {
     @api recordId;
     @api objectApiName;
     @api storageKey;
+    @api showModelPicker = true;
+    @api defaultModelApiName;
+    @api showSuggestedPrompts = true;
+    @api showUsageMetrics = true;
+    @api persistConversation = true;
+    @api showSuggestedComparisonRecords = true;
+    @api enableSuggestedFollowUps = true;
 
     selectedObjectType = '';
     @track selectedRecords = [];
@@ -52,7 +59,9 @@ export default class RecordCompare extends LightningElement {
                 id: this.recordId,
                 name: 'Current Record'
             }];
-            this.loadSuggestions();
+            if (this.showSuggestedComparisonRecords) {
+                this.loadSuggestions();
+            }
         }
     }
 
@@ -91,7 +100,7 @@ export default class RecordCompare extends LightningElement {
     }
 
     get showSuggestions() {
-        return this.recordId && this.selectedRecords.length < 5;
+        return this.showSuggestedComparisonRecords && this.recordId && this.selectedRecords.length < 5;
     }
 
     get hasSuggestions() {
