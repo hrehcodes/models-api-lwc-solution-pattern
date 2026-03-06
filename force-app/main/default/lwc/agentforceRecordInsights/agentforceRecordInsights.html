@@ -1,37 +1,65 @@
 <template>
     <lightning-card>
-        <div slot="title" class="card-title-with-icon">
-            <img src={agentforceIcon} alt="Agentforce" class="agentforce-card-icon" />
-            <span class="slds-card__header-title slds-truncate">{cardTitle}</span>
-        </div>
-        <!-- Mode Toggle -->
-        <div slot="actions">
-            <lightning-button-group>
-                <lightning-button
-                    label="Insights"
-                    variant={insightsButtonVariant}
-                    onclick={handleInsightsMode}
-                    icon-name="utility:preview"
-                    title="Chat about this record's data"
-                ></lightning-button>
-                <lightning-button
-                    label="Compare"
-                    variant={compareButtonVariant}
-                    onclick={handleCompareMode}
-                    icon-name="utility:side_list"
-                    title="Compare multiple records side by side"
-                ></lightning-button>
-            </lightning-button-group>
-            <template lwc:if={showSettingsButton}>
-                <lightning-button-icon
-                    icon-name="utility:settings"
-                    alternative-text="Toggle context panel"
-                    title="Show or hide the context settings panel"
-                    class="slds-m-left_x-small"
-                    onclick={handleToggleContext}
-                    variant={contextToggleVariant}
-                ></lightning-button-icon>
-            </template>
+        <div class={customHeaderClass} lwc:ref="header">
+            <div class="header-title-row">
+                <img src={agentforceIcon} alt="Agentforce" class="agentforce-card-icon" />
+                <span class="header-title-text">{displayCardTitle}</span>
+            </div>
+
+            <div class="header-actions-row">
+                <template lwc:if={useModeMenu}>
+                    <lightning-button-menu
+                        label={modeMenuLabel}
+                        title="Switch mode"
+                        alternative-text="Switch between Insights and Compare"
+                        icon-name="utility:chevrondown"
+                        icon-position="right"
+                        variant="border-filled"
+                        menu-alignment="right"
+                        class="mode-switch-menu"
+                        onselect={handleModeSelect}
+                    >
+                        <lightning-menu-item
+                            value="insights"
+                            label="Insights"
+                            icon-name={insightsMenuItemIcon}
+                        ></lightning-menu-item>
+                        <lightning-menu-item
+                            value="compare"
+                            label="Compare"
+                            icon-name={compareMenuItemIcon}
+                        ></lightning-menu-item>
+                    </lightning-button-menu>
+                </template>
+                <template lwc:else>
+                    <lightning-button-group>
+                        <lightning-button
+                            label="Insights"
+                            variant={insightsButtonVariant}
+                            onclick={handleInsightsMode}
+                            icon-name="utility:preview"
+                            title="Chat about this record's data"
+                        ></lightning-button>
+                        <lightning-button
+                            label="Compare"
+                            variant={compareButtonVariant}
+                            onclick={handleCompareMode}
+                            icon-name="utility:side_list"
+                            title="Compare multiple records side by side"
+                        ></lightning-button>
+                    </lightning-button-group>
+                </template>
+                <template lwc:if={showSettingsButton}>
+                    <lightning-button-icon
+                        icon-name="utility:settings"
+                        alternative-text="Toggle context panel"
+                        title="Show or hide the context settings panel"
+                        onclick={handleToggleContext}
+                        variant={contextToggleVariant}
+                        size={settingsButtonSize}
+                    ></lightning-button-icon>
+                </template>
+            </div>
         </div>
 
         <div class="main-container">

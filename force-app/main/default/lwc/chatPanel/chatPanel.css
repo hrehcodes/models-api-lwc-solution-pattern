@@ -19,6 +19,18 @@
     --sds-c-input-sizing-height: 28px;
 }
 
+@media (max-width: 1200px) {
+    .model-picker {
+        max-width: 220px;
+    }
+}
+
+@media (max-width: 1000px) {
+    .model-picker {
+        max-width: 180px;
+    }
+}
+
 /* Chat messages container - flex to fill available space */
 .chat-messages {
     flex: 1;

@@ -10,11 +10,12 @@
 .depth-selector {
     display: flex;
     align-items: center;
+    gap: 2px;
 }
 
 .depth-btn {
-    --sds-c-button-neutral-sizing-height: 24px;
-    --sds-c-button-brand-sizing-height: 24px;
+    --sds-c-button-neutral-sizing-height: 18px;
+    --sds-c-button-brand-sizing-height: 18px;
 }
 
 .section-header {

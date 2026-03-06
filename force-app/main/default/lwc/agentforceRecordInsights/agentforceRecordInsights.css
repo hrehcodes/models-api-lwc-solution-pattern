@@ -1,15 +1,102 @@
-.card-title-with-icon {
+.custom-header {
+    padding: 0.25rem 0.75rem 0.375rem;
+    border-bottom: 1px solid #e5e5e5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.header-title-row {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    flex: 1 1 20rem;
     min-width: 0;
-    overflow: hidden;
 }
 
 .agentforce-card-icon {
-    width: 28px;
-    height: 28px;
+    width: 20px;
+    height: 20px;
     flex-shrink: 0;
+}
+
+.header-title-text {
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.25;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.header-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+.custom-header.medium {
+    flex-wrap: nowrap;
+}
+
+.custom-header.medium .header-title-row {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.custom-header.medium .header-title-text {
+    white-space: nowrap;
+}
+
+.custom-header.medium .header-actions-row {
+    margin-left: auto;
+    gap: 0.25rem;
+}
+
+.custom-header.small {
+    align-items: flex-start;
+    padding: 0.375rem 0.75rem 0.5rem;
+}
+
+.custom-header.small .header-title-row {
+    flex: 1 1 100%;
+}
+
+.custom-header.small .header-title-text {
+    font-size: 1rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.custom-header.small .header-actions-row {
+    width: auto;
+    margin-left: auto;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.mode-switch-menu {
+    --slds-c-button-radius-border: 9999px;
+    --slds-c-button-color-border: #747474;
+    --slds-c-button-sizing-height: 2rem;
+    --slds-c-button-spacing-inline-start: 0.9rem;
+    --slds-c-button-spacing-inline-end: 0.9rem;
+    min-width: 8.5rem;
+}
+
+.custom-header.medium .mode-switch-menu {
+    min-width: 7.75rem;
+}
+
+.custom-header.small .mode-switch-menu {
+    min-width: 7.25rem;
 }
 
 .main-container {
