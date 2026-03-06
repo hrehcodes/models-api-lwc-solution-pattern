@@ -50,11 +50,11 @@ export default class ChatPanel extends LightningElement {
     @api recordName;
     @api mode = 'insights';
     @api comparisonContextJson;
-    @api showModelPicker = true;
+    @api showModelPicker;
     @api defaultModelApiName;
-    @api showSuggestedPrompts = true;
-    @api persistConversation = true;
-    @api enableSuggestedFollowUps = true;
+    @api showSuggestedPrompts;
+    @api persistConversation;
+    @api enableSuggestedFollowUps;
 
     @track messages = [];
     userInput = '';
@@ -107,7 +107,7 @@ export default class ChatPanel extends LightningElement {
     }
 
     connectedCallback() {
-        if (!this.persistConversation) {
+        if (!this.persistConversationEnabled) {
             this.clearPersistedState();
         }
         this.loadConversation();
@@ -137,7 +137,7 @@ export default class ChatPanel extends LightningElement {
     }
 
     get showModelBar() {
-        return this.showModelPicker || this.hasMessages;
+        return this.showModelPickerEnabled || this.hasMessages;
     }
 
     get sendDisabled() {
@@ -156,7 +156,7 @@ export default class ChatPanel extends LightningElement {
     }
 
     get showSuggestedPromptButtons() {
-        return this.showSuggestedPrompts && this.suggestedPrompts.length > 0;
+        return this.showSuggestedPromptsEnabled && this.suggestedPrompts.length > 0;
     }
 
     get followUpPromptsKeyed() {
@@ -164,7 +164,23 @@ export default class ChatPanel extends LightningElement {
     }
 
     get hasFollowUpPrompts() {
-        return this.enableSuggestedFollowUps && this.followUpPromptsKeyed.length > 0;
+        return this.enableSuggestedFollowUpsEnabled && this.followUpPromptsKeyed.length > 0;
+    }
+
+    get showModelPickerEnabled() {
+        return this.isBooleanEnabled(this.showModelPicker);
+    }
+
+    get showSuggestedPromptsEnabled() {
+        return this.isBooleanEnabled(this.showSuggestedPrompts);
+    }
+
+    get persistConversationEnabled() {
+        return this.isBooleanEnabled(this.persistConversation);
+    }
+
+    get enableSuggestedFollowUpsEnabled() {
+        return this.isBooleanEnabled(this.enableSuggestedFollowUps);
     }
 
     // ── Event Handlers ──
@@ -231,7 +247,7 @@ export default class ChatPanel extends LightningElement {
             if (result.success) {
                 this.addMessage('assistant', result.response);
                 this.trackUsage(text, result.response);
-                if (this.enableSuggestedFollowUps) {
+                if (this.enableSuggestedFollowUpsEnabled) {
                     this.generateFollowUps();
                 }
             } else {
@@ -369,7 +385,7 @@ export default class ChatPanel extends LightningElement {
     // ── Follow-up Generation ──
 
     async generateFollowUps() {
-        if (!this.enableSuggestedFollowUps) {
+        if (!this.enableSuggestedFollowUpsEnabled) {
             return;
         }
 
@@ -391,7 +407,7 @@ export default class ChatPanel extends LightningElement {
     // ── localStorage Persistence ──
 
     saveConversation() {
-        if (!this.storageKey || !this.persistConversation) {
+        if (!this.storageKey || !this.persistConversationEnabled) {
             this.clearPersistedState();
             return;
         }
@@ -402,7 +418,7 @@ export default class ChatPanel extends LightningElement {
     }
 
     loadConversation() {
-        if (!this.storageKey || !this.persistConversation) {
+        if (!this.storageKey || !this.persistConversationEnabled) {
             this.messages = [];
             return;
         }
@@ -436,7 +452,7 @@ export default class ChatPanel extends LightningElement {
     }
 
     saveUsageMetrics() {
-        if (!this.storageKey || !this.persistConversation) {
+        if (!this.storageKey || !this.persistConversationEnabled) {
             this.clearPersistedState();
             return;
         }
@@ -449,7 +465,7 @@ export default class ChatPanel extends LightningElement {
     }
 
     loadUsageMetrics() {
-        if (!this.storageKey || !this.persistConversation) {
+        if (!this.storageKey || !this.persistConversationEnabled) {
             this.sessionTokens = 0;
             this.sessionCredits = 0;
             this.dispatchUsageUpdate();
@@ -489,6 +505,10 @@ export default class ChatPanel extends LightningElement {
         }
 
         this.selectedModel = fallbackModel || availableModels[0] || null;
+    }
+
+    isBooleanEnabled(value) {
+        return value !== false && value !== 'false';
     }
 
     // ── Markdown Rendering ──

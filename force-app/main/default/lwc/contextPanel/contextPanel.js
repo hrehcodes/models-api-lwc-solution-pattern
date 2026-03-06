@@ -28,7 +28,7 @@ export default class ContextPanel extends LightningElement {
     @api maxDepthAllowed = 3;
     @api sessionTokens = 0;
     @api sessionCredits = 0;
-    @api showUsageMetrics = true;
+    @api showUsageMetrics;
 
     fieldsExpanded = false;
     relationshipsExpanded = false;
@@ -54,6 +54,7 @@ export default class ContextPanel extends LightningElement {
     get depth3Variant() { return this.depth === 3 ? 'brand' : 'neutral'; }
     get showDepth2Button() { return this.normalizedMaxDepth >= 2; }
     get showDepth3Button() { return this.normalizedMaxDepth >= 3; }
+    get showUsageMetricsEnabled() { return this.isBooleanEnabled(this.showUsageMetrics); }
 
     get depthDescription() {
         return DEPTH_DESCRIPTIONS[this.depth] || '';
@@ -180,6 +181,10 @@ export default class ContextPanel extends LightningElement {
     handleDepth3() {
         if (this.normalizedMaxDepth < 3) return;
         this.dispatchEvent(new CustomEvent('depthchange', { detail: { depth: 3 } }));
+    }
+
+    isBooleanEnabled(value) {
+        return value !== false && value !== 'false';
     }
 
     toggleFieldsSection() { this.fieldsExpanded = !this.fieldsExpanded; }

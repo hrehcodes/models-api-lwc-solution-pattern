@@ -18,17 +18,17 @@ export default class AgentforceRecordInsights extends LightningElement {
     @api defaultDepth = 1;
     @api defaultMode = MODE_INSIGHTS;
     @api availableModes = AVAILABLE_MODES_BOTH;
-    @api startWithContextPanelOpen = true;
+    @api startWithContextPanelOpen;
     @api maxDepthAllowed = 3;
     @api defaultFieldCategoriesCsv;
     @api defaultRelationshipsCsv;
-    @api showModelPicker = true;
+    @api showModelPicker;
     @api defaultModelApiName;
-    @api showSuggestedPrompts = true;
-    @api showUsageMetrics = true;
-    @api persistConversation = true;
-    @api showSuggestedComparisonRecords = true;
-    @api enableSuggestedFollowUps = true;
+    @api showSuggestedPrompts;
+    @api showUsageMetrics;
+    @api persistConversation;
+    @api showSuggestedComparisonRecords;
+    @api enableSuggestedFollowUps;
 
     mode = MODE_INSIGHTS;
     contextPanelOpen = true;
@@ -63,7 +63,7 @@ export default class AgentforceRecordInsights extends LightningElement {
     ];
 
     connectedCallback() {
-        this.contextPanelOpen = this.startWithContextPanelOpen !== false;
+        this.contextPanelOpen = this.isBooleanEnabled(this.startWithContextPanelOpen);
         this.mode = this.getInitialMode();
         this.currentDepth = this.normalizeDepth(this.defaultDepth);
 
@@ -118,6 +118,12 @@ export default class AgentforceRecordInsights extends LightningElement {
     get allowsInsightsMode() { return this.normalizedAvailableModes !== AVAILABLE_MODES_COMPARE_ONLY; }
     get allowsCompareMode() { return this.normalizedAvailableModes !== AVAILABLE_MODES_INSIGHTS_ONLY; }
     get showModeSwitcher() { return this.allowsInsightsMode && this.allowsCompareMode; }
+    get showModelPickerEnabled() { return this.isBooleanEnabled(this.showModelPicker); }
+    get showSuggestedPromptsEnabled() { return this.isBooleanEnabled(this.showSuggestedPrompts); }
+    get showUsageMetricsEnabled() { return this.isBooleanEnabled(this.showUsageMetrics); }
+    get persistConversationEnabled() { return this.isBooleanEnabled(this.persistConversation); }
+    get showSuggestedComparisonRecordsEnabled() { return this.isBooleanEnabled(this.showSuggestedComparisonRecords); }
+    get enableSuggestedFollowUpsEnabled() { return this.isBooleanEnabled(this.enableSuggestedFollowUps); }
 
     get showSettingsButton() {
         return this.isInsightsMode && this.hasRecordContext;
@@ -335,6 +341,10 @@ export default class AgentforceRecordInsights extends LightningElement {
 
     normalizeToken(value) {
         return value ? String(value).trim().toLowerCase().replace(/[\s_-]+/g, '') : '';
+    }
+
+    isBooleanEnabled(value) {
+        return value !== false && value !== 'false';
     }
 
     extractErrorMessage(error) {

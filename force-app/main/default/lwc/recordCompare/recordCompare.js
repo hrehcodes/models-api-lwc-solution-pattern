@@ -15,13 +15,13 @@ export default class RecordCompare extends LightningElement {
     @api recordId;
     @api objectApiName;
     @api storageKey;
-    @api showModelPicker = true;
+    @api showModelPicker;
     @api defaultModelApiName;
-    @api showSuggestedPrompts = true;
-    @api showUsageMetrics = true;
-    @api persistConversation = true;
-    @api showSuggestedComparisonRecords = true;
-    @api enableSuggestedFollowUps = true;
+    @api showSuggestedPrompts;
+    @api showUsageMetrics;
+    @api persistConversation;
+    @api showSuggestedComparisonRecords;
+    @api enableSuggestedFollowUps;
 
     selectedObjectType = '';
     @track selectedRecords = [];
@@ -59,7 +59,7 @@ export default class RecordCompare extends LightningElement {
                 id: this.recordId,
                 name: 'Current Record'
             }];
-            if (this.showSuggestedComparisonRecords) {
+            if (this.showSuggestedComparisonRecordsEnabled) {
                 this.loadSuggestions();
             }
         }
@@ -100,7 +100,15 @@ export default class RecordCompare extends LightningElement {
     }
 
     get showSuggestions() {
-        return this.showSuggestedComparisonRecords && this.recordId && this.selectedRecords.length < 5;
+        return this.showSuggestedComparisonRecordsEnabled && this.recordId && this.selectedRecords.length < 5;
+    }
+
+    get showUsageMetricsEnabled() {
+        return this.isBooleanEnabled(this.showUsageMetrics);
+    }
+
+    get showSuggestedComparisonRecordsEnabled() {
+        return this.isBooleanEnabled(this.showSuggestedComparisonRecords);
     }
 
     get hasSuggestions() {
@@ -268,5 +276,9 @@ export default class RecordCompare extends LightningElement {
         this.dispatchEvent(new CustomEvent('usageupdate', {
             detail: event.detail
         }));
+    }
+
+    isBooleanEnabled(value) {
+        return value !== false && value !== 'false';
     }
 }
