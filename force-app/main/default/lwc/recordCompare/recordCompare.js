@@ -2,6 +2,7 @@ import { LightningElement, api, track } from 'lwc';
 import getComparisonContext from '@salesforce/apex/RecordCompareService.getComparisonContext';
 import searchRecords from '@salesforce/apex/RecordCompareService.searchRecords';
 import getSuggestedRecords from '@salesforce/apex/RecordCompareService.getSuggestedRecords';
+import getAvailableCompareObjects from '@salesforce/apex/RecordCompareService.getAvailableCompareObjects';
 
 const OBJECT_ICON_MAP = {
     Account: 'standard:account',
@@ -36,23 +37,21 @@ export default class RecordCompare extends LightningElement {
     @track suggestedRecords = [];
     isLoadingSuggestions = false;
     suggestionsLoaded = false;
+    @track objectTypeOptions = [];
+    objectTypeFilter = '';
+    isLoadingObjectTypes = false;
+    objectTypeError;
 
     _sessionTokens = 0;
     _sessionCredits = 0;
 
     _searchTimeout;
 
-    objectTypeOptions = [
-        { label: 'Account', value: 'Account' },
-        { label: 'Opportunity', value: 'Opportunity' },
-        { label: 'Contact', value: 'Contact' },
-        { label: 'Case', value: 'Case' },
-        { label: 'Lead', value: 'Lead' }
-    ];
-
     connectedCallback() {
         if (this.objectApiName) {
             this.selectedObjectType = this.objectApiName;
+        } else {
+            this.loadAvailableObjectTypes();
         }
         if (this.recordId && this.objectApiName) {
             this.selectedRecords = [{
@@ -69,6 +68,32 @@ export default class RecordCompare extends LightningElement {
 
     get showObjectPicker() {
         return !this.objectApiName;
+    }
+
+    get filteredObjectTypeOptions() {
+        const normalizedFilter = this.objectTypeFilter.trim().toLowerCase();
+        let options = this.objectTypeOptions;
+
+        if (normalizedFilter) {
+            options = options.filter(option =>
+                option.label.toLowerCase().includes(normalizedFilter)
+                || option.value.toLowerCase().includes(normalizedFilter)
+            );
+        }
+
+        const selectedOption = this.objectTypeOptions.find(option => option.value === this.selectedObjectType);
+        if (selectedOption && !options.some(option => option.value === selectedOption.value)) {
+            options = [selectedOption, ...options];
+        }
+
+        return options;
+    }
+
+    get noFilteredObjectOptions() {
+        return !this.isLoadingObjectTypes
+            && !this.objectTypeError
+            && this.objectTypeOptions.length > 0
+            && this.filteredObjectTypeOptions.length === 0;
     }
 
     get canSearch() {
@@ -93,6 +118,10 @@ export default class RecordCompare extends LightningElement {
 
     get objectIconName() {
         return OBJECT_ICON_MAP[this.activeObjectType] || 'standard:custom_notification';
+    }
+
+    get objectFilterPlaceholder() {
+        return 'Filter object types...';
     }
 
     get comparisonLabel() {
@@ -133,6 +162,24 @@ export default class RecordCompare extends LightningElement {
 
     get displaySessionCredits() {
         return this._sessionCredits.toLocaleString();
+    }
+
+    async loadAvailableObjectTypes() {
+        this.isLoadingObjectTypes = true;
+        this.objectTypeError = null;
+
+        try {
+            const options = await getAvailableCompareObjects();
+            this.objectTypeOptions = (options || []).map(option => ({
+                label: option.label,
+                value: option.apiName
+            }));
+        } catch (error) {
+            this.objectTypeOptions = [];
+            this.objectTypeError = error?.body?.message || error?.message || 'Failed to load object types.';
+        } finally {
+            this.isLoadingObjectTypes = false;
+        }
     }
 
     // ── Suggestions ──
@@ -176,6 +223,10 @@ export default class RecordCompare extends LightningElement {
         this.searchResults = [];
         this.comparisonLoaded = false;
         this.comparisonContextJson = null;
+    }
+
+    handleObjectFilterChange(event) {
+        this.objectTypeFilter = event.detail.value || '';
     }
 
     handleSearchChange(event) {

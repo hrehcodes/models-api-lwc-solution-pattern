@@ -19,6 +19,38 @@
     --sds-c-input-sizing-height: 28px;
 }
 
+.context-warning {
+    padding: 0.625rem 0.875rem;
+    border-bottom: 1px solid #f0b75e;
+    background-color: #fff7e6;
+    flex-shrink: 0;
+}
+
+.context-warning-failed {
+    border-bottom-color: #c23934;
+    background-color: #fef1ee;
+}
+
+.warning-summary {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #5c3b00;
+}
+
+.context-warning-failed .warning-summary {
+    color: #8e030f;
+}
+
+.warning-list {
+    margin: 0.375rem 0 0;
+    padding-left: 1rem;
+    font-size: 0.75rem;
+}
+
+.warning-list li {
+    margin-bottom: 0.125rem;
+}
+
 @media (max-width: 1200px) {
     .model-picker {
         max-width: 220px;

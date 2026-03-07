@@ -29,6 +29,9 @@ export default class ContextPanel extends LightningElement {
     @api sessionTokens = 0;
     @api sessionCredits = 0;
     @api showUsageMetrics;
+    @api contextStatus;
+    @api contextWarningSummary;
+    @api contextWarningMessages = [];
 
     fieldsExpanded = false;
     relationshipsExpanded = false;
@@ -55,6 +58,17 @@ export default class ContextPanel extends LightningElement {
     get showDepth2Button() { return this.normalizedMaxDepth >= 2; }
     get showDepth3Button() { return this.normalizedMaxDepth >= 3; }
     get showUsageMetricsEnabled() { return this.isBooleanEnabled(this.showUsageMetrics); }
+    get showContextWarning() {
+        return Boolean(this.contextWarningSummary || this.contextWarningMessageList.length);
+    }
+    get contextWarningMessageList() {
+        return Array.isArray(this.contextWarningMessages) ? this.contextWarningMessages.filter(Boolean) : [];
+    }
+    get contextWarningClass() {
+        return this.contextStatus === 'failed'
+            ? 'context-warning context-warning-failed'
+            : 'context-warning';
+    }
 
     get depthDescription() {
         return DEPTH_DESCRIPTIONS[this.depth] || '';

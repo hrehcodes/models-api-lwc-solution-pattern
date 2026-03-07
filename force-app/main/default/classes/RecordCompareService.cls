@@ -36,6 +36,16 @@ public with sharing class RecordCompareService {
         }
     }
 
+    public class ObjectOption {
+        @AuraEnabled public String apiName { get; set; }
+        @AuraEnabled public String label { get; set; }
+
+        public ObjectOption(String apiName, String label) {
+            this.apiName = apiName;
+            this.label = label;
+        }
+    }
+
     // ── Public Methods ──
 
     /**
@@ -139,6 +149,37 @@ public with sharing class RecordCompareService {
         }
 
         return ctx;
+    }
+
+    @AuraEnabled(cacheable=true)
+    public static List<ObjectOption> getAvailableCompareObjects() {
+        Map<String, Schema.SObjectType> globalDescribe = Schema.getGlobalDescribe();
+        Map<String, ObjectOption> optionsByKey = new Map<String, ObjectOption>();
+        List<String> sortKeys = new List<String>();
+
+        for (String objectApiName : globalDescribe.keySet()) {
+            Schema.DescribeSObjectResult objDescribe = globalDescribe.get(objectApiName).getDescribe();
+            if (!objDescribe.isAccessible() || !objDescribe.isQueryable() || objDescribe.isDeprecatedAndHidden()) {
+                continue;
+            }
+
+            String nameField = RecordSchemaUtils.getNameField(objDescribe);
+            if (nameField == 'Id') {
+                continue;
+            }
+
+            String sortKey = objDescribe.getLabel().toLowerCase() + '|' + objectApiName;
+            sortKeys.add(sortKey);
+            optionsByKey.put(sortKey, new ObjectOption(objectApiName, objDescribe.getLabel()));
+        }
+
+        sortKeys.sort();
+
+        List<ObjectOption> options = new List<ObjectOption>();
+        for (String sortKey : sortKeys) {
+            options.add(optionsByKey.get(sortKey));
+        }
+        return options;
     }
 
     /**
@@ -250,7 +291,7 @@ public with sharing class RecordCompareService {
         }
 
         Schema.SObjectType objType = Schema.getGlobalDescribe().get(objectApiName);
-        if (objType == null || !objType.getDescribe().isAccessible()) {
+        if (objType == null) {
             throw new AuraHandledException('Invalid or inaccessible object type.');
         }
 
@@ -258,7 +299,14 @@ public with sharing class RecordCompareService {
         if (maxResults > 50) maxResults = 50;
 
         Schema.DescribeSObjectResult objDescribe = objType.getDescribe();
+        if (!objDescribe.isAccessible() || !objDescribe.isQueryable()) {
+            throw new AuraHandledException('Invalid or inaccessible object type.');
+        }
+
         String nameField = RecordSchemaUtils.getNameField(objDescribe);
+        if (nameField == 'Id') {
+            throw new AuraHandledException('This object type does not support record-name search.');
+        }
 
         List<Map<String, String>> results = new List<Map<String, String>>();
 
@@ -274,16 +322,17 @@ public with sharing class RecordCompareService {
                 });
             }
         } else {
-            String searchQuery = 'FIND \'' + String.escapeSingleQuotes(searchTerm) + '*\' IN NAME FIELDS RETURNING '
-                + objectApiName + '(Id, ' + nameField + ' LIMIT ' + maxResults + ')';
-            List<List<SObject>> searchResults = Search.query(searchQuery);
-            if (!searchResults.isEmpty()) {
-                for (SObject rec : searchResults[0]) {
-                    results.add(new Map<String, String>{
-                        'id' => rec.Id,
-                        'name' => String.valueOf(rec.get(nameField))
-                    });
-                }
+            String searchPattern = '%' + searchTerm.trim() + '%';
+            String soql = 'SELECT Id, ' + nameField
+                + ' FROM ' + objectApiName
+                + ' WHERE ' + nameField + ' LIKE :searchPattern'
+                + ' ORDER BY LastModifiedDate DESC'
+                + ' LIMIT ' + maxResults;
+            for (SObject rec : Database.query(soql)) {
+                results.add(new Map<String, String>{
+                    'id' => rec.Id,
+                    'name' => String.valueOf(rec.get(nameField))
+                });
             }
         }
 

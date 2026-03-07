@@ -55,6 +55,9 @@ export default class ChatPanel extends LightningElement {
     @api showSuggestedPrompts;
     @api persistConversation;
     @api enableSuggestedFollowUps;
+    @api contextStatus;
+    @api contextWarningSummary;
+    @api contextWarningMessages = [];
 
     @track messages = [];
     userInput = '';
@@ -181,6 +184,20 @@ export default class ChatPanel extends LightningElement {
 
     get enableSuggestedFollowUpsEnabled() {
         return this.isBooleanEnabled(this.enableSuggestedFollowUps);
+    }
+
+    get showContextWarning() {
+        return Boolean(this.contextWarningSummary || this.contextWarningMessageList.length);
+    }
+
+    get contextWarningMessageList() {
+        return Array.isArray(this.contextWarningMessages) ? this.contextWarningMessages.filter(Boolean) : [];
+    }
+
+    get contextWarningClass() {
+        return this.contextStatus === 'failed'
+            ? 'context-warning context-warning-failed'
+            : 'context-warning';
     }
 
     // ── Event Handlers ──

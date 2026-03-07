@@ -75,6 +75,10 @@
     flex: 1;
 }
 
+.picker-error {
+    color: #8e030f;
+}
+
 .search-results {
     list-style: none;
     padding: 0;

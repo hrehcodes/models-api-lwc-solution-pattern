@@ -42,6 +42,11 @@ export default class AgentforceRecordInsights extends LightningElement {
     showFieldSelector = false;
     sessionTokens = 0;
     sessionCredits = 0;
+    contextLoadStatus;
+    contextWarningSummary;
+    contextWarningMessages = [];
+    availableContextWarnings = [];
+    recordContextWarnings = [];
 
     selectedObjectType = '';
     manualRecordId = '';
@@ -200,12 +205,14 @@ export default class AgentforceRecordInsights extends LightningElement {
         this.contextError = null;
         this.availableContext = null;
         this.recordContextJson = null;
+        this.resetContextWarningState();
 
         try {
             const ctx = await getAvailableContext({ recordId: this.activeRecordId });
             this.availableContext = ctx;
             this.activeObjectApiName = ctx.objectApiName;
             this.activeRecordName = ctx.recordName;
+            this.availableContextWarnings = this.extractCompletenessMessages(ctx.completeness);
             this.includedCategories = this.resolveConfiguredSelections(
                 ctx.fieldCategories,
                 'name',
@@ -236,9 +243,12 @@ export default class AgentforceRecordInsights extends LightningElement {
                 includedCategories: this.includedCategories,
                 includedRelationships: this.includedRelationships
             });
-            this.recordContextJson = JSON.stringify(ctx);
+            this.recordContextJson = JSON.stringify(this.serializeContextForChat(ctx));
+            this.updateContextWarningState(ctx.completeness);
         } catch (error) {
             console.error('Error loading record context:', error);
+            this.recordContextJson = null;
+            this.setContextFailureState(error);
         }
     }
 
@@ -274,6 +284,61 @@ export default class AgentforceRecordInsights extends LightningElement {
     handleUsageUpdate(event) {
         this.sessionTokens = event.detail.sessionTokens;
         this.sessionCredits = event.detail.sessionCredits;
+    }
+
+    resetContextWarningState() {
+        this.contextLoadStatus = null;
+        this.contextWarningSummary = null;
+        this.contextWarningMessages = [];
+        this.availableContextWarnings = [];
+        this.recordContextWarnings = [];
+    }
+
+    updateContextWarningState(completeness) {
+        this.recordContextWarnings = this.extractCompletenessMessages(completeness);
+        const combinedWarnings = this.combineWarnings(
+            this.availableContextWarnings,
+            this.recordContextWarnings
+        );
+
+        if (combinedWarnings.length) {
+            this.contextLoadStatus = 'partial';
+            this.contextWarningSummary = 'Some record context was skipped or truncated. AI responses may be incomplete.';
+            this.contextWarningMessages = combinedWarnings;
+            return;
+        }
+
+        this.contextLoadStatus = 'ready';
+        this.contextWarningSummary = null;
+        this.contextWarningMessages = [];
+    }
+
+    setContextFailureState(error) {
+        this.contextLoadStatus = 'failed';
+        this.contextWarningSummary = 'Record context could not be loaded. Responses may be ungrounded until context loads successfully.';
+        this.contextWarningMessages = this.combineWarnings(
+            [this.extractErrorMessage(error)],
+            this.availableContextWarnings
+        );
+    }
+
+    extractCompletenessMessages(completeness) {
+        return Array.isArray(completeness?.warningMessages)
+            ? completeness.warningMessages.filter(Boolean)
+            : [];
+    }
+
+    combineWarnings(...warningGroups) {
+        return [...new Set([].concat(...warningGroups).filter(Boolean))];
+    }
+
+    serializeContextForChat(ctx) {
+        if (!ctx) {
+            return null;
+        }
+
+        const { completeness, ...chatContext } = ctx;
+        return chatContext;
     }
 
     getInitialMode() {

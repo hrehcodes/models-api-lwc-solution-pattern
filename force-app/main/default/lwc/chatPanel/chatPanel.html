@@ -25,6 +25,19 @@
         </div>
     </template>
 
+    <template lwc:if={showContextWarning}>
+        <div class={contextWarningClass}>
+            <div class="warning-summary">{contextWarningSummary}</div>
+            <template lwc:if={contextWarningMessageList.length}>
+                <ul class="warning-list">
+                    <template for:each={contextWarningMessageList} for:item="warning">
+                        <li key={warning}>{warning}</li>
+                    </template>
+                </ul>
+            </template>
+        </div>
+    </template>
+
     <!-- Chat Messages -->
     <div class="chat-messages" lwc:ref="chatContainer">
         <template lwc:if={showWelcome}>

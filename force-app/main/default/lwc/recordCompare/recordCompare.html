@@ -32,14 +32,36 @@
 
                 <!-- Object Type Picker (app page only, when no objectApiName) -->
                 <template lwc:if={showObjectPicker}>
+                    <lightning-input
+                        type="search"
+                        label="Filter Object Types"
+                        value={objectTypeFilter}
+                        onchange={handleObjectFilterChange}
+                        placeholder={objectFilterPlaceholder}
+                        class="slds-m-bottom_x-small"
+                    ></lightning-input>
                     <lightning-combobox
                         label="Object Type"
                         value={selectedObjectType}
-                        options={objectTypeOptions}
+                        options={filteredObjectTypeOptions}
                         onchange={handleObjectTypeChange}
                         placeholder="Select object type to compare..."
                         class="slds-m-bottom_small"
+                        disabled={isLoadingObjectTypes}
                     ></lightning-combobox>
+                    <template lwc:if={isLoadingObjectTypes}>
+                        <div class="slds-text-align_center slds-p-vertical_x-small">
+                            <lightning-spinner alternative-text="Loading object types..." size="x-small"></lightning-spinner>
+                        </div>
+                    </template>
+                    <template lwc:if={objectTypeError}>
+                        <p class="picker-error slds-m-bottom_small">{objectTypeError}</p>
+                    </template>
+                    <template lwc:if={noFilteredObjectOptions}>
+                        <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_small">
+                            No object types match the current filter.
+                        </p>
+                    </template>
                 </template>
 
                 <!-- Suggested Records -->

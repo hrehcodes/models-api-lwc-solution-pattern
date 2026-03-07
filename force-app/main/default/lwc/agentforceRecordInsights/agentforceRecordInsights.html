@@ -112,10 +112,13 @@
                                     included-categories={includedCategories}
                                     included-relationships={includedRelationships}
                                     depth={currentDepth}
-                                max-depth-allowed={normalizedMaxDepth}
+                                    max-depth-allowed={normalizedMaxDepth}
                                     session-tokens={sessionTokens}
                                     session-credits={sessionCredits}
-                                show-usage-metrics={showUsageMetricsEnabled}
+                                    show-usage-metrics={showUsageMetricsEnabled}
+                                    context-status={contextLoadStatus}
+                                    context-warning-summary={contextWarningSummary}
+                                    context-warning-messages={contextWarningMessages}
                                     oncontextchange={handleContextChange}
                                     ondepthchange={handleDepthChange}
                                     onfieldselect={handleOpenFieldSelector}
@@ -134,6 +137,9 @@
                                 show-suggested-prompts={showSuggestedPromptsEnabled}
                                 persist-conversation={persistConversationEnabled}
                                 enable-suggested-follow-ups={enableSuggestedFollowUpsEnabled}
+                                context-status={contextLoadStatus}
+                                context-warning-summary={contextWarningSummary}
+                                context-warning-messages={contextWarningMessages}
                                 onusageupdate={handleUsageUpdate}
                             ></c-chat-panel>
                         </div>

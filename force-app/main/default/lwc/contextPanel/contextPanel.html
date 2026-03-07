@@ -14,6 +14,19 @@
             </template>
         </div>
 
+        <template lwc:if={showContextWarning}>
+            <div class={contextWarningClass}>
+                <div class="warning-summary">{contextWarningSummary}</div>
+                <template lwc:if={contextWarningMessageList.length}>
+                    <ul class="warning-list">
+                        <template for:each={contextWarningMessageList} for:item="warning">
+                            <li key={warning}>{warning}</li>
+                        </template>
+                    </ul>
+                </template>
+            </div>
+        </template>
+
         <!-- Depth Selector -->
         <div class="slds-m-bottom_small">
             <div class="depth-selector">

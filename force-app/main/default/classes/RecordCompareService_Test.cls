@@ -88,13 +88,28 @@ private class RecordCompareService_Test {
     @IsTest
     static void testSearchRecords_WithTerm() {
         Test.startTest();
-        // SOSL needs Test.setFixedSearchResults
-        Account acc = [SELECT Id FROM Account WHERE Name = 'Compare Account 1' LIMIT 1];
-        Test.setFixedSearchResults(new List<Id>{ acc.Id });
         List<Map<String, String>> results = RecordCompareService.searchRecords('Account', 'Compare', 5);
         Test.stopTest();
 
         System.assert(!results.isEmpty(), 'Should find matching records');
+    }
+
+    @IsTest
+    static void testGetAvailableCompareObjects() {
+        Test.startTest();
+        List<RecordCompareService.ObjectOption> options = RecordCompareService.getAvailableCompareObjects();
+        Test.stopTest();
+
+        System.assert(!options.isEmpty(), 'Should return accessible compare objects');
+
+        Boolean containsAccount = false;
+        for (RecordCompareService.ObjectOption option : options) {
+            if (option.apiName == 'Account') {
+                containsAccount = true;
+                break;
+            }
+        }
+        System.assertEquals(true, containsAccount, 'Account should be included in dynamic object discovery');
     }
 
     @IsTest
