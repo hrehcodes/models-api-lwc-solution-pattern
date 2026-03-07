@@ -102,6 +102,9 @@ private class RecordContextService_Test {
         System.assertNotEquals(null, ctx);
         System.assertEquals('Account', ctx.objectApiName);
         System.assert(!ctx.fields.isEmpty(), 'Should have fields');
+        System.assertNotEquals(null, ctx.completeness, 'Completeness metadata should be returned');
+        System.assertEquals(true, ctx.completeness.isComplete, 'Default context should be complete');
+        System.assertEquals(false, ctx.completeness.hasWarnings, 'Default context should not warn');
     }
 
     @IsTest
@@ -208,5 +211,76 @@ private class RecordContextService_Test {
             exceptionThrown = true;
         }
         System.assert(exceptionThrown, 'Should throw for non-existent relationship');
+    }
+
+    @IsTest
+    static void testGetRecordContext_FieldWarnings() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        RecordContextService.resetTestHooks();
+        RecordContextService.forceFieldSerializationFailure = true;
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            acc.Id, 1, new List<String>{'core'}, null
+        );
+        Test.stopTest();
+
+        RecordContextService.resetTestHooks();
+        System.assertEquals(true, ctx.completeness.hasWarnings, 'Field serialization failure should warn');
+        System.assertEquals(1, ctx.completeness.skippedFieldCount, 'One field should be recorded as skipped');
+    }
+
+    @IsTest
+    static void testGetRecordContext_RelationshipWarnings() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        String relName = 'Contacts';
+
+        RecordContextService.resetTestHooks();
+        RecordContextService.forceRelationshipFetchFailure = true;
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            acc.Id, 1, new List<String>{'core'}, new List<String>{ relName }
+        );
+        Test.stopTest();
+
+        RecordContextService.resetTestHooks();
+        System.assertEquals(true, ctx.completeness.hasWarnings, 'Relationship fetch failure should warn');
+        System.assertEquals(1, ctx.completeness.skippedRelationshipCount, 'Skipped relationship count should increment');
+    }
+
+    @IsTest
+    static void testGetRecordContext_DescendantWarnings() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        RecordContextService.resetTestHooks();
+        RecordContextService.forceDescendantFetchFailure = true;
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            acc.Id, 2, new List<String>{'core'}, new List<String>{ 'Opportunities' }
+        );
+        Test.stopTest();
+
+        RecordContextService.resetTestHooks();
+        System.assertEquals(true, ctx.completeness.hasWarnings, 'Descendant failure should warn');
+        System.assertEquals(1, ctx.completeness.skippedDescendantCount, 'Skipped descendant count should increment');
+    }
+
+    @IsTest
+    static void testGetAvailableContext_TruncationWarnings() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        RecordContextService.resetTestHooks();
+        RecordContextService.forceRelationshipDiscoveryTruncation = true;
+
+        Test.startTest();
+        RecordContextService.AvailableContext ctx = RecordContextService.getAvailableContext(acc.Id);
+        Test.stopTest();
+
+        RecordContextService.resetTestHooks();
+        System.assertEquals(true, ctx.completeness.hasWarnings, 'Truncation should produce warnings');
+        System.assert(ctx.completeness.truncatedRelationshipCount > 0, 'Truncation count should be recorded');
     }
 }

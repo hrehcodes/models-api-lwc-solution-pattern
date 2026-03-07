@@ -10,6 +10,10 @@ public with sharing class RecordContextService {
     private static final Integer DEFAULT_RELATED_RECORD_LIMIT = 10;
     private static final Integer MAX_RELATIONSHIP_QUERIES = 20;
     private static final Integer QUERY_SAFETY_BUFFER = 10;
+    @TestVisible private static Boolean forceFieldSerializationFailure = false;
+    @TestVisible private static Boolean forceRelationshipFetchFailure = false;
+    @TestVisible private static Boolean forceDescendantFetchFailure = false;
+    @TestVisible private static Boolean forceRelationshipDiscoveryTruncation = false;
 
     private static final Set<String> SYSTEM_RELATIONSHIP_SUFFIXES = new Set<String>{
         'Shares', 'Histories', 'Feeds', 'ChangeEvents', 'Tags',
@@ -29,6 +33,33 @@ public with sharing class RecordContextService {
         @AuraEnabled public String recordName { get; set; }
         @AuraEnabled public List<FieldCategory> fieldCategories { get; set; }
         @AuraEnabled public List<RelationshipInfo> relationships { get; set; }
+        @AuraEnabled public ContextCompleteness completeness { get; set; }
+
+        public AvailableContext() {
+            this.fieldCategories = new List<FieldCategory>();
+            this.relationships = new List<RelationshipInfo>();
+            this.completeness = new ContextCompleteness();
+        }
+    }
+
+    public class ContextCompleteness {
+        @AuraEnabled public Boolean isComplete { get; set; }
+        @AuraEnabled public Boolean hasWarnings { get; set; }
+        @AuraEnabled public List<String> warningMessages { get; set; }
+        @AuraEnabled public Integer skippedFieldCount { get; set; }
+        @AuraEnabled public Integer skippedRelationshipCount { get; set; }
+        @AuraEnabled public Integer skippedDescendantCount { get; set; }
+        @AuraEnabled public Integer truncatedRelationshipCount { get; set; }
+
+        public ContextCompleteness() {
+            this.isComplete = true;
+            this.hasWarnings = false;
+            this.warningMessages = new List<String>();
+            this.skippedFieldCount = 0;
+            this.skippedRelationshipCount = 0;
+            this.skippedDescendantCount = 0;
+            this.truncatedRelationshipCount = 0;
+        }
     }
 
     public class FieldCategory {
@@ -77,10 +108,12 @@ public with sharing class RecordContextService {
         @AuraEnabled public String recordName { get; set; }
         @AuraEnabled public Map<String, Object> fields { get; set; }
         @AuraEnabled public List<RelatedRecordSet> relatedRecordSets { get; set; }
+        @AuraEnabled public ContextCompleteness completeness { get; set; }
 
         public RecordContext() {
             this.fields = new Map<String, Object>();
             this.relatedRecordSets = new List<RelatedRecordSet>();
+            this.completeness = new ContextCompleteness();
         }
     }
 
@@ -122,7 +155,7 @@ public with sharing class RecordContextService {
         ctx.objectApiName = objectApiName;
         ctx.objectLabel = objDescribe.getLabel();
         ctx.fieldCategories = categorizeFields(objDescribe);
-        ctx.relationships = discoverRelationships(objDescribe, recordId);
+        ctx.relationships = discoverRelationships(objDescribe, recordId, ctx.completeness);
 
         // Fetch record name
         try {
@@ -224,6 +257,7 @@ public with sharing class RecordContextService {
         for (String fn : fieldsToQuery) {
             if (fn == 'Id') continue;
             try {
+                triggerFieldSerializationFailureIfRequested();
                 Object val = record.get(fn);
                 Map<String, Object> fieldData = new Map<String, Object>();
                 fieldData.put('value', RecordSchemaUtils.normalizeValue(val));
@@ -237,7 +271,7 @@ public with sharing class RecordContextService {
                 }
                 ctx.fields.put(fn, fieldData);
             } catch (Exception e) {
-                // Skip fields that fail
+                noteSkippedField(ctx.completeness);
             }
         }
 
@@ -256,6 +290,7 @@ public with sharing class RecordContextService {
                 if (!childDescribe.isAccessible()) continue;
 
                 try {
+                    triggerRelationshipFetchFailureIfRequested();
                     RelatedRecordSet rrs = fetchRelatedRecords(
                         cr, recordId, childDescribe, DEFAULT_RELATED_RECORD_LIMIT
                     );
@@ -263,11 +298,11 @@ public with sharing class RecordContextService {
                         ctx.relatedRecordSets.add(rrs);
 
                         if (depth >= 2) {
-                            fetchDescendants(rrs, ctx, childDescribe, 2, depth);
+                            fetchDescendants(rrs, ctx, childDescribe, 2, depth, ctx.completeness);
                         }
                     }
                 } catch (Exception e) {
-                    // Skip relationships that fail
+                    noteSkippedRelationship(ctx.completeness, relName);
                 }
             }
         }
@@ -309,6 +344,14 @@ public with sharing class RecordContextService {
         }
 
         throw new AuraHandledException('Relationship not found: ' + relationshipName);
+    }
+
+    @TestVisible
+    static void resetTestHooks() {
+        forceFieldSerializationFailure = false;
+        forceRelationshipFetchFailure = false;
+        forceDescendantFetchFailure = false;
+        forceRelationshipDiscoveryTruncation = false;
     }
 
     // ── Private Methods ──
@@ -430,11 +473,18 @@ public with sharing class RecordContextService {
      * and returns record counts for each.
      */
     private static List<RelationshipInfo> discoverRelationships(
-        Schema.DescribeSObjectResult objDescribe, String recordId
+        Schema.DescribeSObjectResult objDescribe,
+        String recordId,
+        ContextCompleteness completeness
     ) {
         List<RelationshipInfo> relationships = new List<RelationshipInfo>();
         List<Schema.ChildRelationship> childRels = objDescribe.getChildRelationships();
         Integer countQueriesUsed = 0;
+
+        if (Test.isRunningTest() && forceRelationshipDiscoveryTruncation) {
+            countQueriesUsed = MAX_RELATIONSHIP_QUERIES;
+            forceRelationshipDiscoveryTruncation = false;
+        }
 
         for (Schema.ChildRelationship cr : childRels) {
             String relName = cr.getRelationshipName();
@@ -454,6 +504,7 @@ public with sharing class RecordContextService {
 
             if (countQueriesUsed >= MAX_RELATIONSHIP_QUERIES) {
                 info.recordCount = -1;
+                noteTruncatedRelationshipCount(completeness);
                 relationships.add(info);
                 continue;
             }
@@ -465,7 +516,8 @@ public with sharing class RecordContextService {
                 info.recordCount = Database.countQuery(countSoql);
                 countQueriesUsed++;
             } catch (Exception e) {
-                info.recordCount = 0;
+                info.recordCount = -1;
+                noteTruncatedRelationshipCount(completeness);
             }
 
             if (info.recordCount > 0 || info.recordCount == -1) {
@@ -561,7 +613,8 @@ public with sharing class RecordContextService {
         RecordContext ctx,
         Schema.DescribeSObjectResult parentDescribe,
         Integer currentDepth,
-        Integer maxDepth
+        Integer maxDepth,
+        ContextCompleteness completeness
     ) {
         if (currentDepth > maxDepth) return;
         if (Limits.getQueries() >= Limits.getLimitQueries() - QUERY_SAFETY_BUFFER) return;
@@ -590,6 +643,7 @@ public with sharing class RecordContextService {
                 if (parentRecordId == null) continue;
 
                 try {
+                    triggerDescendantFetchFailureIfRequested();
                     RelatedRecordSet childRrs = fetchRelatedRecords(
                         cr, parentRecordId, childDescribe, maxRecords
                     );
@@ -598,11 +652,18 @@ public with sharing class RecordContextService {
                         ctx.relatedRecordSets.add(childRrs);
 
                         if (currentDepth < maxDepth) {
-                            fetchDescendants(childRrs, ctx, childDescribe, currentDepth + 1, maxDepth);
+                            fetchDescendants(
+                                childRrs,
+                                ctx,
+                                childDescribe,
+                                currentDepth + 1,
+                                maxDepth,
+                                completeness
+                            );
                         }
                     }
                 } catch (Exception e) {
-                    // Skip descendant relationships that fail
+                    noteSkippedDescendant(completeness, parentRrs.childObjectApiName, relName);
                 }
                 parentCount++;
             }
@@ -639,6 +700,95 @@ public with sharing class RecordContextService {
         }
 
         return result;
+    }
+
+    private static void noteSkippedField(ContextCompleteness completeness) {
+        completeness.skippedFieldCount++;
+        markIncomplete(
+            completeness,
+            'Some field values could not be included in the record context.'
+        );
+    }
+
+    private static void noteSkippedRelationship(ContextCompleteness completeness, String relationshipName) {
+        completeness.skippedRelationshipCount++;
+        markIncomplete(
+            completeness,
+            'Some related records could not be loaded and were omitted from the context.'
+        );
+        if (String.isNotBlank(relationshipName)) {
+            addWarning(
+                completeness,
+                'Related records skipped for relationship ' + relationshipName + '.'
+            );
+        }
+    }
+
+    private static void noteSkippedDescendant(
+        ContextCompleteness completeness,
+        String parentObjectApiName,
+        String relationshipName
+    ) {
+        completeness.skippedDescendantCount++;
+        markIncomplete(
+            completeness,
+            'Some descendant related records could not be loaded at deeper context levels.'
+        );
+        if (String.isNotBlank(parentObjectApiName) && String.isNotBlank(relationshipName)) {
+            addWarning(
+                completeness,
+                'Descendant records skipped for ' + parentObjectApiName + '.' + relationshipName + '.'
+            );
+        }
+    }
+
+    private static void noteTruncatedRelationshipCount(ContextCompleteness completeness) {
+        completeness.truncatedRelationshipCount++;
+        markIncomplete(
+            completeness,
+            'Some related record counts could not be calculated and are shown without counts.'
+        );
+    }
+
+    private static void markIncomplete(ContextCompleteness completeness, String warningMessage) {
+        if (completeness == null) return;
+        completeness.isComplete = false;
+        completeness.hasWarnings = true;
+        addWarning(completeness, warningMessage);
+    }
+
+    private static void addWarning(ContextCompleteness completeness, String warningMessage) {
+        if (completeness == null || String.isBlank(warningMessage)) return;
+        if (!completeness.warningMessages.contains(warningMessage)) {
+            completeness.warningMessages.add(warningMessage);
+        }
+    }
+
+    private static void triggerFieldSerializationFailureIfRequested() {
+        if (Test.isRunningTest() && forceFieldSerializationFailure) {
+            forceFieldSerializationFailure = false;
+            triggerTestFailure();
+        }
+    }
+
+    private static void triggerRelationshipFetchFailureIfRequested() {
+        if (Test.isRunningTest() && forceRelationshipFetchFailure) {
+            forceRelationshipFetchFailure = false;
+            triggerTestFailure();
+        }
+    }
+
+    private static void triggerDescendantFetchFailureIfRequested() {
+        if (Test.isRunningTest() && forceDescendantFetchFailure) {
+            forceDescendantFetchFailure = false;
+            triggerTestFailure();
+        }
+    }
+
+    private static void triggerTestFailure() {
+        Integer zero = 0;
+        Integer failure = 1 / zero;
+        failure++;
     }
 
 }
