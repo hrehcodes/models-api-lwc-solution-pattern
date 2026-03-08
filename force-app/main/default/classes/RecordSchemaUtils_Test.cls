@@ -39,6 +39,31 @@ private class RecordSchemaUtils_Test {
     }
 
     @IsTest
+    static void testBuildFieldList_UsesCanonicalFieldNamesWithoutDuplicates() {
+        Schema.DescribeSObjectResult opportunityDescribe = Opportunity.SObjectType.getDescribe();
+
+        List<String> fields = RecordSchemaUtils.buildFieldList(opportunityDescribe);
+        Set<String> normalizedFields = new Set<String>();
+
+        for (String fieldName : fields) {
+            String normalizedFieldName = fieldName.toLowerCase();
+            System.assert(
+                !normalizedFields.contains(normalizedFieldName),
+                'Field list should not contain case-insensitive duplicates. Duplicate: ' + fieldName
+            );
+            normalizedFields.add(normalizedFieldName);
+        }
+
+        System.assert(fields.contains('StageName'), 'Opportunity field list should include StageName');
+        System.assert(fields.contains('CloseDate'), 'Opportunity field list should include CloseDate');
+        System.assert(fields.contains('Amount'), 'Opportunity field list should include Amount');
+        System.assert(fields.contains('Probability'), 'Opportunity field list should include Probability');
+        System.assert(fields.contains('NextStep'), 'Opportunity field list should include NextStep');
+        System.assert(!fields.contains('id'), 'Field list should not include lowercase duplicate Id');
+        System.assert(!fields.contains('name'), 'Field list should not include lowercase duplicate Name');
+    }
+
+    @IsTest
     static void testBuildIdentityFieldClause_DeduplicatesId() {
         Schema.DescribeSObjectResult accountDescribe = Account.SObjectType.getDescribe();
         String fieldClause = RecordSchemaUtils.buildIdentityFieldClause(accountDescribe);

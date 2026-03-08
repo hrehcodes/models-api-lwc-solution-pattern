@@ -9,6 +9,27 @@ private class RecordCompareService_Test {
             new Account(Name = 'Compare Account 3', Industry = 'Healthcare', AnnualRevenue = 750000)
         };
         insert accounts;
+
+        insert new List<Opportunity>{
+            new Opportunity(
+                Name = 'Compare Opportunity 1',
+                AccountId = accounts[0].Id,
+                StageName = 'Prospecting',
+                CloseDate = Date.today().addDays(10),
+                Amount = 32000,
+                Probability = 30,
+                NextStep = 'Schedule discovery call'
+            ),
+            new Opportunity(
+                Name = 'Compare Opportunity 2',
+                AccountId = accounts[1].Id,
+                StageName = 'Proposal/Price Quote',
+                CloseDate = Date.today().addDays(5),
+                Amount = 98000,
+                Probability = 70,
+                NextStep = 'Finalize pricing review'
+            )
+        };
     }
 
     @IsTest
@@ -38,6 +59,41 @@ private class RecordCompareService_Test {
         Test.stopTest();
 
         System.assertEquals(3, ctx.records.size());
+    }
+
+    @IsTest
+    static void testGetComparisonContext_OpportunityIncludesPrioritizationFields() {
+        List<Opportunity> opportunities = [
+            SELECT Id, Name, StageName, CloseDate, Amount, Probability, NextStep
+            FROM Opportunity
+            WHERE Name LIKE 'Compare Opportunity %'
+            ORDER BY Name
+        ];
+        List<String> ids = new List<String>();
+        for (Opportunity opp : opportunities) ids.add(opp.Id);
+
+        Test.startTest();
+        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(ids);
+        Test.stopTest();
+
+        System.assertEquals('Opportunity', ctx.objectApiName);
+        System.assert(ctx.commonFields.contains('StageName'), 'Common fields should include StageName');
+        System.assert(ctx.commonFields.contains('CloseDate'), 'Common fields should include CloseDate');
+        System.assert(ctx.commonFields.contains('Amount'), 'Common fields should include Amount');
+        System.assert(ctx.commonFields.contains('Probability'), 'Common fields should include Probability');
+        System.assert(ctx.commonFields.contains('NextStep'), 'Common fields should include NextStep');
+
+        for (RecordCompareService.ComparisonRecord record : ctx.records) {
+            System.assert(record.fields.containsKey('StageName'), 'Comparison record should include StageName');
+            System.assert(record.fields.containsKey('CloseDate'), 'Comparison record should include CloseDate');
+            System.assert(record.fields.containsKey('Amount'), 'Comparison record should include Amount');
+            System.assert(record.fields.containsKey('Probability'), 'Comparison record should include Probability');
+            System.assert(record.fields.containsKey('NextStep'), 'Comparison record should include NextStep');
+
+            Map<String, Object> stageField = (Map<String, Object>) record.fields.get('StageName');
+            System.assertEquals('Stage', String.valueOf(stageField.get('label')));
+            System.assertNotEquals(null, stageField.get('value'));
+        }
     }
 
     @IsTest

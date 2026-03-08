@@ -44,24 +44,28 @@ public with sharing class RecordSchemaUtils {
      */
     public static List<String> buildFieldList(Schema.DescribeSObjectResult objDescribe) {
         List<String> queryFields = new List<String>();
-        Set<String> fieldSet = new Set<String>();
+        Set<String> normalizedFieldSet = new Set<String>();
 
         queryFields.add('Id');
-        fieldSet.add('Id');
+        normalizedFieldSet.add('id');
 
         String nameField = getNameField(objDescribe);
-        if (!fieldSet.contains(nameField)) {
+        String normalizedNameField = nameField.toLowerCase();
+        if (!normalizedFieldSet.contains(normalizedNameField)) {
             queryFields.add(nameField);
-            fieldSet.add(nameField);
+            normalizedFieldSet.add(normalizedNameField);
         }
 
         Map<String, Schema.SObjectField> fieldMap = objDescribe.fields.getMap();
 
-        for (String fieldName : fieldMap.keySet()) {
-            if (fieldSet.contains(fieldName)) continue;
+        for (String fieldKey : fieldMap.keySet()) {
             if (queryFields.size() >= MAX_FIELDS_PER_QUERY) break;
 
-            Schema.DescribeFieldResult dfr = fieldMap.get(fieldName).getDescribe();
+            Schema.DescribeFieldResult dfr = fieldMap.get(fieldKey).getDescribe();
+            String fieldName = dfr.getName();
+            String normalizedFieldName = fieldName.toLowerCase();
+
+            if (normalizedFieldSet.contains(normalizedFieldName)) continue;
             if (!dfr.isAccessible()) continue;
             if (EXCLUDED_FIELD_TYPES.contains(dfr.getType())) continue;
             if (fieldName.length() > MAX_FIELD_NAME_LENGTH) continue;
@@ -71,7 +75,7 @@ public with sharing class RecordSchemaUtils {
             }
 
             queryFields.add(fieldName);
-            fieldSet.add(fieldName);
+            normalizedFieldSet.add(normalizedFieldName);
         }
 
         return queryFields;
