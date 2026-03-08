@@ -62,7 +62,15 @@
 .selection-area {
     border-bottom: 1px solid #e5e5e5;
     flex-shrink: 0;
-    max-height: 50%;
+    max-height: 40%;
+    overflow-y: auto;
+}
+
+.compare-settings-shell {
+    border-bottom: 1px solid #e5e5e5;
+    background-color: #ffffff;
+    flex-shrink: 0;
+    max-height: 45%;
     overflow-y: auto;
 }
 
@@ -135,7 +143,7 @@
     font-size: 0.75rem;
 }
 
-/* Chat + usage area */
+/* Chat area */
 .compare-body {
     display: flex;
     flex-direction: column;
@@ -155,18 +163,4 @@
 .compare-chat > c-chat-panel {
     flex: 1;
     min-height: 0;
-}
-
-.usage-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-top: 1px solid #e5e5e5;
-    background-color: #fafaf9;
-    flex-shrink: 0;
-}
-
-.usage-credits {
-    font-weight: 700;
-    color: #0070d2;
 }

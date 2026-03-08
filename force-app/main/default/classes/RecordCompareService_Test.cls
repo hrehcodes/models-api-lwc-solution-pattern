@@ -10,6 +10,11 @@ private class RecordCompareService_Test {
         };
         insert accounts;
 
+        insert new List<Contact>{
+            new Contact(FirstName = 'Alpha', LastName = 'Contact', AccountId = accounts[0].Id, Email = 'alpha@example.com'),
+            new Contact(FirstName = 'Beta', LastName = 'Contact', AccountId = accounts[1].Id, Email = 'beta@example.com')
+        };
+
         insert new List<Opportunity>{
             new Opportunity(
                 Name = 'Compare Opportunity 1',
@@ -39,7 +44,7 @@ private class RecordCompareService_Test {
         for (Account a : accounts) ids.add(a.Id);
 
         Test.startTest();
-        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(ids);
+        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(ids, 1, null, null);
         Test.stopTest();
 
         System.assertNotEquals(null, ctx);
@@ -55,7 +60,7 @@ private class RecordCompareService_Test {
         for (Account a : accounts) ids.add(a.Id);
 
         Test.startTest();
-        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(ids);
+        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(ids, 1, null, null);
         Test.stopTest();
 
         System.assertEquals(3, ctx.records.size());
@@ -73,7 +78,12 @@ private class RecordCompareService_Test {
         for (Opportunity opp : opportunities) ids.add(opp.Id);
 
         Test.startTest();
-        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(ids);
+        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(
+            ids,
+            1,
+            new List<String>{ 'core', 'status', 'financial', 'dates' },
+            null
+        );
         Test.stopTest();
 
         System.assertEquals('Opportunity', ctx.objectApiName);
@@ -97,12 +107,38 @@ private class RecordCompareService_Test {
     }
 
     @IsTest
+    static void testGetComparisonContext_AppliesSharedContextSelections() {
+        List<Account> accounts = [SELECT Id FROM Account ORDER BY Name LIMIT 2];
+        List<String> ids = new List<String>();
+        for (Account accountRecord : accounts) ids.add(accountRecord.Id);
+
+        Test.startTest();
+        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(
+            ids,
+            1,
+            new List<String>{ 'core' },
+            new List<String>{ 'Contacts' }
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, ctx.commonFields.contains('AnnualRevenue'), 'Only the selected categories should be included');
+        System.assertEquals(false, ctx.completeness.hasWarnings, 'Supported account compare context should not warn');
+
+        for (RecordCompareService.ComparisonRecord record : ctx.records) {
+            System.assert(record.fields.containsKey('Name'), 'Core fields should still be included');
+            System.assertEquals(false, record.fields.containsKey('AnnualRevenue'), 'Financial fields should be excluded');
+            System.assertEquals(1, record.relatedRecordSets.size(), 'The selected relationship should be loaded for each record');
+            System.assertEquals('Contacts', record.relatedRecordSets[0].relationshipName);
+        }
+    }
+
+    @IsTest
     static void testGetComparisonContext_TooFew() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Boolean exceptionThrown = false;
         try {
-            RecordCompareService.getComparisonContext(new List<String>{ acc.Id });
+            RecordCompareService.getComparisonContext(new List<String>{ acc.Id }, 1, null, null);
         } catch (AuraHandledException e) {
             exceptionThrown = true;
         }
@@ -113,7 +149,7 @@ private class RecordCompareService_Test {
     static void testGetComparisonContext_InvalidId() {
         Boolean exceptionThrown = false;
         try {
-            RecordCompareService.getComparisonContext(new List<String>{ 'bad', 'ids' });
+            RecordCompareService.getComparisonContext(new List<String>{ 'bad', 'ids' }, 1, null, null);
         } catch (AuraHandledException e) {
             exceptionThrown = true;
         }
@@ -125,7 +161,7 @@ private class RecordCompareService_Test {
         Account acc = [SELECT Id FROM Account LIMIT 1];
         Boolean exceptionThrown = false;
         try {
-            RecordCompareService.getComparisonContext(new List<String>{ acc.Id, acc.Id });
+            RecordCompareService.getComparisonContext(new List<String>{ acc.Id, acc.Id }, 1, null, null);
         } catch (AuraHandledException e) {
             exceptionThrown = true;
         }

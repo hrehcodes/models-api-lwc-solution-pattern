@@ -20,6 +20,11 @@
     background-color: #fef1ee;
 }
 
+.context-warning-token {
+    border-color: #91c8f6;
+    background-color: #eef8ff;
+}
+
 .warning-summary {
     font-weight: 600;
     color: #5c3b00;
@@ -27,6 +32,10 @@
 
 .context-warning-failed .warning-summary {
     color: #8e030f;
+}
+
+.context-warning-token .warning-summary {
+    color: #014486;
 }
 
 .warning-list {

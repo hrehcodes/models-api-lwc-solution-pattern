@@ -171,6 +171,49 @@
             </div>
         </template>
 
+        <template lwc:if={showCompareContextSettings}>
+            <div class="compare-settings-shell">
+                <template lwc:if={isLoadingCompareContext}>
+                    <div class="slds-text-align_center slds-p-around_medium">
+                        <lightning-spinner alternative-text="Loading compare context settings..." size="small"></lightning-spinner>
+                        <p class="slds-m-top_small slds-text-color_weak">Loading compare context settings...</p>
+                    </div>
+                </template>
+
+                <template lwc:if={showCompareContextPanel}>
+                    <c-context-panel
+                        record-id={referenceRecordId}
+                        available-context={availableContext}
+                        included-categories={includedCategories}
+                        included-relationships={includedRelationships}
+                        depth={currentDepth}
+                        max-depth-allowed={normalizedMaxDepth}
+                        session-tokens={_sessionTokens}
+                        session-credits={_sessionCredits}
+                        show-usage-metrics={showUsageMetricsEnabled}
+                        context-status={contextStatus}
+                        context-warning-summary={contextWarningSummary}
+                        context-warning-messages={contextWarningMessages}
+                        hide-context-warnings={hideContextWarnings}
+                        context-token-estimate={compareContextTokenEstimate}
+                        token-warning-threshold={normalizedPromptWarningThreshold}
+                        oncontextchange={handleContextChange}
+                        ondepthchange={handleDepthChange}
+                        onfieldselect={handleOpenFieldSelector}
+                    ></c-context-panel>
+                </template>
+
+                <template lwc:if={showCompareContextError}>
+                    <div class="compare-settings-error slds-p-around_small">
+                        <div class="slds-notify slds-notify_alert slds-alert_error" role="alert">
+                            <span class="slds-assistive-text">error</span>
+                            <h2>{contextWarningSummary}</h2>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </template>
+
         <!-- Chat + Usage area (shown after comparison loaded) -->
         <template lwc:if={comparisonLoaded}>
             <div class="compare-body">
@@ -186,21 +229,24 @@
                         show-suggested-prompts={showSuggestedPrompts}
                         persist-conversation={persistConversation}
                         enable-suggested-follow-ups={enableSuggestedFollowUps}
+                        context-status={contextStatus}
+                        context-warning-summary={contextWarningSummary}
+                        context-warning-messages={contextWarningMessages}
+                        hide-context-warnings={hideContextWarnings}
+                        token-warning-threshold={normalizedPromptWarningThreshold}
                         onusageupdate={handleChatUsageUpdate}
                     ></c-chat-panel>
                 </div>
-                <!-- Inline usage footer -->
-                <template lwc:if={showUsageMetricsEnabled}>
-                    <div class="usage-footer slds-p-horizontal_small slds-p-vertical_xx-small">
-                        <span class="slds-text-body_small slds-text-color_weak">
-                            Session: ~{displaySessionTokens} tokens
-                        </span>
-                        <span class="slds-text-body_small usage-credits">
-                            {displaySessionCredits} flex credits
-                        </span>
-                    </div>
-                </template>
             </div>
         </template>
     </div>
+
+    <template lwc:if={showFieldSelector}>
+        <c-insights-field-selector
+            field-categories={availableContext.fieldCategories}
+            included-categories={includedCategories}
+            oncategorieschange={handleCategoriesChange}
+            onclose={handleCloseFieldSelector}
+        ></c-insights-field-selector>
+    </template>
 </template>

@@ -180,18 +180,52 @@ public with sharing class RecordContextService {
         ctx.objectLabel = objDescribe.getLabel();
         ctx.fieldCategories = categorizeFields(objDescribe);
         ctx.relationships = discoverRelationships(objDescribe, recordId, ctx.completeness);
+        ctx.recordName = fetchRecordName(objDescribe, objectApiName, recordId);
 
-        // Fetch record name
-        try {
-            String nameField = RecordSchemaUtils.getNameField(objDescribe);
-            // Object/field names sourced from Schema Describe, not user input -- safe for dynamic SOQL
-            String soql = 'SELECT ' + nameField + ' FROM ' + objectApiName + ' WHERE Id = :recordId LIMIT 1';
-            List<SObject> records = Database.query(soql);
-            if (!records.isEmpty()) {
-                ctx.recordName = String.valueOf(records[0].get(nameField));
+        return ctx;
+    }
+
+    /**
+     * Returns object-level context metadata without requiring a specific record.
+     * When a reference record is provided, relationship counts are calculated from
+     * that record so compare mode can mirror the insights settings experience.
+     */
+    @AuraEnabled(cacheable=true)
+    public static AvailableContext getAvailableContextForObject(String objectApiName, String referenceRecordId) {
+        if (String.isBlank(objectApiName)) {
+            throw new AuraHandledException('Object type is required.');
+        }
+
+        Schema.SObjectType objType = Schema.getGlobalDescribe().get(objectApiName);
+        if (objType == null) {
+            throw new AuraHandledException('Invalid or inaccessible object type.');
+        }
+
+        Schema.DescribeSObjectResult objDescribe = objType.getDescribe();
+        if (!objDescribe.isAccessible()) {
+            throw new AuraHandledException('You do not have access to this object type.');
+        }
+
+        AvailableContext ctx = new AvailableContext();
+        ctx.objectApiName = objDescribe.getName();
+        ctx.objectLabel = objDescribe.getLabel();
+        ctx.fieldCategories = categorizeFields(objDescribe);
+
+        if (String.isNotBlank(referenceRecordId)) {
+            validateRecordId(referenceRecordId);
+
+            Id referenceId = Id.valueOf(referenceRecordId);
+            String referenceObjectApiName = referenceId.getSObjectType().getDescribe().getName();
+            if (referenceObjectApiName != objDescribe.getName()) {
+                throw new AuraHandledException('Reference record must match the selected object type.');
             }
-        } catch (Exception e) {
-            ctx.recordName = recordId;
+
+            ctx.recordId = referenceRecordId;
+            ctx.recordName = fetchRecordName(objDescribe, objDescribe.getName(), referenceRecordId);
+            ctx.relationships = discoverRelationships(objDescribe, referenceRecordId, ctx.completeness);
+        } else {
+            ctx.recordName = objDescribe.getLabel() + ' comparison settings';
+            ctx.relationships = describeRelationships(objDescribe);
         }
 
         return ctx;
@@ -410,7 +444,7 @@ public with sharing class RecordContextService {
         Set<String> coreFieldNames = new Set<String>{
             'Name', 'Subject', 'CaseNumber', 'Title', 'Description',
             'OwnerId', 'RecordTypeId', 'Phone', 'Email', 'Website',
-            'Industry', 'Department', 'AccountId', 'ContactId'
+            'Industry', 'Department', 'AccountId', 'ContactId', 'NextStep'
         };
 
         Set<String> statusFieldNames = new Set<String>{
@@ -424,8 +458,9 @@ public with sharing class RecordContextService {
             'TotalOpportunityQuantity', 'Discount'
         };
 
-        for (String fieldName : fieldMap.keySet()) {
-            Schema.DescribeFieldResult dfr = fieldMap.get(fieldName).getDescribe();
+        for (String fieldKey : fieldMap.keySet()) {
+            Schema.DescribeFieldResult dfr = fieldMap.get(fieldKey).getDescribe();
+            String fieldName = dfr.getName();
 
             if (!dfr.isAccessible()) continue;
             if (RecordSchemaUtils.EXCLUDED_FIELD_TYPES.contains(dfr.getType())) continue;
@@ -577,6 +612,29 @@ public with sharing class RecordContextService {
         sorted.addAll(defaultIncluded);
         sorted.addAll(notDefault);
         return sorted;
+    }
+
+    private static List<RelationshipInfo> describeRelationships(Schema.DescribeSObjectResult objDescribe) {
+        List<RelationshipInfo> defaultIncluded = new List<RelationshipInfo>();
+        List<RelationshipInfo> optional = new List<RelationshipInfo>();
+
+        for (Schema.ChildRelationship cr : objDescribe.getChildRelationships()) {
+            RelationshipCandidate candidate = buildRelationshipCandidate(cr);
+            if (candidate == null) {
+                continue;
+            }
+
+            if (candidate.info.includedByDefault) {
+                defaultIncluded.add(candidate.info);
+            } else {
+                optional.add(candidate.info);
+            }
+        }
+
+        List<RelationshipInfo> describedRelationships = new List<RelationshipInfo>();
+        describedRelationships.addAll(defaultIncluded);
+        describedRelationships.addAll(optional);
+        return describedRelationships;
     }
 
     private static RelationshipCandidate buildRelationshipCandidate(Schema.ChildRelationship cr) {
@@ -855,6 +913,26 @@ public with sharing class RecordContextService {
         if (!completeness.warningMessages.contains(warningMessage)) {
             completeness.warningMessages.add(warningMessage);
         }
+    }
+
+    private static String fetchRecordName(
+        Schema.DescribeSObjectResult objDescribe,
+        String objectApiName,
+        String recordId
+    ) {
+        try {
+            String nameField = RecordSchemaUtils.getNameField(objDescribe);
+            // Object/field names sourced from Schema Describe, not user input -- safe for dynamic SOQL
+            String soql = 'SELECT ' + nameField + ' FROM ' + objectApiName + ' WHERE Id = :recordId LIMIT 1';
+            List<SObject> records = Database.query(soql);
+            if (!records.isEmpty()) {
+                return String.valueOf(records[0].get(nameField));
+            }
+        } catch (Exception e) {
+            // Fall through to the safest available label.
+        }
+
+        return String.isNotBlank(recordId) ? recordId : objDescribe.getLabel();
     }
 
     private static void triggerFieldSerializationFailureIfRequested() {

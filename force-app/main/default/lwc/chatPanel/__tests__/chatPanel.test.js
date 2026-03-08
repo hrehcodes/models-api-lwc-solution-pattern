@@ -140,4 +140,32 @@ describe('c-chat-panel', () => {
 
         expect(element.shadowRoot.querySelector('.context-warning')).toBeNull();
     });
+
+    it('shows a confirmation modal before sending prompts above the configured token threshold', async () => {
+        const element = createElement('c-chat-panel', {
+            is: ChatPanel
+        });
+        element.recordContextJson = JSON.stringify({
+            fields: {
+                Name: { label: 'Name', value: 'Acme' }
+            }
+        }).repeat(800);
+        element.tokenWarningThreshold = 100;
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        const textarea = element.shadowRoot.querySelector('textarea');
+        textarea.value = 'Summarize this record.';
+        textarea.dispatchEvent(new Event('input'));
+        await flushPromises();
+
+        const sendButton = element.shadowRoot.querySelector('lightning-button-icon');
+        sendButton.click();
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('.slds-modal')).not.toBeNull();
+        expect(element.shadowRoot.querySelectorAll('.message-row')).toHaveLength(0);
+    });
 });

@@ -41,6 +41,7 @@ const SUGGESTED_PROMPTS = {
 };
 
 const MODEL_CREDIT_MAP = {};
+const PROMPT_OVERHEAD_TOKENS = 800;
 
 export default class ChatPanel extends LightningElement {
     agentforceIcon = AGENTFORCE_ICON;
@@ -59,6 +60,7 @@ export default class ChatPanel extends LightningElement {
     @api contextWarningSummary;
     @api contextWarningMessages = [];
     @api hideContextWarnings;
+    @api tokenWarningThreshold = 20000;
 
     @track messages = [];
     userInput = '';
@@ -68,6 +70,9 @@ export default class ChatPanel extends LightningElement {
     @track followUpPrompts = [];
     sessionTokens = 0;
     sessionCredits = 0;
+    showLargePromptWarningModal = false;
+    pendingLargePromptText;
+    pendingLargePromptTokenEstimate = 0;
 
     _messageCounter = 0;
     _modelData = [];
@@ -205,6 +210,22 @@ export default class ChatPanel extends LightningElement {
         return this.hideContextWarnings === true || this.hideContextWarnings === 'true';
     }
 
+    get normalizedTokenWarningThreshold() {
+        const parsedThreshold = parseInt(this.tokenWarningThreshold, 10);
+        if (Number.isNaN(parsedThreshold)) {
+            return 20000;
+        }
+        return Math.max(parsedThreshold, 0);
+    }
+
+    get largePromptWarningHeading() {
+        return `This prompt is estimated at ~${this.pendingLargePromptTokenEstimate.toLocaleString()} tokens.`;
+    }
+
+    get largePromptWarningBody() {
+        return `That exceeds the configured warning threshold of ${this.normalizedTokenWarningThreshold.toLocaleString()} tokens. Large prompts can be slower, use more flex credits, and may cause some context to be truncated before the model responds.`;
+    }
+
     // ── Event Handlers ──
 
     handleModelChange(event) {
@@ -236,6 +257,39 @@ export default class ChatPanel extends LightningElement {
 
     async handleSend() {
         const text = this.userInput?.trim();
+        if (!text) return;
+
+        const promptTokenEstimate = this.estimatePromptTokens(text);
+        if (this.shouldWarnAboutLargePrompt(promptTokenEstimate)) {
+            this.pendingLargePromptText = text;
+            this.pendingLargePromptTokenEstimate = promptTokenEstimate;
+            this.showLargePromptWarningModal = true;
+            return;
+        }
+
+        await this.sendPrompt(text);
+    }
+
+    async handleContinueLargePrompt() {
+        const text = this.pendingLargePromptText;
+        this.showLargePromptWarningModal = false;
+        this.pendingLargePromptText = null;
+        this.pendingLargePromptTokenEstimate = 0;
+
+        if (!text) {
+            return;
+        }
+
+        await this.sendPrompt(text);
+    }
+
+    handleCancelLargePrompt() {
+        this.showLargePromptWarningModal = false;
+        this.pendingLargePromptText = null;
+        this.pendingLargePromptTokenEstimate = 0;
+    }
+
+    async sendPrompt(text) {
         if (!text) return;
 
         this.addMessage('user', text);
@@ -352,6 +406,18 @@ export default class ChatPanel extends LightningElement {
             contextSize = this.recordContextJson.length;
         }
         return Math.ceil(contextSize / 4);
+    }
+
+    estimatePromptTokens(userText) {
+        const historyJson = this.buildConversationHistory();
+        const historyTokens = historyJson ? Math.ceil(historyJson.length / 4) : 0;
+        const userTokens = userText ? Math.ceil(userText.length / 4) : 0;
+        return this.estimateContextTokens() + historyTokens + userTokens + PROMPT_OVERHEAD_TOKENS;
+    }
+
+    shouldWarnAboutLargePrompt(promptTokenEstimate) {
+        return this.normalizedTokenWarningThreshold > 0
+            && promptTokenEstimate > this.normalizedTokenWarningThreshold;
     }
 
     dispatchUsageUpdate() {

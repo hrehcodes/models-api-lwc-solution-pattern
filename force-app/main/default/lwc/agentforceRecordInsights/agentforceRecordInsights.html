@@ -120,6 +120,7 @@
                                     context-warning-summary={contextWarningSummary}
                                     context-warning-messages={contextWarningMessages}
                                     hide-context-warnings={hideContextWarningsEnabled}
+                                    token-warning-threshold={normalizedPromptWarningThreshold}
                                     oncontextchange={handleContextChange}
                                     ondepthchange={handleDepthChange}
                                     onfieldselect={handleOpenFieldSelector}
@@ -142,6 +143,7 @@
                                 context-warning-summary={contextWarningSummary}
                                 context-warning-messages={contextWarningMessages}
                                 hide-context-warnings={hideContextWarningsEnabled}
+                                token-warning-threshold={normalizedPromptWarningThreshold}
                                 onusageupdate={handleUsageUpdate}
                             ></c-chat-panel>
                         </div>
@@ -180,6 +182,12 @@
                     persist-conversation={persistConversationEnabled}
                     show-suggested-comparison-records={showSuggestedComparisonRecordsEnabled}
                     enable-suggested-follow-ups={enableSuggestedFollowUpsEnabled}
+                    default-depth={defaultDepth}
+                    max-depth-allowed={normalizedMaxDepth}
+                    default-field-categories-csv={defaultFieldCategoriesCsv}
+                    default-relationships-csv={defaultRelationshipsCsv}
+                    hide-context-warnings={hideContextWarningsEnabled}
+                    prompt-warning-threshold-tokens={normalizedPromptWarningThreshold}
                     onusageupdate={handleUsageUpdate}
                 ></c-record-compare>
             </template>

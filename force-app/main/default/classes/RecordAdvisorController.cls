@@ -330,8 +330,9 @@ public with sharing class RecordAdvisorController {
     private static String buildCompareSystemPrompt(String comparisonContextJson) {
         String prompt = 'You are Agentforce Record Insights in comparison mode. '
             + 'You help users compare multiple Salesforce records of the same type.\n\n';
-        prompt += 'The data is structured as JSON with each record containing field API names mapped to objects '
-            + 'with a human-readable "label" and "value". '
+        prompt += 'The data is structured as JSON with a top-level comparison object and a list of records. '
+            + 'Each record contains `fields` with field API names mapped to objects with a human-readable `label` and `value`. '
+            + 'Records may also contain `relatedRecordSets`, which follow the same label/value structure, and `completeness` metadata. '
             + 'Always refer to each record by its name, not its ID.\n\n';
 
         prompt += '=== RECORDS TO COMPARE ===\n';
@@ -348,6 +349,9 @@ public with sharing class RecordAdvisorController {
             + '(2) a field-by-field comparison table for the most relevant fields, '
             + '(3) recommendations with rationale.\n';
         prompt += '- Use markdown tables when comparing specific field values across records.\n';
+        prompt += '- When evaluating fields, read values from each record\'s `fields` map. '
+            + 'Use `relatedRecordSets` only when the user\'s question depends on related-record context.\n';
+        prompt += '- If comparison-level or record-level `completeness` metadata indicates warnings, mention that the answer may be incomplete.\n';
         prompt += '- When a field has a value on one record but is null or empty on another, '
             + 'call this out explicitly — missing data is itself an insight.\n';
         prompt += '- Provide actionable recommendations (e.g., which to prioritize, which needs attention).\n';

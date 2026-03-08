@@ -30,6 +30,7 @@ export default class AgentforceRecordInsights extends LightningElement {
     @api showSuggestedComparisonRecords;
     @api enableSuggestedFollowUps;
     @api hideContextWarnings;
+    @api promptWarningThresholdTokens = 20000;
 
     mode = MODE_INSIGHTS;
     contextPanelOpen = true;
@@ -132,6 +133,13 @@ export default class AgentforceRecordInsights extends LightningElement {
     get enableSuggestedFollowUpsEnabled() { return this.isBooleanEnabled(this.enableSuggestedFollowUps); }
     get hideContextWarningsEnabled() {
         return this.hideContextWarnings === true || this.hideContextWarnings === 'true';
+    }
+    get normalizedPromptWarningThreshold() {
+        const parsedThreshold = parseInt(this.promptWarningThresholdTokens, 10);
+        if (Number.isNaN(parsedThreshold)) {
+            return 20000;
+        }
+        return Math.max(parsedThreshold, 0);
     }
 
     get showSettingsButton() {

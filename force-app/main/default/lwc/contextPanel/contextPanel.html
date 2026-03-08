@@ -27,6 +27,13 @@
             </div>
         </template>
 
+        <template lwc:if={showLargeContextWarning}>
+            <div class="context-warning context-warning-token">
+                <div class="warning-summary">{largeContextWarningSummary}</div>
+                <div class="slds-text-body_small slds-m-top_xx-small">{largeContextWarningDetails}</div>
+            </div>
+        </template>
+
         <!-- Depth Selector -->
         <div class="slds-m-bottom_small">
             <div class="depth-selector">

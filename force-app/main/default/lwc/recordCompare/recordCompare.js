@@ -3,6 +3,7 @@ import getComparisonContext from '@salesforce/apex/RecordCompareService.getCompa
 import searchRecords from '@salesforce/apex/RecordCompareService.searchRecords';
 import getSuggestedRecords from '@salesforce/apex/RecordCompareService.getSuggestedRecords';
 import getAvailableCompareObjects from '@salesforce/apex/RecordCompareService.getAvailableCompareObjects';
+import getAvailableContextForObject from '@salesforce/apex/RecordContextService.getAvailableContextForObject';
 
 const OBJECT_ICON_MAP = {
     Account: 'standard:account',
@@ -23,6 +24,12 @@ export default class RecordCompare extends LightningElement {
     @api persistConversation;
     @api showSuggestedComparisonRecords;
     @api enableSuggestedFollowUps;
+    @api defaultDepth = 1;
+    @api maxDepthAllowed = 3;
+    @api defaultFieldCategoriesCsv;
+    @api defaultRelationshipsCsv;
+    @api hideContextWarnings;
+    @api promptWarningThresholdTokens = 20000;
 
     selectedObjectType = '';
     @track selectedRecords = [];
@@ -41,15 +48,30 @@ export default class RecordCompare extends LightningElement {
     objectTypeFilter = '';
     isLoadingObjectTypes = false;
     objectTypeError;
+    availableContext;
+    includedCategories = [];
+    includedRelationships = [];
+    currentDepth = 1;
+    isLoadingCompareContext = false;
+    showFieldSelector = false;
+    contextStatus;
+    contextWarningSummary;
+    @track contextWarningMessages = [];
+    availableContextWarnings = [];
+    comparisonContextWarnings = [];
 
     _sessionTokens = 0;
     _sessionCredits = 0;
+    _loadedContextObjectType;
+    _loadedContextReferenceRecordId;
 
     _searchTimeout;
 
     connectedCallback() {
+        this.currentDepth = this.normalizeDepth(this.defaultDepth);
         if (this.objectApiName) {
             this.selectedObjectType = this.objectApiName;
+            this.loadCompareContextMetadata({ resetSelections: true });
         } else {
             this.loadAvailableObjectTypes();
         }
@@ -101,7 +123,7 @@ export default class RecordCompare extends LightningElement {
     }
 
     get canCompare() {
-        return this.selectedRecords.length >= 2 && !this.isLoadingComparison;
+        return this.selectedRecords.length >= 2 && !this.isLoadingComparison && !this.isLoadingCompareContext;
     }
 
     get selectionCount() {
@@ -164,6 +186,64 @@ export default class RecordCompare extends LightningElement {
         return this._sessionCredits.toLocaleString();
     }
 
+    get showCompareContextSettings() {
+        return Boolean(this.activeObjectType);
+    }
+
+    get showCompareContextPanel() {
+        return this.showCompareContextSettings && this.availableContext && !this.isLoadingCompareContext;
+    }
+
+    get showCompareContextError() {
+        return this.showCompareContextSettings
+            && !this.availableContext
+            && !this.isLoadingCompareContext
+            && this.contextStatus === 'failed';
+    }
+
+    get referenceRecordId() {
+        if (this.recordId && this.objectApiName === this.activeObjectType) {
+            return this.recordId;
+        }
+        return this.selectedRecords[0]?.id || null;
+    }
+
+    get compareContextTokenEstimate() {
+        if (this.comparisonContextJson) {
+            return Math.ceil(this.comparisonContextJson.length / 4);
+        }
+
+        if (!this.availableContext) {
+            return null;
+        }
+
+        let perRecordEstimate = 0;
+        const includedCategorySet = new Set(this.includedCategories);
+        for (const category of this.availableContext.fieldCategories || []) {
+            if (includedCategorySet.has(category.name)) {
+                perRecordEstimate += (category.fieldCount || 0) * 15;
+            }
+        }
+
+        const includedRelationshipSet = new Set(this.includedRelationships);
+        for (const relationship of this.availableContext.relationships || []) {
+            if (includedRelationshipSet.has(relationship.relationshipName) && relationship.recordCount > 0) {
+                perRecordEstimate += relationship.recordCount * 100;
+            }
+        }
+
+        const recordMultiplier = Math.max(this.selectedRecords.length, 1);
+        return perRecordEstimate > 0 ? perRecordEstimate * recordMultiplier : null;
+    }
+
+    get normalizedPromptWarningThreshold() {
+        const parsedThreshold = parseInt(this.promptWarningThresholdTokens, 10);
+        if (Number.isNaN(parsedThreshold)) {
+            return 20000;
+        }
+        return Math.max(parsedThreshold, 0);
+    }
+
     async loadAvailableObjectTypes() {
         this.isLoadingObjectTypes = true;
         this.objectTypeError = null;
@@ -179,6 +259,70 @@ export default class RecordCompare extends LightningElement {
             this.objectTypeError = error?.body?.message || error?.message || 'Failed to load object types.';
         } finally {
             this.isLoadingObjectTypes = false;
+        }
+    }
+
+    async loadCompareContextMetadata({ resetSelections = false } = {}) {
+        if (!this.activeObjectType) {
+            this.availableContext = null;
+            this.resetCompareWarningState();
+            return;
+        }
+
+        this.isLoadingCompareContext = true;
+        this.resetCompareWarningState();
+
+        try {
+            const referenceRecordId = this.referenceRecordId;
+            const ctx = await getAvailableContextForObject({
+                objectApiName: this.activeObjectType,
+                referenceRecordId
+            });
+
+            this.availableContext = ctx;
+            this.availableContextWarnings = this.extractCompletenessMessages(ctx.completeness);
+            this._loadedContextObjectType = this.activeObjectType;
+            this._loadedContextReferenceRecordId = referenceRecordId;
+
+            if (resetSelections || this.includedCategories.length === 0) {
+                this.includedCategories = this.resolveConfiguredSelections(
+                    ctx.fieldCategories,
+                    'name',
+                    this.defaultFieldCategoriesCsv,
+                    item => item.includedByDefault
+                );
+            }
+            if (resetSelections || this.includedRelationships.length === 0) {
+                this.includedRelationships = this.resolveConfiguredSelections(
+                    ctx.relationships,
+                    'relationshipName',
+                    this.defaultRelationshipsCsv,
+                    item => item.includedByDefault
+                );
+            }
+
+            this.currentDepth = resetSelections
+                ? this.normalizeDepth(this.defaultDepth)
+                : this.normalizeDepth(this.currentDepth);
+
+            this.updateCompareWarningState();
+        } catch (error) {
+            this.availableContext = null;
+            this.setCompareContextFailureState(error);
+        } finally {
+            this.isLoadingCompareContext = false;
+        }
+    }
+
+    refreshCompareContextMetadata(resetSelections = false) {
+        const nextReferenceRecordId = this.referenceRecordId;
+        if (
+            resetSelections
+            || !this.availableContext
+            || this._loadedContextObjectType !== this.activeObjectType
+            || this._loadedContextReferenceRecordId !== nextReferenceRecordId
+        ) {
+            this.loadCompareContextMetadata({ resetSelections });
         }
     }
 
@@ -212,7 +356,8 @@ export default class RecordCompare extends LightningElement {
 
         this.selectedRecords = [...this.selectedRecords, { id, name }];
         this.suggestedRecords = this.suggestedRecords.filter(r => r.id !== id);
-        this.comparisonLoaded = false;
+        this.invalidateComparison();
+        this.refreshCompareContextMetadata();
     }
 
     // ── Event Handlers ──
@@ -221,8 +366,12 @@ export default class RecordCompare extends LightningElement {
         this.selectedObjectType = event.detail.value;
         this.selectedRecords = [];
         this.searchResults = [];
-        this.comparisonLoaded = false;
-        this.comparisonContextJson = null;
+        this.suggestedRecords = [];
+        this.suggestionsLoaded = false;
+        this.includedCategories = [];
+        this.includedRelationships = [];
+        this.invalidateComparison();
+        this.loadCompareContextMetadata({ resetSelections: true });
     }
 
     handleObjectFilterChange(event) {
@@ -267,19 +416,22 @@ export default class RecordCompare extends LightningElement {
         this.selectedRecords = [...this.selectedRecords, { id, name }];
         this.searchResults = this.searchResults.filter(r => r.id !== id);
         this.suggestedRecords = this.suggestedRecords.filter(r => r.id !== id);
-        this.comparisonLoaded = false;
+        this.invalidateComparison();
+        this.refreshCompareContextMetadata();
     }
 
     handleRemoveRecord(event) {
         const id = event.target.dataset.id;
         this.selectedRecords = this.selectedRecords.filter(r => r.id !== id);
-        this.comparisonLoaded = false;
+        this.invalidateComparison();
+        this.refreshCompareContextMetadata();
     }
 
     handleRemoveRecordCollapsed(event) {
         const id = event.target.dataset.id;
         this.selectedRecords = this.selectedRecords.filter(r => r.id !== id);
-        this.comparisonLoaded = false;
+        this.invalidateComparison();
+        this.refreshCompareContextMetadata();
         if (this.selectedRecords.length < 2) {
             this.selectionCollapsed = false;
         }
@@ -294,15 +446,21 @@ export default class RecordCompare extends LightningElement {
 
         this.isLoadingComparison = true;
         this.compareError = null;
-        this.comparisonLoaded = false;
+        this.invalidateComparison();
 
         try {
             const recordIds = this.selectedRecords.map(r => r.id);
-            const ctx = await getComparisonContext({ recordIds });
+            const ctx = await getComparisonContext({
+                recordIds,
+                depth: this.currentDepth,
+                includedCategories: this.includedCategories,
+                includedRelationships: this.includedRelationships
+            });
 
             this.comparisonContextJson = JSON.stringify(ctx);
             this.comparisonLoaded = true;
             this.selectionCollapsed = true;
+            this.updateCompareWarningState(ctx.completeness);
 
             if (ctx.records) {
                 const nameMap = {};
@@ -316,9 +474,43 @@ export default class RecordCompare extends LightningElement {
             }
         } catch (error) {
             this.compareError = error?.body?.message || error?.message || 'Failed to load comparison.';
+            this.setCompareContextFailureState(error);
         } finally {
             this.isLoadingComparison = false;
         }
+    }
+
+    handleContextChange(event) {
+        const { includedCategories, includedRelationships } = event.detail;
+        if (includedCategories) {
+            this.includedCategories = includedCategories;
+        }
+        if (includedRelationships) {
+            this.includedRelationships = includedRelationships;
+        }
+        this.invalidateComparison();
+        this.updateCompareWarningState();
+    }
+
+    handleDepthChange(event) {
+        this.currentDepth = this.normalizeDepth(event.detail.depth);
+        this.invalidateComparison();
+        this.updateCompareWarningState();
+    }
+
+    handleOpenFieldSelector() {
+        this.showFieldSelector = true;
+    }
+
+    handleCloseFieldSelector() {
+        this.showFieldSelector = false;
+    }
+
+    handleCategoriesChange(event) {
+        this.includedCategories = event.detail.includedCategories;
+        this.showFieldSelector = false;
+        this.invalidateComparison();
+        this.updateCompareWarningState();
     }
 
     handleChatUsageUpdate(event) {
@@ -329,7 +521,112 @@ export default class RecordCompare extends LightningElement {
         }));
     }
 
+    invalidateComparison() {
+        this.comparisonLoaded = false;
+        this.comparisonContextJson = null;
+        this.compareError = null;
+        this.comparisonContextWarnings = [];
+    }
+
+    resetCompareWarningState() {
+        this.contextStatus = null;
+        this.contextWarningSummary = null;
+        this.contextWarningMessages = [];
+        this.availableContextWarnings = [];
+        this.comparisonContextWarnings = [];
+    }
+
+    updateCompareWarningState(completeness) {
+        this.comparisonContextWarnings = this.extractCompletenessMessages(completeness);
+        const combinedWarnings = this.combineWarnings(
+            this.availableContextWarnings,
+            this.comparisonContextWarnings
+        );
+
+        if (combinedWarnings.length > 0) {
+            this.contextStatus = 'partial';
+            this.contextWarningSummary = 'Some compared record context was skipped or truncated. AI responses may be incomplete.';
+            this.contextWarningMessages = combinedWarnings;
+            return;
+        }
+
+        this.contextStatus = 'ready';
+        this.contextWarningSummary = null;
+        this.contextWarningMessages = [];
+    }
+
+    setCompareContextFailureState(error) {
+        this.contextStatus = 'failed';
+        this.contextWarningSummary = 'Comparison context could not be loaded. Responses may be ungrounded until the comparison loads successfully.';
+        this.contextWarningMessages = this.combineWarnings(
+            [this.extractErrorMessage(error)],
+            this.availableContextWarnings
+        );
+    }
+
+    extractCompletenessMessages(completeness) {
+        return Array.isArray(completeness?.warningMessages)
+            ? completeness.warningMessages.filter(Boolean)
+            : [];
+    }
+
+    combineWarnings(...warningGroups) {
+        return [...new Set([].concat(...warningGroups).filter(Boolean))];
+    }
+
+    resolveConfiguredSelections(items, keyField, csvValue, fallbackPredicate) {
+        const configuredTokens = this.parseCsv(csvValue);
+        if (!configuredTokens.length) {
+            return items.filter(fallbackPredicate).map(item => item[keyField]);
+        }
+
+        const availableItems = new Map(
+            items.map(item => [this.normalizeToken(item[keyField]), item[keyField]])
+        );
+        const matches = configuredTokens
+            .map(token => availableItems.get(this.normalizeToken(token)))
+            .filter(Boolean);
+
+        return matches.length
+            ? [...new Set(matches)]
+            : items.filter(fallbackPredicate).map(item => item[keyField]);
+    }
+
+    parseCsv(value) {
+        if (!value) {
+            return [];
+        }
+
+        return String(value)
+            .split(',')
+            .map(token => token.trim())
+            .filter(Boolean);
+    }
+
+    normalizeDepth(value) {
+        const parsedDepth = parseInt(value, 10);
+        const safeDepth = Number.isNaN(parsedDepth) ? 1 : parsedDepth;
+        return Math.min(Math.max(safeDepth, 1), this.normalizedMaxDepth);
+    }
+
+    get normalizedMaxDepth() {
+        const parsedDepth = parseInt(this.maxDepthAllowed, 10);
+        const safeDepth = Number.isNaN(parsedDepth) ? 3 : parsedDepth;
+        return Math.min(Math.max(safeDepth, 1), 3);
+    }
+
+    normalizeToken(value) {
+        return value ? String(value).trim().toLowerCase().replace(/[\s_-]+/g, '') : '';
+    }
+
     isBooleanEnabled(value) {
         return value !== false && value !== 'false';
+    }
+
+    extractErrorMessage(error) {
+        if (typeof error === 'string') return error;
+        if (error?.body?.message) return error.body.message;
+        if (error?.message) return error.message;
+        return 'An unexpected error occurred.';
     }
 }

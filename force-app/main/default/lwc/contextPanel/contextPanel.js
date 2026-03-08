@@ -33,6 +33,8 @@ export default class ContextPanel extends LightningElement {
     @api contextWarningSummary;
     @api contextWarningMessages = [];
     @api hideContextWarnings;
+    @api contextTokenEstimate;
+    @api tokenWarningThreshold = 20000;
 
     fieldsExpanded = false;
     relationshipsExpanded = false;
@@ -73,6 +75,28 @@ export default class ContextPanel extends LightningElement {
     }
     get hideContextWarningsEnabled() {
         return this.hideContextWarnings === true || this.hideContextWarnings === 'true';
+    }
+
+    get showLargeContextWarning() {
+        return this.tokenWarningThresholdValue > 0
+            && Boolean(this.tokenEstimate)
+            && this.tokenEstimate > this.tokenWarningThresholdValue;
+    }
+
+    get largeContextWarningSummary() {
+        return `This context is estimated at ~${this.tokenEstimate} tokens, above the configured warning threshold of ${this.tokenWarningThresholdValue.toLocaleString()} tokens.`;
+    }
+
+    get largeContextWarningDetails() {
+        return 'Large prompts can be slower, consume more flex credits, and may cause some context to be truncated before the model responds.';
+    }
+
+    get tokenWarningThresholdValue() {
+        const parsedThreshold = parseInt(this.tokenWarningThreshold, 10);
+        if (Number.isNaN(parsedThreshold)) {
+            return 20000;
+        }
+        return Math.max(parsedThreshold, 0);
     }
 
     get depthDescription() {
@@ -159,6 +183,11 @@ export default class ContextPanel extends LightningElement {
     }
 
     get tokenEstimate() {
+        const explicitEstimate = parseInt(this.contextTokenEstimate, 10);
+        if (!Number.isNaN(explicitEstimate) && explicitEstimate > 0) {
+            return explicitEstimate;
+        }
+
         let tokens = 0;
         const included = new Set(this.includedCategories);
         if (this.availableContext?.fieldCategories) {

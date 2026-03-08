@@ -4,6 +4,7 @@ import getAvailableCompareObjects from '@salesforce/apex/RecordCompareService.ge
 import getComparisonContext from '@salesforce/apex/RecordCompareService.getComparisonContext';
 import searchRecords from '@salesforce/apex/RecordCompareService.searchRecords';
 import getSuggestedRecords from '@salesforce/apex/RecordCompareService.getSuggestedRecords';
+import getAvailableContextForObject from '@salesforce/apex/RecordContextService.getAvailableContextForObject';
 
 jest.mock(
     '@salesforce/apex/RecordCompareService.getAvailableCompareObjects',
@@ -37,6 +38,14 @@ jest.mock(
     { virtual: true }
 );
 
+jest.mock(
+    '@salesforce/apex/RecordContextService.getAvailableContextForObject',
+    () => ({
+        default: jest.fn()
+    }),
+    { virtual: true }
+);
+
 const flushPromises = async (count = 4) => {
     for (let index = 0; index < count; index += 1) {
         await Promise.resolve();
@@ -51,12 +60,44 @@ describe('c-record-compare', () => {
             { apiName: 'Custom_Object__c', label: 'Custom Object' }
         ]);
         getComparisonContext.mockResolvedValue({
-            records: []
+            records: [],
+            completeness: {
+                isComplete: true,
+                hasWarnings: false,
+                warningMessages: []
+            }
         });
         searchRecords.mockResolvedValue([
             { id: '001000000000010AAA', name: 'Alpha Account' }
         ]);
         getSuggestedRecords.mockResolvedValue([]);
+        getAvailableContextForObject.mockResolvedValue({
+            objectApiName: 'Account',
+            objectLabel: 'Account',
+            recordName: 'Account comparison settings',
+            fieldCategories: [
+                {
+                    name: 'core',
+                    label: 'Core Fields',
+                    includedByDefault: true,
+                    fieldCount: 1,
+                    fields: [{ apiName: 'Name', label: 'Account Name', fieldType: 'STRING' }]
+                }
+            ],
+            relationships: [
+                {
+                    relationshipName: 'Contacts',
+                    childObjectLabel: 'Contact',
+                    recordCount: 1,
+                    includedByDefault: true
+                }
+            ],
+            completeness: {
+                isComplete: true,
+                hasWarnings: false,
+                warningMessages: []
+            }
+        });
     });
 
     afterEach(() => {
@@ -114,6 +155,75 @@ describe('c-record-compare', () => {
             objectApiName: 'Custom_Object__c',
             searchTerm: 'Alpha',
             maxResults: 10
+        });
+    });
+
+    it('loads comparison context with the shared field, relationship, and depth settings', async () => {
+        getComparisonContext.mockResolvedValue({
+            records: [
+                {
+                    recordId: '001000000000001AAA',
+                    recordName: 'Current Record',
+                    fields: {},
+                    relatedRecordSets: [],
+                    completeness: {
+                        isComplete: true,
+                        hasWarnings: false,
+                        warningMessages: []
+                    }
+                },
+                {
+                    recordId: '001000000000002AAA',
+                    recordName: 'Second Record',
+                    fields: {},
+                    relatedRecordSets: [],
+                    completeness: {
+                        isComplete: true,
+                        hasWarnings: false,
+                        warningMessages: []
+                    }
+                }
+            ],
+            completeness: {
+                isComplete: true,
+                hasWarnings: false,
+                warningMessages: []
+            }
+        });
+
+        const element = createElement('c-record-compare', {
+            is: RecordCompare
+        });
+        element.objectApiName = 'Account';
+        element.recordId = '001000000000001AAA';
+        document.body.appendChild(element);
+
+        await flushPromises();
+
+        const searchInput = element.shadowRoot.querySelector('lightning-input');
+        searchInput.dispatchEvent(
+            new CustomEvent('change', {
+                detail: { value: 'Second' }
+            })
+        );
+
+        jest.advanceTimersByTime(300);
+        await flushPromises();
+
+        const resultItem = element.shadowRoot.querySelector('.result-item');
+        resultItem.click();
+        await flushPromises();
+
+        const loadButton = [...element.shadowRoot.querySelectorAll('lightning-button')]
+            .find(button => button.label === 'Load Comparison');
+        loadButton.click();
+        await flushPromises();
+
+        expect(getComparisonContext).toHaveBeenCalledWith({
+            recordIds: ['001000000000001AAA', '001000000000010AAA'],
+            depth: 1,
+            includedCategories: ['core'],
+            includedRelationships: ['Contacts']
         });
     });
 });

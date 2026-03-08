@@ -59,6 +59,21 @@ private class RecordContextService_Test {
         System.assertEquals('Test Opportunity', ctx.recordName);
         System.assertEquals(false, ctx.completeness.hasWarnings, 'Supported opportunity relationships should not warn during discovery');
 
+        Boolean probabilityCategorizedAsStatus = false;
+        Boolean nextStepCategorizedAsCore = false;
+        for (RecordContextService.FieldCategory category : ctx.fieldCategories) {
+            for (RecordContextService.FieldInfo fieldInfo : category.fields) {
+                if (category.name == 'status' && fieldInfo.apiName == 'Probability') {
+                    probabilityCategorizedAsStatus = true;
+                }
+                if (category.name == 'core' && fieldInfo.apiName == 'NextStep') {
+                    nextStepCategorizedAsCore = true;
+                }
+            }
+        }
+        System.assertEquals(true, probabilityCategorizedAsStatus, 'Probability should be categorized as a status field');
+        System.assertEquals(true, nextStepCategorizedAsCore, 'NextStep should be categorized as a core field');
+
         Set<String> relationshipNames = new Set<String>();
         for (RecordContextService.RelationshipInfo info : ctx.relationships) {
             relationshipNames.add(info.relationshipName);
@@ -76,6 +91,38 @@ private class RecordContextService_Test {
         Test.stopTest();
 
         System.assertEquals('Contact', ctx.objectApiName);
+    }
+
+    @IsTest
+    static void testGetAvailableContextForObject_WithReferenceRecord() {
+        Opportunity opp = [SELECT Id FROM Opportunity LIMIT 1];
+
+        Test.startTest();
+        RecordContextService.AvailableContext ctx = RecordContextService.getAvailableContextForObject(
+            'Opportunity',
+            opp.Id
+        );
+        Test.stopTest();
+
+        System.assertEquals('Opportunity', ctx.objectApiName);
+        System.assertEquals('Test Opportunity', ctx.recordName);
+        System.assertNotEquals(null, ctx.relationships);
+    }
+
+    @IsTest
+    static void testGetAvailableContextForObject_WithoutReferenceRecord() {
+        Test.startTest();
+        RecordContextService.AvailableContext ctx = RecordContextService.getAvailableContextForObject(
+            'Contact',
+            null
+        );
+        Test.stopTest();
+
+        System.assertEquals('Contact', ctx.objectApiName);
+        System.assertEquals('Contact comparison settings', ctx.recordName);
+        System.assertNotEquals(null, ctx.fieldCategories);
+        System.assertNotEquals(null, ctx.relationships);
+        System.assertEquals(false, ctx.completeness.hasWarnings, 'Object-level metadata should not warn without a reference record');
     }
 
     @IsTest
