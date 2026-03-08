@@ -57,6 +57,14 @@ private class RecordContextService_Test {
 
         System.assertEquals('Opportunity', ctx.objectApiName);
         System.assertEquals('Test Opportunity', ctx.recordName);
+        System.assertEquals(false, ctx.completeness.hasWarnings, 'Supported opportunity relationships should not warn during discovery');
+
+        Set<String> relationshipNames = new Set<String>();
+        for (RecordContextService.RelationshipInfo info : ctx.relationships) {
+            relationshipNames.add(info.relationshipName);
+        }
+        System.assertEquals(false, relationshipNames.contains('OpenActivities'));
+        System.assertEquals(false, relationshipNames.contains('RelatedClients'));
     }
 
     @IsTest
@@ -132,6 +140,24 @@ private class RecordContextService_Test {
         Test.stopTest();
 
         System.assertNotEquals(null, ctx);
+    }
+
+    @IsTest
+    static void testGetRecordContext_UnsupportedRelationshipsAreIgnored() {
+        Opportunity opp = [SELECT Id FROM Opportunity LIMIT 1];
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            opp.Id,
+            1,
+            new List<String>{ 'core' },
+            new List<String>{ 'OpenActivities', 'RelatedClients' }
+        );
+        Test.stopTest();
+
+        System.assertNotEquals(null, ctx);
+        System.assertEquals(false, ctx.completeness.hasWarnings, 'Unsupported relationship noise should be filtered out');
+        System.assertEquals(0, ctx.completeness.skippedRelationshipCount, 'Unsupported relationships should be skipped before fetch');
     }
 
     @IsTest

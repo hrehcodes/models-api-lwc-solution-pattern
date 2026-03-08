@@ -10,6 +10,14 @@ public with sharing class RecordContextService {
     private static final Integer DEFAULT_RELATED_RECORD_LIMIT = 10;
     private static final Integer MAX_RELATIONSHIP_QUERIES = 20;
     private static final Integer QUERY_SAFETY_BUFFER = 10;
+    private static final Set<String> UNSUPPORTED_RELATIONSHIP_NAMES = new Set<String>{
+        'RelatedClients', 'AttachedContentNotes', 'FieldChangeSnapshots',
+        'NotesAndAttachments', 'OpenActivities', 'RecentFieldChanges'
+    };
+    private static final Set<String> UNSUPPORTED_CHILD_OBJECTS = new Set<String>{
+        'ActionableListMember', 'AttachedContentNote', 'FieldChangeSnapshot',
+        'NoteAndAttachment', 'OpenActivity', 'RecentFieldChange'
+    };
     @TestVisible private static Boolean forceFieldSerializationFailure = false;
     @TestVisible private static Boolean forceRelationshipFetchFailure = false;
     @TestVisible private static Boolean forceDescendantFetchFailure = false;
@@ -99,6 +107,22 @@ public with sharing class RecordContextService {
         @AuraEnabled public String fieldName { get; set; }
         @AuraEnabled public Integer recordCount { get; set; }
         @AuraEnabled public Boolean includedByDefault { get; set; }
+    }
+
+    private class RelationshipCandidate {
+        public Schema.ChildRelationship childRelationship { get; private set; }
+        public Schema.DescribeSObjectResult childDescribe { get; private set; }
+        public RelationshipInfo info { get; private set; }
+
+        public RelationshipCandidate(
+            Schema.ChildRelationship childRelationship,
+            Schema.DescribeSObjectResult childDescribe,
+            RelationshipInfo info
+        ) {
+            this.childRelationship = childRelationship;
+            this.childDescribe = childDescribe;
+            this.info = info;
+        }
     }
 
     public class RecordContext {
@@ -290,7 +314,7 @@ public with sharing class RecordContextService {
                 if (relName == null || !relSet.contains(relName)) continue;
 
                 Schema.DescribeSObjectResult childDescribe = cr.getChildSObject().getDescribe();
-                if (!childDescribe.isAccessible()) continue;
+                if (!isSupportedRelationship(cr, relName, childDescribe)) continue;
 
                 try {
                     triggerRelationshipFetchFailureIfRequested();
@@ -339,8 +363,8 @@ public with sharing class RecordContextService {
         for (Schema.ChildRelationship cr : objDescribe.getChildRelationships()) {
             if (cr.getRelationshipName() == relationshipName) {
                 Schema.DescribeSObjectResult childDescribe = cr.getChildSObject().getDescribe();
-                if (!childDescribe.isAccessible()) {
-                    throw new AuraHandledException('You do not have access to the related object.');
+                if (!isSupportedRelationship(cr, relationshipName, childDescribe)) {
+                    throw new AuraHandledException('This relationship is not supported for context loading.');
                 }
                 return fetchRelatedRecords(cr, recordId, childDescribe, maxRecords);
             }
@@ -481,7 +505,8 @@ public with sharing class RecordContextService {
         ContextCompleteness completeness
     ) {
         List<RelationshipInfo> relationships = new List<RelationshipInfo>();
-        List<Schema.ChildRelationship> childRels = objDescribe.getChildRelationships();
+        List<RelationshipCandidate> defaultCandidates = new List<RelationshipCandidate>();
+        List<RelationshipCandidate> optionalCandidates = new List<RelationshipCandidate>();
         Integer countQueriesUsed = 0;
 
         if (Test.isRunningTest() && forceRelationshipDiscoveryTruncation) {
@@ -489,42 +514,52 @@ public with sharing class RecordContextService {
             forceRelationshipDiscoveryTruncation = false;
         }
 
-        for (Schema.ChildRelationship cr : childRels) {
-            String relName = cr.getRelationshipName();
-            if (relName == null) continue;
-
-            Schema.DescribeSObjectResult childDescribe = cr.getChildSObject().getDescribe();
-            if (!childDescribe.isAccessible()) continue;
-
-            if (isSystemRelationship(relName, childDescribe.getName())) continue;
-
-            RelationshipInfo info = new RelationshipInfo();
-            info.relationshipName = relName;
-            info.childObjectApiName = childDescribe.getName();
-            info.childObjectLabel = childDescribe.getLabel();
-            info.fieldName = cr.getField().getDescribe().getName();
-            info.includedByDefault = isDefaultRelationship(childDescribe.getName());
-
-            if (countQueriesUsed >= MAX_RELATIONSHIP_QUERIES) {
-                info.recordCount = -1;
-                noteTruncatedRelationshipCount(completeness);
-                relationships.add(info);
+        for (Schema.ChildRelationship cr : objDescribe.getChildRelationships()) {
+            RelationshipCandidate candidate = buildRelationshipCandidate(cr);
+            if (candidate == null) {
                 continue;
             }
 
-            // Object/field names sourced from Schema Describe, not user input -- safe for dynamic SOQL
-            try {
-                String countSoql = 'SELECT COUNT() FROM ' + childDescribe.getName()
-                    + ' WHERE ' + info.fieldName + ' = :recordId';
-                info.recordCount = Database.countQuery(countSoql);
-                countQueriesUsed++;
-            } catch (Exception e) {
-                info.recordCount = -1;
+            if (candidate.info.includedByDefault) {
+                defaultCandidates.add(candidate);
+            } else {
+                optionalCandidates.add(candidate);
+            }
+        }
+
+        for (RelationshipCandidate candidate : defaultCandidates) {
+            if (countQueriesUsed >= MAX_RELATIONSHIP_QUERIES) {
+                candidate.info.recordCount = null;
                 noteTruncatedRelationshipCount(completeness);
+                relationships.add(candidate.info);
+                continue;
             }
 
-            if (info.recordCount > 0 || info.recordCount == -1) {
-                relationships.add(info);
+            countQueriesUsed++;
+            Integer recordCount = countRelationshipRecords(candidate, recordId);
+            if (recordCount == null) {
+                candidate.info.recordCount = null;
+                noteTruncatedRelationshipCount(completeness);
+                relationships.add(candidate.info);
+                continue;
+            }
+
+            if (recordCount > 0) {
+                candidate.info.recordCount = recordCount;
+                relationships.add(candidate.info);
+            }
+        }
+
+        for (RelationshipCandidate candidate : optionalCandidates) {
+            if (countQueriesUsed >= MAX_RELATIONSHIP_QUERIES) {
+                break;
+            }
+
+            countQueriesUsed++;
+            Integer recordCount = countRelationshipRecords(candidate, recordId);
+            if (recordCount != null && recordCount > 0) {
+                candidate.info.recordCount = recordCount;
+                relationships.add(candidate.info);
             }
         }
 
@@ -544,6 +579,37 @@ public with sharing class RecordContextService {
         return sorted;
     }
 
+    private static RelationshipCandidate buildRelationshipCandidate(Schema.ChildRelationship cr) {
+        String relName = cr.getRelationshipName();
+        if (String.isBlank(relName) || cr.isDeprecatedAndHidden() || cr.getField() == null) {
+            return null;
+        }
+
+        Schema.DescribeSObjectResult childDescribe = cr.getChildSObject().getDescribe();
+        if (!isSupportedRelationship(cr, relName, childDescribe)) {
+            return null;
+        }
+
+        RelationshipInfo info = new RelationshipInfo();
+        info.relationshipName = relName;
+        info.childObjectApiName = childDescribe.getName();
+        info.childObjectLabel = childDescribe.getLabel();
+        info.fieldName = cr.getField().getDescribe().getName();
+        info.includedByDefault = isDefaultRelationship(childDescribe.getName());
+
+        return new RelationshipCandidate(cr, childDescribe, info);
+    }
+
+    private static Integer countRelationshipRecords(RelationshipCandidate candidate, String recordId) {
+        try {
+            String countSoql = 'SELECT COUNT() FROM ' + candidate.childDescribe.getName()
+                + ' WHERE ' + candidate.info.fieldName + ' = :recordId';
+            return Database.countQuery(countSoql);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private static Boolean isSystemRelationship(String relationshipName, String childObjectName) {
         for (String suffix : SYSTEM_RELATIONSHIP_SUFFIXES) {
             if (relationshipName.endsWith(suffix)) return true;
@@ -554,6 +620,29 @@ public with sharing class RecordContextService {
             return true;
         }
         return false;
+    }
+
+    private static Boolean isSupportedRelationship(
+        Schema.ChildRelationship cr,
+        String relationshipName,
+        Schema.DescribeSObjectResult childDescribe
+    ) {
+        if (childDescribe == null || cr == null) {
+            return false;
+        }
+        if (!childDescribe.isAccessible() || !childDescribe.isQueryable()) {
+            return false;
+        }
+        if (isSystemRelationship(relationshipName, childDescribe.getName())) {
+            return false;
+        }
+        if (UNSUPPORTED_RELATIONSHIP_NAMES.contains(relationshipName)) {
+            return false;
+        }
+        if (UNSUPPORTED_CHILD_OBJECTS.contains(childDescribe.getName())) {
+            return false;
+        }
+        return true;
     }
 
     private static Boolean isDefaultRelationship(String childObjectName) {
@@ -634,10 +723,9 @@ public with sharing class RecordContextService {
             String relName = cr.getRelationshipName();
             if (relName == null) continue;
 
-            Schema.DescribeSObjectResult childDescribe = cr.getChildSObject().getDescribe();
-            if (!childDescribe.isAccessible()) continue;
-            if (isSystemRelationship(relName, childDescribe.getName())) continue;
-            if (!isDefaultRelationship(childDescribe.getName())) continue;
+                Schema.DescribeSObjectResult childDescribe = cr.getChildSObject().getDescribe();
+                if (!isSupportedRelationship(cr, relName, childDescribe)) continue;
+                if (!isDefaultRelationship(childDescribe.getName())) continue;
 
             Integer parentCount = 0;
             for (Map<String, Object> parentRec : parentRrs.records) {

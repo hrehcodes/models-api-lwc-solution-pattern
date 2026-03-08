@@ -164,4 +164,33 @@ describe('c-agentforce-record-insights', () => {
         expect(chatPanel.recordContextJson).toBeNull();
         expect(chatPanel.contextWarningMessages).toContain('Context query failed');
     });
+
+    it('passes the hide warnings builder setting to child panels', async () => {
+        getRecordContext.mockResolvedValue({
+            ...baseRecordContext,
+            completeness: {
+                isComplete: false,
+                hasWarnings: true,
+                warningMessages: ['Some field values could not be included in the record context.']
+            }
+        });
+
+        const element = createElement('c-agentforce-record-insights', {
+            is: AgentforceRecordInsights
+        });
+        element.recordId = '001000000000001AAA';
+        element.objectApiName = 'Account';
+        element.startWithContextPanelOpen = true;
+        element.hideContextWarnings = true;
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        const contextPanel = element.shadowRoot.querySelector('c-context-panel');
+        const chatPanel = element.shadowRoot.querySelector('c-chat-panel');
+
+        expect(contextPanel.hideContextWarnings).toBe(true);
+        expect(chatPanel.hideContextWarnings).toBe(true);
+    });
 });

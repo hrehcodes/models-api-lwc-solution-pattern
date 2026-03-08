@@ -124,4 +124,20 @@ describe('c-chat-panel', () => {
         expect(warning).not.toBeNull();
         expect(warning.textContent).toContain('Context query failed');
     });
+
+    it('suppresses warning banners when hideContextWarnings is enabled', async () => {
+        const element = createElement('c-chat-panel', {
+            is: ChatPanel
+        });
+        element.contextStatus = 'partial';
+        element.contextWarningSummary = 'Some record context was skipped or truncated.';
+        element.contextWarningMessages = ['Some field values could not be included in the record context.'];
+        element.hideContextWarnings = true;
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('.context-warning')).toBeNull();
+    });
 });

@@ -29,6 +29,7 @@ export default class AgentforceRecordInsights extends LightningElement {
     @api persistConversation;
     @api showSuggestedComparisonRecords;
     @api enableSuggestedFollowUps;
+    @api hideContextWarnings;
 
     mode = MODE_INSIGHTS;
     contextPanelOpen = true;
@@ -129,6 +130,9 @@ export default class AgentforceRecordInsights extends LightningElement {
     get persistConversationEnabled() { return this.isBooleanEnabled(this.persistConversation); }
     get showSuggestedComparisonRecordsEnabled() { return this.isBooleanEnabled(this.showSuggestedComparisonRecords); }
     get enableSuggestedFollowUpsEnabled() { return this.isBooleanEnabled(this.enableSuggestedFollowUps); }
+    get hideContextWarningsEnabled() {
+        return this.hideContextWarnings === true || this.hideContextWarnings === 'true';
+    }
 
     get showSettingsButton() {
         return this.isInsightsMode && this.hasRecordContext;

@@ -32,6 +32,7 @@ export default class ContextPanel extends LightningElement {
     @api contextStatus;
     @api contextWarningSummary;
     @api contextWarningMessages = [];
+    @api hideContextWarnings;
 
     fieldsExpanded = false;
     relationshipsExpanded = false;
@@ -59,7 +60,8 @@ export default class ContextPanel extends LightningElement {
     get showDepth3Button() { return this.normalizedMaxDepth >= 3; }
     get showUsageMetricsEnabled() { return this.isBooleanEnabled(this.showUsageMetrics); }
     get showContextWarning() {
-        return Boolean(this.contextWarningSummary || this.contextWarningMessageList.length);
+        return !this.hideContextWarningsEnabled
+            && Boolean(this.contextWarningSummary || this.contextWarningMessageList.length);
     }
     get contextWarningMessageList() {
         return Array.isArray(this.contextWarningMessages) ? this.contextWarningMessages.filter(Boolean) : [];
@@ -68,6 +70,9 @@ export default class ContextPanel extends LightningElement {
         return this.contextStatus === 'failed'
             ? 'context-warning context-warning-failed'
             : 'context-warning';
+    }
+    get hideContextWarningsEnabled() {
+        return this.hideContextWarnings === true || this.hideContextWarnings === 'true';
     }
 
     get depthDescription() {
@@ -119,7 +124,9 @@ export default class ContextPanel extends LightningElement {
         return this.availableContext.relationships.map(rel => ({
             ...rel,
             isIncluded: included.has(rel.relationshipName),
-            displayCount: rel.recordCount >= 0 ? `(${rel.recordCount})` : ''
+            displayCount: typeof rel.recordCount === 'number' && rel.recordCount >= 0
+                ? `(${rel.recordCount})`
+                : ''
         }));
     }
 

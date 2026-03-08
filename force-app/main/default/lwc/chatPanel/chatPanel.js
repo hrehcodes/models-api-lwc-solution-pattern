@@ -58,6 +58,7 @@ export default class ChatPanel extends LightningElement {
     @api contextStatus;
     @api contextWarningSummary;
     @api contextWarningMessages = [];
+    @api hideContextWarnings;
 
     @track messages = [];
     userInput = '';
@@ -187,7 +188,8 @@ export default class ChatPanel extends LightningElement {
     }
 
     get showContextWarning() {
-        return Boolean(this.contextWarningSummary || this.contextWarningMessageList.length);
+        return !this.hideContextWarningsEnabled
+            && Boolean(this.contextWarningSummary || this.contextWarningMessageList.length);
     }
 
     get contextWarningMessageList() {
@@ -198,6 +200,9 @@ export default class ChatPanel extends LightningElement {
         return this.contextStatus === 'failed'
             ? 'context-warning context-warning-failed'
             : 'context-warning';
+    }
+    get hideContextWarningsEnabled() {
+        return this.hideContextWarnings === true || this.hideContextWarnings === 'true';
     }
 
     // ── Event Handlers ──
