@@ -220,6 +220,9 @@ describe('c-record-compare', () => {
         expect(actionBar).not.toBeNull();
         expect(actionBar.textContent).toContain('Ready to compare 2 records');
 
+        const preLoadSettingsShell = element.shadowRoot.querySelector('.compare-settings-shell');
+        expect(preLoadSettingsShell.classList.contains('compare-settings-collapsed')).toBe(true);
+
         const loadButton = actionBar.querySelector('lightning-button');
         loadButton.click();
         await flushPromises();

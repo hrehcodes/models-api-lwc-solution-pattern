@@ -42,7 +42,7 @@ export default class RecordCompare extends LightningElement {
     isLoadingComparison = false;
     compareError;
     selectionCollapsed = false;
-    contextSettingsCollapsed = false;
+    contextSettingsCollapsed = true;
 
     @track suggestedRecords = [];
     isLoadingSuggestions = false;
@@ -411,6 +411,7 @@ export default class RecordCompare extends LightningElement {
             this.updateCompareWarningState();
         } catch (error) {
             this.availableContext = null;
+            this.contextSettingsCollapsed = false;
             this.setCompareContextFailureState(error);
         } finally {
             this.isLoadingCompareContext = false;
@@ -473,7 +474,7 @@ export default class RecordCompare extends LightningElement {
         this.includedCategories = [];
         this.includedRelationships = [];
         this.selectionCollapsed = false;
-        this.contextSettingsCollapsed = false;
+        this.contextSettingsCollapsed = true;
         this.invalidateComparison();
         this.loadCompareContextMetadata({ resetSelections: true });
     }
@@ -636,7 +637,6 @@ export default class RecordCompare extends LightningElement {
         this.comparisonContextJson = null;
         this.compareError = null;
         this.comparisonContextWarnings = [];
-        this.contextSettingsCollapsed = false;
     }
 
     resetCompareWarningState() {

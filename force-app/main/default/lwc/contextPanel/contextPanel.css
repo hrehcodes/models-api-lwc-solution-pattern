@@ -63,7 +63,7 @@
 .header-copy {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     min-width: 0;
 }
 
@@ -74,6 +74,7 @@
     line-height: 1;
     vertical-align: middle;
     flex-shrink: 0;
+    transform: translateY(-1px);
 }
 
 .section-header {
@@ -104,20 +105,21 @@
     text-align: left;
 }
 
+.section-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+}
+
 .section-toggle:hover {
     color: #0070d2;
 }
 
-.section-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-left: auto;
-    flex-shrink: 0;
-}
-
 .edit-btn {
     flex-shrink: 0;
+    margin-left: auto;
 }
 
 .count-badge {
@@ -205,7 +207,7 @@
     }
 
     .header-copy,
-    .section-actions {
+    .section-main {
         flex-wrap: wrap;
     }
 }
