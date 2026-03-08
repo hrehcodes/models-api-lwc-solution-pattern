@@ -158,7 +158,7 @@ describe('c-record-compare', () => {
         });
     });
 
-    it('loads comparison context with the shared field, relationship, and depth settings', async () => {
+    it('uses the staged compare flow to review optional settings and load chat context', async () => {
         getComparisonContext.mockResolvedValue({
             records: [
                 {
@@ -220,10 +220,20 @@ describe('c-record-compare', () => {
         expect(actionBar).not.toBeNull();
         expect(actionBar.textContent).toContain('Ready to compare 2 records');
 
-        const preLoadSettingsShell = element.shadowRoot.querySelector('.compare-settings-shell');
-        expect(preLoadSettingsShell.classList.contains('compare-settings-collapsed')).toBe(true);
+        const stepHeaders = [...element.shadowRoot.querySelectorAll('.step-header')];
+        expect(stepHeaders[0].textContent).toContain('Choose records');
+        expect(stepHeaders[1].textContent).toContain('Optional context settings');
+        expect(stepHeaders[2].textContent).toContain('Chat');
 
-        const loadButton = actionBar.querySelector('lightning-button');
+        const settingsButton = [...actionBar.querySelectorAll('lightning-button')]
+            .find(button => button.label === 'Optional Context Settings');
+        settingsButton.click();
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('c-context-panel')).not.toBeNull();
+
+        const loadButton = [...element.shadowRoot.querySelectorAll('lightning-button')]
+            .find(button => button.label === 'Load Comparison');
         loadButton.click();
         await flushPromises();
 
@@ -236,15 +246,7 @@ describe('c-record-compare', () => {
             maxRelatedRecords: 7
         });
 
-        const compareSettingsShell = element.shadowRoot.querySelector('.compare-settings-shell');
-        expect(compareSettingsShell.classList.contains('compare-settings-collapsed')).toBe(true);
-        expect(element.shadowRoot.querySelector('c-context-panel')).toBeNull();
-
-        const compareSettingsToggle = element.shadowRoot.querySelector('.compare-settings-toggle');
-        compareSettingsToggle.click();
-        await flushPromises();
-
-        expect(element.shadowRoot.querySelector('c-context-panel')).not.toBeNull();
+        expect(element.shadowRoot.querySelector('c-chat-panel')).not.toBeNull();
     });
 
     it('prevents adding records beyond the configured compare limit and shows a warning', async () => {

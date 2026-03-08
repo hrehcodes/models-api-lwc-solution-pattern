@@ -41,8 +41,7 @@ export default class RecordCompare extends LightningElement {
     comparisonLoaded = false;
     isLoadingComparison = false;
     compareError;
-    selectionCollapsed = false;
-    contextSettingsCollapsed = true;
+    activeStep = 'records';
 
     @track suggestedRecords = [];
     isLoadingSuggestions = false;
@@ -175,14 +174,6 @@ export default class RecordCompare extends LightningElement {
         return !this.isLoadingSuggestions && this.suggestionsLoaded && this.suggestedRecords.length === 0;
     }
 
-    get selectionExpanded() {
-        return !this.selectionCollapsed;
-    }
-
-    get collapseChevronIcon() {
-        return this.selectionCollapsed ? 'utility:chevronright' : 'utility:chevrondown';
-    }
-
     get displaySessionTokens() {
         return this._sessionTokens.toLocaleString();
     }
@@ -223,12 +214,42 @@ export default class RecordCompare extends LightningElement {
         return `You have reached the configured compare limit of ${this.normalizedMaxCompareRecords} records. Remove a record to add another.`;
     }
 
+    get hasMinimumSelectedRecords() {
+        return this.selectedRecords.length >= 2;
+    }
+
+    get canAccessSettingsStep() {
+        return Boolean(this.activeObjectType) && this.hasMinimumSelectedRecords;
+    }
+
+    get settingsStepDisabled() {
+        return !this.canAccessSettingsStep;
+    }
+
+    get chatStepDisabled() {
+        return !this.comparisonLoaded;
+    }
+
+    get showSettingsStepBody() {
+        return this.activeStep === 'settings' && !this.settingsStepDisabled;
+    }
+
+    get showRecordsStepBody() {
+        return this.activeStep === 'records' || !this.hasMinimumSelectedRecords;
+    }
+
+    get showChatStepBody() {
+        return this.activeStep === 'chat';
+    }
+
+    get showChatPlaceholder() {
+        return this.showChatStepBody && !this.comparisonLoaded;
+    }
+
     get showSelectionActionBar() {
-        return this.selectionExpanded && (
-            this.selectedRecords.length > 0
+        return this.selectedRecords.length > 0
             || this.isLoadingComparison
-            || Boolean(this.compareError)
-        );
+            || Boolean(this.compareError);
     }
 
     get selectionActionMessage() {
@@ -236,7 +257,7 @@ export default class RecordCompare extends LightningElement {
             return 'Loading the comparison and preparing the chat context.';
         }
 
-        if (this.selectedRecords.length >= 2) {
+        if (this.hasMinimumSelectedRecords) {
             return `Ready to compare ${this.selectedRecords.length} records. Load the comparison to shift focus to the chat.`;
         }
 
@@ -245,6 +266,10 @@ export default class RecordCompare extends LightningElement {
         }
 
         return 'Select at least 2 records to enable comparison.';
+    }
+
+    get showSettingsReviewAction() {
+        return this.canAccessSettingsStep && !this.isLoadingComparison;
     }
 
     get showCompareContextPanel() {
@@ -301,24 +326,6 @@ export default class RecordCompare extends LightningElement {
         return Math.max(parsedThreshold, 0);
     }
 
-    get showCompareContextBody() {
-        return !this.contextSettingsCollapsed;
-    }
-
-    get compareContextChevronIcon() {
-        return this.contextSettingsCollapsed ? 'utility:chevronright' : 'utility:chevrondown';
-    }
-
-    get compareContextToggleLabel() {
-        return this.contextSettingsCollapsed ? 'Show settings' : 'Hide settings';
-    }
-
-    get compareSettingsShellClass() {
-        return this.contextSettingsCollapsed
-            ? 'compare-settings-shell compare-settings-collapsed'
-            : 'compare-settings-shell';
-    }
-
     get compareContextSummary() {
         if (this.contextStatus === 'failed' && this.contextWarningSummary) {
             return this.contextWarningSummary;
@@ -345,6 +352,114 @@ export default class RecordCompare extends LightningElement {
         }
 
         return summaryParts.join(' • ');
+    }
+
+    get selectedRecordPreview() {
+        const recordNames = this.selectedRecords
+            .map(record => record.name)
+            .filter(Boolean);
+
+        if (!recordNames.length) {
+            return 'No records selected yet.';
+        }
+
+        const visibleNames = recordNames.slice(0, 2).join(', ');
+        const remainingCount = recordNames.length - 2;
+        return remainingCount > 0
+            ? `${visibleNames} +${remainingCount} more`
+            : visibleNames;
+    }
+
+    get recordsStepSummary() {
+        if (!this.selectedRecords.length) {
+            return 'Choose at least 2 records to compare.';
+        }
+
+        if (!this.hasMinimumSelectedRecords) {
+            return `${this.selectedRecordPreview}. Add 1 more record to continue.`;
+        }
+
+        return `${this.compareSelectionLimitLabel} selected • ${this.selectedRecordPreview}`;
+    }
+
+    get settingsStepSummary() {
+        if (!this.activeObjectType) {
+            return 'Choose an object type and at least 2 records to unlock shared settings.';
+        }
+
+        if (!this.hasMinimumSelectedRecords) {
+            return 'Optional. Unlocks after you choose at least 2 records.';
+        }
+
+        return this.compareContextSummary;
+    }
+
+    get chatStepSummary() {
+        if (!this.comparisonLoaded) {
+            return 'Load the comparison to start the conversation.';
+        }
+
+        return this.comparisonLabel;
+    }
+
+    get recordsStepClass() {
+        return this.buildStepClass({
+            active: this.activeStep === 'records',
+            complete: this.hasMinimumSelectedRecords,
+            locked: false
+        });
+    }
+
+    get settingsStepClass() {
+        return this.buildStepClass({
+            active: this.activeStep === 'settings',
+            complete: this.comparisonLoaded,
+            locked: this.settingsStepDisabled
+        });
+    }
+
+    get chatStepClass() {
+        return this.buildStepClass({
+            active: this.activeStep === 'chat',
+            complete: this.comparisonLoaded,
+            locked: this.chatStepDisabled
+        });
+    }
+
+    get recordsStepBadgeClass() {
+        return this.buildStepBadgeClass({
+            active: this.activeStep === 'records',
+            complete: this.hasMinimumSelectedRecords,
+            locked: false
+        });
+    }
+
+    get settingsStepBadgeClass() {
+        return this.buildStepBadgeClass({
+            active: this.activeStep === 'settings',
+            complete: this.comparisonLoaded,
+            locked: this.settingsStepDisabled
+        });
+    }
+
+    get chatStepBadgeClass() {
+        return this.buildStepBadgeClass({
+            active: this.activeStep === 'chat',
+            complete: this.comparisonLoaded,
+            locked: this.chatStepDisabled
+        });
+    }
+
+    get recordsStepChevronIcon() {
+        return this.activeStep === 'records' ? 'utility:chevrondown' : 'utility:chevronright';
+    }
+
+    get settingsStepChevronIcon() {
+        return this.activeStep === 'settings' ? 'utility:chevrondown' : 'utility:chevronright';
+    }
+
+    get chatStepChevronIcon() {
+        return this.activeStep === 'chat' ? 'utility:chevrondown' : 'utility:chevronright';
     }
 
     async loadAvailableObjectTypes() {
@@ -411,8 +526,8 @@ export default class RecordCompare extends LightningElement {
             this.updateCompareWarningState();
         } catch (error) {
             this.availableContext = null;
-            this.contextSettingsCollapsed = false;
             this.setCompareContextFailureState(error);
+            this.activeStep = this.hasMinimumSelectedRecords ? 'settings' : 'records';
         } finally {
             this.isLoadingCompareContext = false;
         }
@@ -461,6 +576,7 @@ export default class RecordCompare extends LightningElement {
         this.suggestedRecords = this.suggestedRecords.filter(r => r.id !== id);
         this.invalidateComparison();
         this.refreshCompareContextMetadata();
+        this.syncActiveStepAfterSelectionChange();
     }
 
     // ── Event Handlers ──
@@ -473,8 +589,7 @@ export default class RecordCompare extends LightningElement {
         this.suggestionsLoaded = false;
         this.includedCategories = [];
         this.includedRelationships = [];
-        this.selectionCollapsed = false;
-        this.contextSettingsCollapsed = true;
+        this.activeStep = 'records';
         this.invalidateComparison();
         this.loadCompareContextMetadata({ resetSelections: true });
     }
@@ -522,6 +637,7 @@ export default class RecordCompare extends LightningElement {
         this.suggestedRecords = this.suggestedRecords.filter(r => r.id !== id);
         this.invalidateComparison();
         this.refreshCompareContextMetadata();
+        this.syncActiveStepAfterSelectionChange();
     }
 
     handleRemoveRecord(event) {
@@ -529,24 +645,7 @@ export default class RecordCompare extends LightningElement {
         this.selectedRecords = this.selectedRecords.filter(r => r.id !== id);
         this.invalidateComparison();
         this.refreshCompareContextMetadata();
-    }
-
-    handleRemoveRecordCollapsed(event) {
-        const id = event.target.dataset.id;
-        this.selectedRecords = this.selectedRecords.filter(r => r.id !== id);
-        this.invalidateComparison();
-        this.refreshCompareContextMetadata();
-        if (this.selectedRecords.length < 2) {
-            this.selectionCollapsed = false;
-        }
-    }
-
-    toggleSelectionCollapsed() {
-        this.selectionCollapsed = !this.selectionCollapsed;
-    }
-
-    toggleContextSettingsCollapsed() {
-        this.contextSettingsCollapsed = !this.contextSettingsCollapsed;
+        this.syncActiveStepAfterSelectionChange();
     }
 
     async handleLoadComparison() {
@@ -569,8 +668,7 @@ export default class RecordCompare extends LightningElement {
 
             this.comparisonContextJson = JSON.stringify(this.serializeComparisonForChat(ctx));
             this.comparisonLoaded = true;
-            this.selectionCollapsed = true;
-            this.contextSettingsCollapsed = true;
+            this.activeStep = 'chat';
             this.updateCompareWarningState(ctx.completeness);
 
             if (ctx.records) {
@@ -601,12 +699,14 @@ export default class RecordCompare extends LightningElement {
         }
         this.invalidateComparison();
         this.updateCompareWarningState();
+        this.activeStep = 'settings';
     }
 
     handleDepthChange(event) {
         this.currentDepth = this.normalizeDepth(event.detail.depth);
         this.invalidateComparison();
         this.updateCompareWarningState();
+        this.activeStep = 'settings';
     }
 
     handleOpenFieldSelector() {
@@ -622,6 +722,7 @@ export default class RecordCompare extends LightningElement {
         this.showFieldSelector = false;
         this.invalidateComparison();
         this.updateCompareWarningState();
+        this.activeStep = 'settings';
     }
 
     handleChatUsageUpdate(event) {
@@ -637,6 +738,24 @@ export default class RecordCompare extends LightningElement {
         this.comparisonContextJson = null;
         this.compareError = null;
         this.comparisonContextWarnings = [];
+    }
+
+    openRecordsStep() {
+        this.activeStep = 'records';
+    }
+
+    openSettingsStep() {
+        if (this.settingsStepDisabled) {
+            return;
+        }
+        this.activeStep = 'settings';
+    }
+
+    openChatStep() {
+        if (this.chatStepDisabled) {
+            return;
+        }
+        this.activeStep = 'chat';
     }
 
     resetCompareWarningState() {
@@ -683,6 +802,17 @@ export default class RecordCompare extends LightningElement {
 
     combineWarnings(...warningGroups) {
         return [...new Set([].concat(...warningGroups).filter(Boolean))];
+    }
+
+    syncActiveStepAfterSelectionChange() {
+        if (!this.hasMinimumSelectedRecords) {
+            this.activeStep = 'records';
+            return;
+        }
+
+        if (this.activeStep === 'chat') {
+            this.activeStep = 'settings';
+        }
     }
 
     resolveConfiguredSelections(items, keyField, csvValue, fallbackPredicate) {
@@ -734,6 +864,36 @@ export default class RecordCompare extends LightningElement {
             return false;
         }
         return this.selectedRecords.length < this.normalizedMaxCompareRecords;
+    }
+
+    buildStepClass({ active, complete, locked }) {
+        const classNames = ['step-card'];
+
+        if (active) {
+            classNames.push('step-card-active');
+        }
+        if (complete) {
+            classNames.push('step-card-complete');
+        }
+        if (locked) {
+            classNames.push('step-card-locked');
+        }
+
+        return classNames.join(' ');
+    }
+
+    buildStepBadgeClass({ active, complete, locked }) {
+        const classNames = ['step-badge'];
+
+        if (active) {
+            classNames.push('step-badge-active');
+        } else if (complete && !locked) {
+            classNames.push('step-badge-complete');
+        } else if (locked) {
+            classNames.push('step-badge-locked');
+        }
+
+        return classNames.join(' ');
     }
 
     serializeComparisonForChat(ctx) {

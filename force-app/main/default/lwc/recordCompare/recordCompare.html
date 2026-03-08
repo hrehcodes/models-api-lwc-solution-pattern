@@ -1,267 +1,290 @@
 <template>
     <div class="compare-wrapper">
-
-        <!-- ── Collapsed Selection Bar ── -->
-        <template lwc:if={selectionCollapsed}>
-            <div class="selection-collapsed">
-                <button class="collapse-toggle" onclick={toggleSelectionCollapsed} type="button">
-                    <lightning-icon icon-name="utility:chevronright" size="xx-small" class="toggle-chevron"></lightning-icon>
-                    <span class="slds-text-heading_small">Compare Records</span>
+        <div class="compare-steps">
+            <section class={recordsStepClass}>
+                <button class="step-header" onclick={openRecordsStep} type="button">
+                    <div class="step-header-main">
+                        <span class={recordsStepBadgeClass}>1</span>
+                        <div class="step-copy">
+                            <span class="step-title">Choose records</span>
+                            <span class="step-summary">{recordsStepSummary}</span>
+                        </div>
+                    </div>
+                    <lightning-icon icon-name={recordsStepChevronIcon} size="x-small" class="step-chevron"></lightning-icon>
                 </button>
-                <span class="slds-text-color_weak slds-text-body_small collapsed-count">{compareSelectionLimitLabel}</span>
-                <div class="collapsed-pills">
-                    <template for:each={selectedRecords} for:item="rec">
-                        <lightning-pill key={rec.id} label={rec.name} onremove={handleRemoveRecordCollapsed} data-id={rec.id}>
-                            <lightning-icon icon-name={objectIconName}></lightning-icon>
-                        </lightning-pill>
-                    </template>
-                </div>
-            </div>
-        </template>
 
-        <!-- ── Expanded Selection Area ── -->
-        <template lwc:if={selectionExpanded}>
-            <div class="selection-area slds-p-around_small">
-                <div class="slds-grid slds-grid_align-spread slds-m-bottom_small">
-                    <button class="collapse-toggle" onclick={toggleSelectionCollapsed} type="button">
-                        <lightning-icon icon-name={collapseChevronIcon} size="xx-small" class="toggle-chevron"></lightning-icon>
-                        <h3 class="slds-text-heading_small">Compare Records</h3>
-                    </button>
-                    <span class="slds-text-color_weak slds-text-body_small">{compareSelectionLimitLabel} selected</span>
-                </div>
+                <template lwc:if={showRecordsStepBody}>
+                    <div class="step-body">
+                        <template lwc:if={showObjectPicker}>
+                            <lightning-input
+                                type="search"
+                                label="Filter Object Types"
+                                value={objectTypeFilter}
+                                onchange={handleObjectFilterChange}
+                                placeholder={objectFilterPlaceholder}
+                                class="slds-m-bottom_x-small"
+                            ></lightning-input>
+                            <lightning-combobox
+                                label="Object Type"
+                                value={selectedObjectType}
+                                options={filteredObjectTypeOptions}
+                                onchange={handleObjectTypeChange}
+                                placeholder="Select object type to compare..."
+                                class="slds-m-bottom_small"
+                                disabled={isLoadingObjectTypes}
+                            ></lightning-combobox>
+                            <template lwc:if={isLoadingObjectTypes}>
+                                <div class="slds-text-align_center slds-p-vertical_x-small">
+                                    <lightning-spinner alternative-text="Loading object types..." size="x-small"></lightning-spinner>
+                                </div>
+                            </template>
+                            <template lwc:if={objectTypeError}>
+                                <p class="picker-error slds-m-bottom_small">{objectTypeError}</p>
+                            </template>
+                            <template lwc:if={noFilteredObjectOptions}>
+                                <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_small">
+                                    No object types match the current filter.
+                                </p>
+                            </template>
+                        </template>
 
-                <!-- Object Type Picker (app page only, when no objectApiName) -->
-                <template lwc:if={showObjectPicker}>
-                    <lightning-input
-                        type="search"
-                        label="Filter Object Types"
-                        value={objectTypeFilter}
-                        onchange={handleObjectFilterChange}
-                        placeholder={objectFilterPlaceholder}
-                        class="slds-m-bottom_x-small"
-                    ></lightning-input>
-                    <lightning-combobox
-                        label="Object Type"
-                        value={selectedObjectType}
-                        options={filteredObjectTypeOptions}
-                        onchange={handleObjectTypeChange}
-                        placeholder="Select object type to compare..."
-                        class="slds-m-bottom_small"
-                        disabled={isLoadingObjectTypes}
-                    ></lightning-combobox>
-                    <template lwc:if={isLoadingObjectTypes}>
-                        <div class="slds-text-align_center slds-p-vertical_x-small">
-                            <lightning-spinner alternative-text="Loading object types..." size="x-small"></lightning-spinner>
-                        </div>
-                    </template>
-                    <template lwc:if={objectTypeError}>
-                        <p class="picker-error slds-m-bottom_small">{objectTypeError}</p>
-                    </template>
-                    <template lwc:if={noFilteredObjectOptions}>
-                        <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_small">
-                            No object types match the current filter.
-                        </p>
-                    </template>
+                        <template lwc:if={showSelectionActionBar}>
+                            <div class="selection-actions">
+                                <div class="selection-actions-copy">
+                                    <span class="selection-actions-title">Load Comparison</span>
+                                    <span class="selection-actions-message">{selectionActionMessage}</span>
+                                </div>
+                                <div class="step-footer-actions">
+                                    <template lwc:if={showSettingsReviewAction}>
+                                        <lightning-button
+                                            label="Optional Context Settings"
+                                            variant="neutral"
+                                            onclick={openSettingsStep}
+                                        ></lightning-button>
+                                    </template>
+                                    <template lwc:if={canCompare}>
+                                        <lightning-button
+                                            label="Load Comparison"
+                                            variant="brand"
+                                            onclick={handleLoadComparison}
+                                            disabled={isLoadingComparison}
+                                        ></lightning-button>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <template lwc:if={selectedRecords.length}>
+                            <div class="selected-records selected-records-primary">
+                                <template for:each={selectedRecords} for:item="rec">
+                                    <lightning-pill key={rec.id} label={rec.name} onremove={handleRemoveRecord} data-id={rec.id}>
+                                        <lightning-icon icon-name={objectIconName}></lightning-icon>
+                                    </lightning-pill>
+                                </template>
+                            </div>
+                        </template>
+
+                        <template lwc:if={canSearch}>
+                            <div class="search-row slds-m-bottom_small">
+                                <lightning-input
+                                    type="search"
+                                    label="Search Records"
+                                    value={searchTerm}
+                                    onchange={handleSearchChange}
+                                    placeholder={searchPlaceholder}
+                                    variant="label-hidden"
+                                    class="search-input"
+                                ></lightning-input>
+                            </div>
+
+                            <template lwc:if={searchResults.length}>
+                                <ul class="search-results slds-m-bottom_small">
+                                    <template for:each={searchResults} for:item="rec">
+                                        <li key={rec.id} class="result-item" onclick={handleAddRecord} data-id={rec.id} data-name={rec.name}>
+                                            <lightning-icon icon-name="utility:add" size="xx-small" class="slds-m-right_x-small"></lightning-icon>
+                                            <span>{rec.name}</span>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </template>
+                        </template>
+
+                        <template lwc:if={showSuggestions}>
+                            <div class="suggested-section">
+                                <div class="suggested-header slds-m-bottom_xx-small">
+                                    <span class="slds-text-title_bold slds-text-color_weak">Suggested</span>
+                                    <lightning-helptext
+                                        content="Records related to the current record (e.g. sibling Opportunities on the same Account) or recently modified records of this type."
+                                        class="compare-helptext"
+                                    ></lightning-helptext>
+                                </div>
+                                <template lwc:if={isLoadingSuggestions}>
+                                    <div class="slds-text-align_center slds-p-around_x-small">
+                                        <lightning-spinner alternative-text="Loading suggestions..." size="x-small"></lightning-spinner>
+                                    </div>
+                                </template>
+                                <template lwc:if={hasSuggestions}>
+                                    <div class="suggestion-pills">
+                                        <template for:each={suggestedRecords} for:item="rec">
+                                            <lightning-pill
+                                                key={rec.id}
+                                                label={rec.name}
+                                                onclick={handleAddSuggested}
+                                                data-id={rec.id}
+                                                data-name={rec.name}
+                                                class="suggestion-pill"
+                                            >
+                                                <lightning-icon icon-name={objectIconName}></lightning-icon>
+                                            </lightning-pill>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template lwc:if={noSuggestions}>
+                                    <p class="slds-text-body_small slds-text-color_weak">No related records found.</p>
+                                </template>
+                            </div>
+                        </template>
+
+                        <template lwc:if={hasReachedMaxCompareRecords}>
+                            <p class="picker-error slds-m-top_x-small">{compareLimitMessage}</p>
+                        </template>
+
+                        <template lwc:if={isLoadingComparison}>
+                            <div class="slds-text-align_center slds-p-around_medium">
+                                <lightning-spinner alternative-text="Loading comparison..." size="small"></lightning-spinner>
+                                <p class="slds-m-top_small slds-text-color_weak">Loading records for comparison...</p>
+                            </div>
+                        </template>
+
+                        <template lwc:if={compareError}>
+                            <div class="slds-m-top_small">
+                                <div class="slds-notify slds-notify_alert slds-alert_error" role="alert">
+                                    <span class="slds-assistive-text">error</span>
+                                    <h2>{compareError}</h2>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
                 </template>
+            </section>
 
-                <template lwc:if={showSelectionActionBar}>
-                    <div class="selection-actions">
-                        <div class="selection-actions-copy">
-                            <span class="selection-actions-title">Load Comparison</span>
-                            <span class="selection-actions-message">{selectionActionMessage}</span>
+            <section class={settingsStepClass}>
+                <button class="step-header" onclick={openSettingsStep} type="button" disabled={settingsStepDisabled}>
+                    <div class="step-header-main">
+                        <span class={settingsStepBadgeClass}>2</span>
+                        <div class="step-copy">
+                            <span class="step-title">Optional context settings</span>
+                            <span class="step-summary">{settingsStepSummary}</span>
                         </div>
-                        <template lwc:if={canCompare}>
+                    </div>
+                    <lightning-icon icon-name={settingsStepChevronIcon} size="x-small" class="step-chevron"></lightning-icon>
+                </button>
+
+                <template lwc:if={showSettingsStepBody}>
+                    <div class="step-body">
+                        <template lwc:if={isLoadingCompareContext}>
+                            <div class="slds-text-align_center slds-p-around_medium">
+                                <lightning-spinner alternative-text="Loading compare context settings..." size="small"></lightning-spinner>
+                                <p class="slds-m-top_small slds-text-color_weak">Loading compare context settings...</p>
+                            </div>
+                        </template>
+
+                        <template lwc:if={showCompareContextPanel}>
+                            <c-context-panel
+                                record-id={referenceRecordId}
+                                available-context={availableContext}
+                                included-categories={includedCategories}
+                                included-relationships={includedRelationships}
+                                depth={currentDepth}
+                                max-depth-allowed={normalizedMaxDepth}
+                                session-tokens={_sessionTokens}
+                                session-credits={_sessionCredits}
+                                show-usage-metrics={showUsageMetricsEnabled}
+                                context-status={contextStatus}
+                                context-warning-summary={contextWarningSummary}
+                                context-warning-messages={contextWarningMessages}
+                                hide-context-warnings={hideContextWarnings}
+                                context-token-estimate={compareContextTokenEstimate}
+                                token-warning-threshold={normalizedPromptWarningThreshold}
+                                oncontextchange={handleContextChange}
+                                ondepthchange={handleDepthChange}
+                                onfieldselect={handleOpenFieldSelector}
+                            ></c-context-panel>
+                        </template>
+
+                        <template lwc:if={showCompareContextError}>
+                            <div class="compare-settings-error slds-p-around_small">
+                                <div class="slds-notify slds-notify_alert slds-alert_error" role="alert">
+                                    <span class="slds-assistive-text">error</span>
+                                    <h2>{contextWarningSummary}</h2>
+                                </div>
+                            </div>
+                        </template>
+
+                        <div class="step-footer">
+                            <lightning-button
+                                label="Back to Record Selection"
+                                variant="neutral"
+                                onclick={openRecordsStep}
+                            ></lightning-button>
                             <lightning-button
                                 label="Load Comparison"
                                 variant="brand"
                                 onclick={handleLoadComparison}
                                 disabled={isLoadingComparison}
                             ></lightning-button>
-                        </template>
-                    </div>
-                </template>
-
-                <!-- Selected Records -->
-                <template lwc:if={selectedRecords.length}>
-                    <div class="selected-records selected-records-primary">
-                        <template for:each={selectedRecords} for:item="rec">
-                            <lightning-pill key={rec.id} label={rec.name} onremove={handleRemoveRecord} data-id={rec.id}>
-                                <lightning-icon icon-name={objectIconName}></lightning-icon>
-                            </lightning-pill>
-                        </template>
-                    </div>
-                </template>
-
-                <!-- Search for records -->
-                <template lwc:if={canSearch}>
-                    <div class="search-row slds-m-bottom_small">
-                        <lightning-input
-                            type="search"
-                            label="Search Records"
-                            value={searchTerm}
-                            onchange={handleSearchChange}
-                            placeholder={searchPlaceholder}
-                            variant="label-hidden"
-                            class="search-input"
-                        ></lightning-input>
-                    </div>
-
-                    <!-- Search Results -->
-                    <template lwc:if={searchResults.length}>
-                        <ul class="search-results slds-m-bottom_small">
-                            <template for:each={searchResults} for:item="rec">
-                                <li key={rec.id} class="result-item" onclick={handleAddRecord} data-id={rec.id} data-name={rec.name}>
-                                    <lightning-icon icon-name="utility:add" size="xx-small" class="slds-m-right_x-small"></lightning-icon>
-                                    <span>{rec.name}</span>
-                                </li>
-                            </template>
-                        </ul>
-                    </template>
-                </template>
-
-                <!-- Suggested Records -->
-                <template lwc:if={showSuggestions}>
-                    <div class="suggested-section slds-m-bottom_small">
-                        <div class="suggested-header slds-m-bottom_xx-small">
-                            <span class="slds-text-title_bold slds-text-color_weak">Suggested</span>
-                            <lightning-helptext
-                                content="Records related to the current record (e.g. sibling Opportunities on the same Account) or recently modified records of this type."
-                                class="compare-helptext"
-                            ></lightning-helptext>
-                        </div>
-                        <template lwc:if={isLoadingSuggestions}>
-                            <div class="slds-text-align_center slds-p-around_x-small">
-                                <lightning-spinner alternative-text="Loading suggestions..." size="x-small"></lightning-spinner>
-                            </div>
-                        </template>
-                        <template lwc:if={hasSuggestions}>
-                            <div class="suggestion-pills">
-                                <template for:each={suggestedRecords} for:item="rec">
-                                    <lightning-pill
-                                        key={rec.id}
-                                        label={rec.name}
-                                        onclick={handleAddSuggested}
-                                        data-id={rec.id}
-                                        data-name={rec.name}
-                                        class="suggestion-pill"
-                                    >
-                                        <lightning-icon icon-name={objectIconName}></lightning-icon>
-                                    </lightning-pill>
-                                </template>
-                            </div>
-                        </template>
-                        <template lwc:if={noSuggestions}>
-                            <p class="slds-text-body_small slds-text-color_weak">No related records found.</p>
-                        </template>
-                    </div>
-                </template>
-
-                <template lwc:if={hasReachedMaxCompareRecords}>
-                    <p class="picker-error slds-m-top_x-small">{compareLimitMessage}</p>
-                </template>
-
-                <!-- Loading -->
-                <template lwc:if={isLoadingComparison}>
-                    <div class="slds-text-align_center slds-p-around_medium">
-                        <lightning-spinner alternative-text="Loading comparison..." size="small"></lightning-spinner>
-                        <p class="slds-m-top_small slds-text-color_weak">Loading records for comparison...</p>
-                    </div>
-                </template>
-
-                <!-- Error -->
-                <template lwc:if={compareError}>
-                    <div class="slds-m-top_small">
-                        <div class="slds-notify slds-notify_alert slds-alert_error" role="alert">
-                            <span class="slds-assistive-text">error</span>
-                            <h2>{compareError}</h2>
                         </div>
                     </div>
                 </template>
-            </div>
-        </template>
+            </section>
 
-        <template lwc:if={showCompareContextSettings}>
-            <div class={compareSettingsShellClass}>
-                <button class="compare-settings-toggle" onclick={toggleContextSettingsCollapsed} type="button">
-                    <div class="compare-settings-toggle-copy">
-                        <div class="compare-settings-toggle-title-row">
-                            <lightning-icon icon-name={compareContextChevronIcon} size="xx-small" class="toggle-chevron"></lightning-icon>
-                            <span class="slds-text-title_bold">Comparison Context</span>
-                            <span class="compare-settings-badge">Optional</span>
+            <section class={chatStepClass}>
+                <button class="step-header" onclick={openChatStep} type="button" disabled={chatStepDisabled}>
+                    <div class="step-header-main">
+                        <span class={chatStepBadgeClass}>3</span>
+                        <div class="step-copy">
+                            <span class="step-title">Chat</span>
+                            <span class="step-summary">{chatStepSummary}</span>
                         </div>
-                        <span class="compare-settings-summary">{compareContextSummary}</span>
                     </div>
-                    <span class="compare-settings-toggle-label">{compareContextToggleLabel}</span>
+                    <lightning-icon icon-name={chatStepChevronIcon} size="x-small" class="step-chevron"></lightning-icon>
                 </button>
 
-                <template lwc:if={showCompareContextBody}>
-                    <template lwc:if={isLoadingCompareContext}>
-                        <div class="slds-text-align_center slds-p-around_medium">
-                            <lightning-spinner alternative-text="Loading compare context settings..." size="small"></lightning-spinner>
-                            <p class="slds-m-top_small slds-text-color_weak">Loading compare context settings...</p>
-                        </div>
-                    </template>
-
-                    <template lwc:if={showCompareContextPanel}>
-                        <c-context-panel
-                            record-id={referenceRecordId}
-                            available-context={availableContext}
-                            included-categories={includedCategories}
-                            included-relationships={includedRelationships}
-                            depth={currentDepth}
-                            max-depth-allowed={normalizedMaxDepth}
-                            session-tokens={_sessionTokens}
-                            session-credits={_sessionCredits}
-                            show-usage-metrics={showUsageMetricsEnabled}
-                            context-status={contextStatus}
-                            context-warning-summary={contextWarningSummary}
-                            context-warning-messages={contextWarningMessages}
-                            hide-context-warnings={hideContextWarnings}
-                            context-token-estimate={compareContextTokenEstimate}
-                            token-warning-threshold={normalizedPromptWarningThreshold}
-                            oncontextchange={handleContextChange}
-                            ondepthchange={handleDepthChange}
-                            onfieldselect={handleOpenFieldSelector}
-                        ></c-context-panel>
-                    </template>
-
-                    <template lwc:if={showCompareContextError}>
-                        <div class="compare-settings-error slds-p-around_small">
-                            <div class="slds-notify slds-notify_alert slds-alert_error" role="alert">
-                                <span class="slds-assistive-text">error</span>
-                                <h2>{contextWarningSummary}</h2>
+                <template lwc:if={showChatStepBody}>
+                    <div class="step-body step-body-chat">
+                        <template lwc:if={comparisonLoaded}>
+                            <div class="compare-chat">
+                                <c-chat-panel
+                                    comparison-context-json={comparisonContextJson}
+                                    object-api-name={activeObjectType}
+                                    record-name={comparisonLabel}
+                                    mode="compare"
+                                    storage-key={storageKey}
+                                    show-model-picker={showModelPicker}
+                                    default-model-api-name={defaultModelApiName}
+                                    show-suggested-prompts={showSuggestedPrompts}
+                                    persist-conversation={persistConversation}
+                                    enable-suggested-follow-ups={enableSuggestedFollowUps}
+                                    context-status={contextStatus}
+                                    context-warning-summary={contextWarningSummary}
+                                    context-warning-messages={contextWarningMessages}
+                                    hide-context-warnings={hideContextWarnings}
+                                    token-warning-threshold={normalizedPromptWarningThreshold}
+                                    onusageupdate={handleChatUsageUpdate}
+                                ></c-chat-panel>
                             </div>
-                        </div>
-                    </template>
-                </template>
-            </div>
-        </template>
+                        </template>
 
-        <!-- Chat + Usage area (shown after comparison loaded) -->
-        <template lwc:if={comparisonLoaded}>
-            <div class="compare-body">
-                <div class="compare-chat">
-                    <c-chat-panel
-                        comparison-context-json={comparisonContextJson}
-                        object-api-name={activeObjectType}
-                        record-name={comparisonLabel}
-                        mode="compare"
-                        storage-key={storageKey}
-                        show-model-picker={showModelPicker}
-                        default-model-api-name={defaultModelApiName}
-                        show-suggested-prompts={showSuggestedPrompts}
-                        persist-conversation={persistConversation}
-                        enable-suggested-follow-ups={enableSuggestedFollowUps}
-                        context-status={contextStatus}
-                        context-warning-summary={contextWarningSummary}
-                        context-warning-messages={contextWarningMessages}
-                        hide-context-warnings={hideContextWarnings}
-                        token-warning-threshold={normalizedPromptWarningThreshold}
-                        onusageupdate={handleChatUsageUpdate}
-                    ></c-chat-panel>
-                </div>
-            </div>
-        </template>
+                        <template lwc:if={showChatPlaceholder}>
+                            <div class="chat-placeholder">
+                                <p class="chat-placeholder-title">Load a comparison to start chatting.</p>
+                                <p class="chat-placeholder-copy">Choose at least 2 records, then load the comparison from Step 1 or Step 2.</p>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </section>
+        </div>
     </div>
 
     <template lwc:if={showFieldSelector}>
