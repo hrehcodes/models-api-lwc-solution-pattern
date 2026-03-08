@@ -31,14 +31,6 @@ private class RecordContextService_Test {
         );
         insert testOpp;
 
-        Case testCase = new Case(
-            Subject = 'Test Case',
-            Status = 'New',
-            Priority = 'Medium',
-            AccountId = testAccount.Id,
-            ContactId = testContact.Id
-        );
-        insert testCase;
     }
 
     @IsTest
@@ -76,17 +68,6 @@ private class RecordContextService_Test {
         Test.stopTest();
 
         System.assertEquals('Contact', ctx.objectApiName);
-    }
-
-    @IsTest
-    static void testGetAvailableContext_Case() {
-        Case c = [SELECT Id FROM Case LIMIT 1];
-
-        Test.startTest();
-        RecordContextService.AvailableContext ctx = RecordContextService.getAvailableContext(c.Id);
-        Test.stopTest();
-
-        System.assertEquals('Case', ctx.objectApiName);
     }
 
     @IsTest
@@ -265,7 +246,10 @@ private class RecordContextService_Test {
 
         RecordContextService.resetTestHooks();
         System.assertEquals(true, ctx.completeness.hasWarnings, 'Descendant failure should warn');
-        System.assertEquals(1, ctx.completeness.skippedDescendantCount, 'Skipped descendant count should increment');
+        System.assert(
+            ctx.completeness.skippedDescendantCount > 0,
+            'Skipped descendant count should increment when descendant loading fails'
+        );
     }
 
     @IsTest

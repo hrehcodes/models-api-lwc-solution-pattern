@@ -112,8 +112,8 @@ public with sharing class RecordCompareService {
         try {
             records = Database.query(soql);
         } catch (QueryException qe) {
-            String nameField = RecordSchemaUtils.getNameField(objDescribe);
-            records = Database.query('SELECT Id, ' + nameField + ' FROM ' + objectApiName + ' WHERE Id IN :validIds');
+            String fallbackFields = RecordSchemaUtils.buildIdentityFieldClause(objDescribe);
+            records = Database.query('SELECT ' + fallbackFields + ' FROM ' + objectApiName + ' WHERE Id IN :validIds');
         }
 
         if (records.size() != validIds.size()) {

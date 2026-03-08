@@ -78,6 +78,19 @@ public with sharing class RecordSchemaUtils {
     }
 
     /**
+     * Builds the smallest useful select clause for a record: Id plus the best
+     * display field when it differs from Id.
+     */
+    public static String buildIdentityFieldClause(Schema.DescribeSObjectResult objDescribe) {
+        List<String> queryFields = new List<String>{ 'Id' };
+        String nameField = getNameField(objDescribe);
+        if (nameField != 'Id') {
+            queryFields.add(nameField);
+        }
+        return String.join(queryFields, ', ');
+    }
+
+    /**
      * Normalizes any Salesforce field value to a JSON-safe primitive.
      */
     public static Object normalizeValue(Object val) {

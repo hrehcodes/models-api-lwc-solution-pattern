@@ -39,6 +39,13 @@ private class RecordSchemaUtils_Test {
     }
 
     @IsTest
+    static void testBuildIdentityFieldClause_DeduplicatesId() {
+        Schema.DescribeSObjectResult accountDescribe = Account.SObjectType.getDescribe();
+        String fieldClause = RecordSchemaUtils.buildIdentityFieldClause(accountDescribe);
+        System.assertEquals('Id, Name', fieldClause, 'Account should query Id and Name without duplicates');
+    }
+
+    @IsTest
     static void testNormalizeValue_Null() {
         System.assertEquals(null, RecordSchemaUtils.normalizeValue(null));
     }

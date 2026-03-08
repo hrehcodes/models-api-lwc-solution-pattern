@@ -241,7 +241,10 @@ public with sharing class RecordContextService {
             records = Database.query(soql);
         } catch (QueryException qe) {
             // Fallback to just Id + Name
-            records = Database.query('SELECT Id, ' + nameField + ' FROM ' + objectApiName + ' WHERE Id = :recordId LIMIT 1');
+            String fallbackFields = RecordSchemaUtils.buildIdentityFieldClause(objDescribe);
+            records = Database.query(
+                'SELECT ' + fallbackFields + ' FROM ' + objectApiName + ' WHERE Id = :recordId LIMIT 1'
+            );
         }
 
         if (records.isEmpty()) {
@@ -588,9 +591,11 @@ public with sharing class RecordContextService {
         try {
             records = Database.query(soql);
         } catch (QueryException qe) {
-            String nameField = RecordSchemaUtils.getNameField(childDescribe);
-            records = Database.query('SELECT Id, ' + nameField + ' FROM ' + childObjectName
-                + ' WHERE ' + foreignKeyField + ' = :recordId LIMIT ' + maxRecords);
+            String fallbackFields = RecordSchemaUtils.buildIdentityFieldClause(childDescribe);
+            records = Database.query(
+                'SELECT ' + fallbackFields + ' FROM ' + childObjectName
+                + ' WHERE ' + foreignKeyField + ' = :recordId LIMIT ' + maxRecords
+            );
         }
 
         RelatedRecordSet rrs = new RelatedRecordSet(relName, childObjectName, childDescribe.getLabel());
