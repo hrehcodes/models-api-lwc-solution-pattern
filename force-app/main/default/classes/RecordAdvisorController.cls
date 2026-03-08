@@ -270,6 +270,7 @@ public with sharing class RecordAdvisorController {
 
     // ── Private Methods ──
 
+    @TestVisible
     private static String buildCoreGuidelines() {
         String today = Datetime.now().format('yyyy-MM-dd');
         String guidelines = '=== CORE GUIDELINES ===\n';
@@ -281,8 +282,9 @@ public with sharing class RecordAdvisorController {
 
         guidelines += '--- Data Integrity ---\n';
         guidelines += '- Ground every answer in the actual data provided. Cite specific field values and labels.\n';
-        guidelines += '- NEVER fabricate or infer field values that are not present in the provided data. '
-            + 'If a field is null, missing, or empty, state that explicitly rather than guessing.\n';
+        guidelines += '- NEVER fabricate or infer field values that are not present in the provided data.\n';
+        guidelines += '- If a field or related record set is absent from the payload, treat it as not provided in the current context selection unless completeness metadata indicates truncation or skipped data.\n';
+        guidelines += '- If a field is present with a null, blank, or empty value, state that it is blank on the record rather than guessing.\n';
         guidelines += '- If a question cannot be answered from the available data, say so clearly and explain what data would be needed.\n\n';
 
         guidelines += '--- Scope ---\n';
@@ -302,12 +304,14 @@ public with sharing class RecordAdvisorController {
         return guidelines;
     }
 
+    @TestVisible
     private static String buildInsightsSystemPrompt(String recordContextJson) {
         String prompt = 'You are Agentforce Record Insights, an AI advisor that helps Salesforce users '
             + 'understand their CRM data.\n\n';
-        prompt += 'You have been given the field values and related records for a Salesforce record. '
-            + 'The data is structured as JSON with field API names mapped to objects containing a human-readable '
-            + '"label" and "value". Related records follow the same pattern, grouped by relationship name. '
+        prompt += 'You have been given a JSON payload with `selectionSummary` and `recordContext`. '
+            + '`selectionSummary` describes which categories, relationships, and depth were included. '
+            + '`recordContext` contains the actual grounded field values, related records, and completeness metadata. '
+            + 'Field API names map to objects containing a human-readable `label` and `value`. '
             + 'Use field labels (not API names) when referring to data in your responses.\n\n';
 
         prompt += '=== RECORD DATA ===\n';
@@ -320,19 +324,26 @@ public with sharing class RecordAdvisorController {
         prompt += buildCoreGuidelines() + '\n';
 
         prompt += '=== INSIGHTS-SPECIFIC GUIDELINES ===\n';
+        prompt += '- Start with a short fact-grounded summary of the most important current state.\n';
+        prompt += '- Then provide recommendations separately, with rationale tied directly to the provided data.\n';
         prompt += '- Prioritize actionable insights — surface risks, opportunities, overdue items, and anomalies.\n';
         prompt += '- When related records are available, draw connections across them '
             + '(e.g., open cases on an account, recent activities on an opportunity).\n';
+        prompt += '- If completeness metadata indicates warnings, state that some context may have been skipped or truncated.\n';
+        prompt += '- If the user asks for something not covered by the selected context, say which additional context would help.\n';
 
         return prompt;
     }
 
+    @TestVisible
     private static String buildCompareSystemPrompt(String comparisonContextJson) {
         String prompt = 'You are Agentforce Record Insights in comparison mode. '
             + 'You help users compare multiple Salesforce records of the same type.\n\n';
-        prompt += 'The data is structured as JSON with a top-level comparison object and a list of records. '
+        prompt += 'The JSON payload includes `selectionSummary` and `comparisonContext`. '
+            + '`selectionSummary` describes which categories, relationships, and depth were included. '
+            + '`comparisonContext` contains the comparison-level metadata and the list of records. '
             + 'Each record contains `fields` with field API names mapped to objects with a human-readable `label` and `value`. '
-            + 'Records may also contain `relatedRecordSets`, which follow the same label/value structure, and `completeness` metadata. '
+            + 'Records may also contain `relatedRecordSets` and `completeness` metadata. '
             + 'Always refer to each record by its name, not its ID.\n\n';
 
         prompt += '=== RECORDS TO COMPARE ===\n';
@@ -348,12 +359,12 @@ public with sharing class RecordAdvisorController {
         prompt += '- Structure comparisons as: (1) an executive summary of how the records differ, '
             + '(2) a field-by-field comparison table for the most relevant fields, '
             + '(3) recommendations with rationale.\n';
-        prompt += '- Use markdown tables when comparing specific field values across records.\n';
+        prompt += '- Use markdown tables only for compact scalar field comparisons. Use bullet lists for related-record patterns, qualitative differences, and narrative takeaways.\n';
         prompt += '- When evaluating fields, read values from each record\'s `fields` map. '
             + 'Use `relatedRecordSets` only when the user\'s question depends on related-record context.\n';
         prompt += '- If comparison-level or record-level `completeness` metadata indicates warnings, mention that the answer may be incomplete.\n';
-        prompt += '- When a field has a value on one record but is null or empty on another, '
-            + 'call this out explicitly — missing data is itself an insight.\n';
+        prompt += '- If a field is absent from the payload, treat it as not provided in the current context selection. If it is present with a null or empty value, call that out explicitly — missing data is itself an insight.\n';
+        prompt += '- For prioritization or triage questions, prefer active or open records over closed or completed ones, and weigh urgency, deadlines, business impact, risk signals, next-step clarity, and blockers. If all compared records are closed or completed, say there may be no current execution priority unless the user wants a retrospective comparison.\n';
         prompt += '- Provide actionable recommendations (e.g., which to prioritize, which needs attention).\n';
 
         return prompt;

@@ -8,6 +8,7 @@
 public with sharing class RecordContextService {
 
     private static final Integer DEFAULT_RELATED_RECORD_LIMIT = 10;
+    private static final Integer MAX_CONFIGURABLE_RELATED_RECORD_LIMIT = 20;
     private static final Integer MAX_RELATIONSHIP_QUERIES = 20;
     private static final Integer QUERY_SAFETY_BUFFER = 10;
     private static final Set<String> UNSUPPORTED_RELATIONSHIP_NAMES = new Set<String>{
@@ -240,7 +241,8 @@ public with sharing class RecordContextService {
         String recordId,
         Integer depth,
         List<String> includedCategories,
-        List<String> includedRelationships
+        List<String> includedRelationships,
+        Integer maxRelatedRecords
     ) {
         validateRecordId(recordId);
 
@@ -254,6 +256,7 @@ public with sharing class RecordContextService {
 
         if (depth == null || depth < 1) { depth = 1; }
         if (depth > 3) { depth = 3; }
+        maxRelatedRecords = normalizeRelatedRecordLimit(maxRelatedRecords);
 
         RecordContext ctx = new RecordContext();
         ctx.recordId = recordId;
@@ -353,7 +356,7 @@ public with sharing class RecordContextService {
                 try {
                     triggerRelationshipFetchFailureIfRequested();
                     RelatedRecordSet rrs = fetchRelatedRecords(
-                        cr, recordId, childDescribe, DEFAULT_RELATED_RECORD_LIMIT
+                        cr, recordId, childDescribe, maxRelatedRecords
                     );
                     if (rrs != null && !rrs.records.isEmpty()) {
                         ctx.relatedRecordSets.add(rrs);
@@ -391,8 +394,7 @@ public with sharing class RecordContextService {
             throw new AuraHandledException('You do not have access to this object type.');
         }
 
-        if (maxRecords == null || maxRecords <= 0) { maxRecords = DEFAULT_RELATED_RECORD_LIMIT; }
-        if (maxRecords > 50) { maxRecords = 50; }
+        maxRecords = normalizeRelatedRecordLimit(maxRecords);
 
         for (Schema.ChildRelationship cr : objDescribe.getChildRelationships()) {
             if (cr.getRelationshipName() == relationshipName) {
@@ -424,6 +426,13 @@ public with sharing class RecordContextService {
         if (!Pattern.matches('^[a-zA-Z0-9]{15}$|^[a-zA-Z0-9]{18}$', recordId)) {
             throw new AuraHandledException('Invalid record ID format.');
         }
+    }
+
+    private static Integer normalizeRelatedRecordLimit(Integer maxRelatedRecords) {
+        if (maxRelatedRecords == null || maxRelatedRecords <= 0) {
+            return DEFAULT_RELATED_RECORD_LIMIT;
+        }
+        return Math.min(Math.max(maxRelatedRecords, 1), MAX_CONFIGURABLE_RELATED_RECORD_LIMIT);
     }
 
     /**

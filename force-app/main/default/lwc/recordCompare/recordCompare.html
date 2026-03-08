@@ -8,7 +8,7 @@
                     <lightning-icon icon-name="utility:chevronright" size="xx-small" class="toggle-chevron"></lightning-icon>
                     <span class="slds-text-heading_small">Compare Records</span>
                 </button>
-                <span class="slds-text-color_weak slds-text-body_small collapsed-count">{selectionCount} of 5</span>
+                <span class="slds-text-color_weak slds-text-body_small collapsed-count">{compareSelectionLimitLabel}</span>
                 <div class="collapsed-pills">
                     <template for:each={selectedRecords} for:item="rec">
                         <lightning-pill key={rec.id} label={rec.name} onremove={handleRemoveRecordCollapsed} data-id={rec.id}>
@@ -27,7 +27,7 @@
                         <lightning-icon icon-name={collapseChevronIcon} size="xx-small" class="toggle-chevron"></lightning-icon>
                         <h3 class="slds-text-heading_small">Compare Records</h3>
                     </button>
-                    <span class="slds-text-color_weak slds-text-body_small">{selectionCount} of 5 selected</span>
+                    <span class="slds-text-color_weak slds-text-body_small">{compareSelectionLimitLabel} selected</span>
                 </div>
 
                 <!-- Object Type Picker (app page only, when no objectApiName) -->
@@ -137,6 +137,10 @@
                             </lightning-pill>
                         </template>
                     </div>
+                </template>
+
+                <template lwc:if={hasReachedMaxCompareRecords}>
+                    <p class="picker-error slds-m-top_x-small">{compareLimitMessage}</p>
                 </template>
 
                 <!-- Compare Button -->

@@ -11,8 +11,6 @@ const OBJECT_ICON_MAP = {
     Campaign: 'standard:campaign'
 };
 
-const MAX_TOKENS = 8000;
-
 const DEPTH_DESCRIPTIONS = {
     1: 'Direct children only (e.g., Opps on Account)',
     2: 'Children + grandchildren (e.g., Opp Products)',
@@ -209,16 +207,33 @@ export default class ContextPanel extends LightningElement {
     }
 
     get tokenMeterWidth() {
-        const pct = Math.min((this.tokenEstimate || 0) / MAX_TOKENS * 100, 100);
+        const baseTokens = this.tokenMeterBaseTokens;
+        const pct = baseTokens > 0
+            ? Math.min((this.tokenEstimate || 0) / baseTokens * 100, 100)
+            : 0;
         return `width: ${pct}%`;
     }
 
     get tokenMeterFillClass() {
-        const pct = (this.tokenEstimate || 0) / MAX_TOKENS * 100;
+        if (this.tokenWarningThresholdValue === 0) {
+            return 'token-meter-fill meter-fill-green';
+        }
+
+        const baseTokens = this.tokenMeterBaseTokens;
+        const pct = baseTokens > 0
+            ? (this.tokenEstimate || 0) / baseTokens * 100
+            : 0;
         let color = 'meter-fill-green';
         if (pct > 75) color = 'meter-fill-red';
         else if (pct > 50) color = 'meter-fill-yellow';
         return `token-meter-fill ${color}`;
+    }
+
+    get tokenMeterBaseTokens() {
+        if (this.tokenWarningThresholdValue > 0) {
+            return this.tokenWarningThresholdValue;
+        }
+        return this.tokenEstimate || 0;
     }
 
     // ── Event Handlers ──

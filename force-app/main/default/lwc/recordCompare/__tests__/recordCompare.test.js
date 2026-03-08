@@ -196,6 +196,8 @@ describe('c-record-compare', () => {
         });
         element.objectApiName = 'Account';
         element.recordId = '001000000000001AAA';
+        element.maxCompareRecords = 4;
+        element.relatedRecordsPerRelationship = 7;
         document.body.appendChild(element);
 
         await flushPromises();
@@ -223,7 +225,43 @@ describe('c-record-compare', () => {
             recordIds: ['001000000000001AAA', '001000000000010AAA'],
             depth: 1,
             includedCategories: ['core'],
-            includedRelationships: ['Contacts']
+            includedRelationships: ['Contacts'],
+            maxCompareRecords: 4,
+            maxRelatedRecords: 7
         });
+    });
+
+    it('prevents adding records beyond the configured compare limit and shows a warning', async () => {
+        searchRecords.mockResolvedValue([
+            { id: '001000000000010AAA', name: 'Alpha Account' },
+            { id: '001000000000011AAA', name: 'Beta Account' }
+        ]);
+
+        const element = createElement('c-record-compare', {
+            is: RecordCompare
+        });
+        element.objectApiName = 'Account';
+        element.recordId = '001000000000001AAA';
+        element.maxCompareRecords = 2;
+        document.body.appendChild(element);
+
+        await flushPromises();
+
+        const searchInput = element.shadowRoot.querySelector('lightning-input');
+        searchInput.dispatchEvent(
+            new CustomEvent('change', {
+                detail: { value: 'Account' }
+            })
+        );
+
+        jest.advanceTimersByTime(300);
+        await flushPromises();
+
+        const resultItems = element.shadowRoot.querySelectorAll('.result-item');
+        resultItems[0].click();
+        await flushPromises();
+
+        expect(element.shadowRoot.textContent).toContain('configured compare limit of 2 records');
+        expect(element.shadowRoot.querySelectorAll('.result-item')).toHaveLength(0);
     });
 });

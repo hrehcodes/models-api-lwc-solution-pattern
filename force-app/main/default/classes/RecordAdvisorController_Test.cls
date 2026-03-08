@@ -121,4 +121,22 @@ private class RecordAdvisorController_Test {
         System.assertEquals(false, info.isDefault);
         System.assertEquals('standard', info.creditType);
     }
+
+    @IsTest
+    static void testBuildCoreGuidelines_IncludeExplicitDateAndMissingDataRules() {
+        String guidelines = RecordAdvisorController.buildCoreGuidelines();
+
+        System.assert(guidelines.contains('Today\'s date: ' + Datetime.now().format('yyyy-MM-dd')));
+        System.assert(guidelines.contains('not provided in the current context selection'));
+        System.assert(guidelines.contains('blank on the record'));
+    }
+
+    @IsTest
+    static void testBuildCompareSystemPrompt_IncludesSelectionSummaryAndPrioritizationGuidance() {
+        String prompt = RecordAdvisorController.buildCompareSystemPrompt('{"selectionSummary":{},"comparisonContext":{}}');
+
+        System.assert(prompt.contains('selectionSummary'));
+        System.assert(prompt.contains('active or open records over closed or completed ones'));
+        System.assert(prompt.contains('Use markdown tables only for compact scalar field comparisons.'));
+    }
 }

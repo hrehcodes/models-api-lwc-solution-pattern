@@ -30,6 +30,8 @@ export default class RecordCompare extends LightningElement {
     @api defaultRelationshipsCsv;
     @api hideContextWarnings;
     @api promptWarningThresholdTokens = 20000;
+    @api maxCompareRecords = 5;
+    @api relatedRecordsPerRelationship = 10;
 
     selectedObjectType = '';
     @track selectedRecords = [];
@@ -119,7 +121,7 @@ export default class RecordCompare extends LightningElement {
     }
 
     get canSearch() {
-        return this.selectedObjectType && this.selectedRecords.length < 5;
+        return this.selectedObjectType && this.selectedRecords.length < this.normalizedMaxCompareRecords;
     }
 
     get canCompare() {
@@ -151,7 +153,9 @@ export default class RecordCompare extends LightningElement {
     }
 
     get showSuggestions() {
-        return this.showSuggestedComparisonRecordsEnabled && this.recordId && this.selectedRecords.length < 5;
+        return this.showSuggestedComparisonRecordsEnabled
+            && this.recordId
+            && this.selectedRecords.length < this.normalizedMaxCompareRecords;
     }
 
     get showUsageMetricsEnabled() {
@@ -188,6 +192,34 @@ export default class RecordCompare extends LightningElement {
 
     get showCompareContextSettings() {
         return Boolean(this.activeObjectType);
+    }
+
+    get normalizedMaxCompareRecords() {
+        const parsedValue = parseInt(this.maxCompareRecords, 10);
+        if (Number.isNaN(parsedValue)) {
+            return 5;
+        }
+        return Math.min(Math.max(parsedValue, 2), 5);
+    }
+
+    get normalizedRelatedRecordsPerRelationship() {
+        const parsedValue = parseInt(this.relatedRecordsPerRelationship, 10);
+        if (Number.isNaN(parsedValue)) {
+            return 10;
+        }
+        return Math.min(Math.max(parsedValue, 1), 20);
+    }
+
+    get hasReachedMaxCompareRecords() {
+        return this.selectedRecords.length >= this.normalizedMaxCompareRecords;
+    }
+
+    get compareSelectionLimitLabel() {
+        return `${this.selectionCount} of ${this.normalizedMaxCompareRecords}`;
+    }
+
+    get compareLimitMessage() {
+        return `You have reached the configured compare limit of ${this.normalizedMaxCompareRecords} records. Remove a record to add another.`;
     }
 
     get showCompareContextPanel() {
@@ -351,8 +383,7 @@ export default class RecordCompare extends LightningElement {
         const id = event.currentTarget.dataset.id;
         const name = event.currentTarget.dataset.name;
         if (!id || !name) return;
-        if (this.selectedRecords.length >= 5) return;
-        if (this.selectedRecords.some(r => r.id === id)) return;
+        if (!this.canAddRecord(id)) return;
 
         this.selectedRecords = [...this.selectedRecords, { id, name }];
         this.suggestedRecords = this.suggestedRecords.filter(r => r.id !== id);
@@ -410,8 +441,7 @@ export default class RecordCompare extends LightningElement {
         const id = event.currentTarget.dataset.id;
         const name = event.currentTarget.dataset.name;
 
-        if (this.selectedRecords.length >= 5) return;
-        if (this.selectedRecords.some(r => r.id === id)) return;
+        if (!this.canAddRecord(id)) return;
 
         this.selectedRecords = [...this.selectedRecords, { id, name }];
         this.searchResults = this.searchResults.filter(r => r.id !== id);
@@ -454,10 +484,12 @@ export default class RecordCompare extends LightningElement {
                 recordIds,
                 depth: this.currentDepth,
                 includedCategories: this.includedCategories,
-                includedRelationships: this.includedRelationships
+                includedRelationships: this.includedRelationships,
+                maxCompareRecords: this.normalizedMaxCompareRecords,
+                maxRelatedRecords: this.normalizedRelatedRecordsPerRelationship
             });
 
-            this.comparisonContextJson = JSON.stringify(ctx);
+            this.comparisonContextJson = JSON.stringify(this.serializeComparisonForChat(ctx));
             this.comparisonLoaded = true;
             this.selectionCollapsed = true;
             this.updateCompareWarningState(ctx.completeness);
@@ -613,6 +645,45 @@ export default class RecordCompare extends LightningElement {
         const parsedDepth = parseInt(this.maxDepthAllowed, 10);
         const safeDepth = Number.isNaN(parsedDepth) ? 3 : parsedDepth;
         return Math.min(Math.max(safeDepth, 1), 3);
+    }
+
+    canAddRecord(id) {
+        if (!id) {
+            return false;
+        }
+        if (this.selectedRecords.some(record => record.id === id)) {
+            return false;
+        }
+        return this.selectedRecords.length < this.normalizedMaxCompareRecords;
+    }
+
+    serializeComparisonForChat(ctx) {
+        if (!ctx) {
+            return null;
+        }
+
+        const warningMessages = this.combineWarnings(
+            this.availableContextWarnings,
+            this.extractCompletenessMessages(ctx.completeness)
+        );
+
+        return {
+            selectionSummary: {
+                mode: 'compare',
+                objectApiName: this.activeObjectType || ctx.objectApiName,
+                objectLabel: ctx.objectLabel,
+                comparedRecordCount: ctx.recordCount,
+                depth: this.currentDepth,
+                selectedCategories: [...this.includedCategories],
+                selectedRelationships: [...this.includedRelationships],
+                contextStatus: warningMessages.length ? 'partial' : 'ready',
+                warningSummary: warningMessages.length
+                    ? 'Some compared record context was skipped or truncated. AI responses may be incomplete.'
+                    : null,
+                warningMessages
+            },
+            comparisonContext: ctx
+        };
     }
 
     normalizeToken(value) {

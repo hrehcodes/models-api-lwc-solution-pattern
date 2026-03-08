@@ -8,7 +8,7 @@
 public with sharing class RecordCompareService {
 
     private static final Integer MIN_RECORDS = 2;
-    private static final Integer MAX_RECORDS = 5;
+    private static final Integer ABSOLUTE_MAX_RECORDS = 5;
     private static final String RECORD_ID_PATTERN = '^[a-zA-Z0-9]{15}$|^[a-zA-Z0-9]{18}$';
 
     // ── Wrapper Classes ──
@@ -63,13 +63,13 @@ public with sharing class RecordCompareService {
         List<String> recordIds,
         Integer depth,
         List<String> includedCategories,
-        List<String> includedRelationships
+        List<String> includedRelationships,
+        Integer maxCompareRecords,
+        Integer maxRelatedRecords
     ) {
+        maxCompareRecords = normalizeMaxCompareRecords(maxCompareRecords);
         if (recordIds == null || recordIds.size() < MIN_RECORDS) {
             throw new AuraHandledException('At least ' + MIN_RECORDS + ' records are required for comparison.');
-        }
-        if (recordIds.size() > MAX_RECORDS) {
-            throw new AuraHandledException('Maximum ' + MAX_RECORDS + ' records can be compared at once.');
         }
 
         // Validate all IDs and ensure same object type
@@ -92,6 +92,9 @@ public with sharing class RecordCompareService {
 
         if (validIds.size() < MIN_RECORDS) {
             throw new AuraHandledException('At least ' + MIN_RECORDS + ' unique records are required for comparison.');
+        }
+        if (validIds.size() > maxCompareRecords) {
+            throw new AuraHandledException('Maximum ' + maxCompareRecords + ' records can be compared at once.');
         }
 
         if (objectTypes.size() > 1) {
@@ -118,7 +121,8 @@ public with sharing class RecordCompareService {
                 String.valueOf(validId),
                 depth,
                 includedCategories,
-                includedRelationships
+                includedRelationships,
+                maxRelatedRecords
             );
 
             ComparisonRecord cr = new ComparisonRecord();
@@ -370,6 +374,13 @@ public with sharing class RecordCompareService {
         if (!completeness.warningMessages.contains(warningMessage)) {
             completeness.warningMessages.add(warningMessage);
         }
+    }
+
+    private static Integer normalizeMaxCompareRecords(Integer maxCompareRecords) {
+        if (maxCompareRecords == null || maxCompareRecords < MIN_RECORDS) {
+            return ABSOLUTE_MAX_RECORDS;
+        }
+        return Math.min(Math.max(maxCompareRecords, MIN_RECORDS), ABSOLUTE_MAX_RECORDS);
     }
 
 }

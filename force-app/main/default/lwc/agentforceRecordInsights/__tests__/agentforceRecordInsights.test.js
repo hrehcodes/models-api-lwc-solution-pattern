@@ -86,13 +86,14 @@ describe('c-agentforce-record-insights', () => {
         jest.clearAllMocks();
     });
 
-    it('passes ready context state to child panels and strips completeness from chat JSON', async () => {
+    it('passes ready context state to child panels and wraps chat JSON with selection metadata', async () => {
         const element = createElement('c-agentforce-record-insights', {
             is: AgentforceRecordInsights
         });
         element.recordId = '001000000000001AAA';
         element.objectApiName = 'Account';
         element.startWithContextPanelOpen = true;
+        element.relatedRecordsPerRelationship = 7;
         document.body.appendChild(element);
 
         getAvailableModelsAdapter.emit([]);
@@ -103,8 +104,16 @@ describe('c-agentforce-record-insights', () => {
 
         expect(contextPanel.contextStatus).toBe('ready');
         expect(chatPanel.contextStatus).toBe('ready');
-        expect(chatPanel.recordContextJson).toContain('"fields"');
-        expect(chatPanel.recordContextJson).not.toContain('completeness');
+        expect(getRecordContext).toHaveBeenCalledWith({
+            recordId: '001000000000001AAA',
+            depth: 1,
+            includedCategories: ['core'],
+            includedRelationships: [],
+            maxRelatedRecords: 7
+        });
+        expect(chatPanel.recordContextJson).toContain('"selectionSummary"');
+        expect(chatPanel.recordContextJson).toContain('"recordContext"');
+        expect(chatPanel.recordContextJson).toContain('"completeness"');
     });
 
     it('surfaces partial context warnings from Apex completeness metadata', async () => {

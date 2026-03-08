@@ -31,6 +31,8 @@ export default class AgentforceRecordInsights extends LightningElement {
     @api enableSuggestedFollowUps;
     @api hideContextWarnings;
     @api promptWarningThresholdTokens = 20000;
+    @api maxCompareRecords = 5;
+    @api relatedRecordsPerRelationship = 10;
 
     mode = MODE_INSIGHTS;
     contextPanelOpen = true;
@@ -140,6 +142,20 @@ export default class AgentforceRecordInsights extends LightningElement {
             return 20000;
         }
         return Math.max(parsedThreshold, 0);
+    }
+    get normalizedMaxCompareRecords() {
+        const parsedValue = parseInt(this.maxCompareRecords, 10);
+        if (Number.isNaN(parsedValue)) {
+            return 5;
+        }
+        return Math.min(Math.max(parsedValue, 2), 5);
+    }
+    get normalizedRelatedRecordsPerRelationship() {
+        const parsedValue = parseInt(this.relatedRecordsPerRelationship, 10);
+        if (Number.isNaN(parsedValue)) {
+            return 10;
+        }
+        return Math.min(Math.max(parsedValue, 1), 20);
     }
 
     get showSettingsButton() {
@@ -253,7 +269,8 @@ export default class AgentforceRecordInsights extends LightningElement {
                 recordId: this.activeRecordId,
                 depth: this.currentDepth,
                 includedCategories: this.includedCategories,
-                includedRelationships: this.includedRelationships
+                includedRelationships: this.includedRelationships,
+                maxRelatedRecords: this.normalizedRelatedRecordsPerRelationship
             });
             this.recordContextJson = JSON.stringify(this.serializeContextForChat(ctx));
             this.updateContextWarningState(ctx.completeness);
@@ -349,8 +366,28 @@ export default class AgentforceRecordInsights extends LightningElement {
             return null;
         }
 
-        const { completeness, ...chatContext } = ctx;
-        return chatContext;
+        const warningMessages = this.combineWarnings(
+            this.availableContextWarnings,
+            this.extractCompletenessMessages(ctx.completeness)
+        );
+
+        return {
+            selectionSummary: {
+                mode: MODE_INSIGHTS,
+                objectApiName: ctx.objectApiName,
+                objectLabel: ctx.objectLabel,
+                recordName: ctx.recordName,
+                depth: this.currentDepth,
+                selectedCategories: [...this.includedCategories],
+                selectedRelationships: [...this.includedRelationships],
+                contextStatus: warningMessages.length ? 'partial' : 'ready',
+                warningSummary: warningMessages.length
+                    ? 'Some record context was skipped or truncated. AI responses may be incomplete.'
+                    : null,
+                warningMessages
+            },
+            recordContext: ctx
+        };
     }
 
     getInitialMode() {

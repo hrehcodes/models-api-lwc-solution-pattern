@@ -20,7 +20,14 @@ private class RecordContextService_Test {
             Phone = '555-5678',
             AccountId = testAccount.Id
         );
-        insert testContact;
+        Contact secondContact = new Contact(
+            FirstName = 'Second',
+            LastName = 'Contact',
+            Email = 'second@test.com',
+            Phone = '555-9012',
+            AccountId = testAccount.Id
+        );
+        insert new List<Contact>{ testContact, secondContact };
 
         Opportunity testOpp = new Opportunity(
             Name = 'Test Opportunity',
@@ -131,7 +138,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, null, null
+            acc.Id, 1, null, null, null
         );
         Test.stopTest();
 
@@ -149,7 +156,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, new List<String>{'core', 'financial'}, null
+            acc.Id, 1, new List<String>{'core', 'financial'}, null, null
         );
         Test.stopTest();
 
@@ -163,7 +170,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 2, new List<String>{'core'}, new List<String>{'Opportunities'}
+            acc.Id, 2, new List<String>{'core'}, new List<String>{'Opportunities'}, null
         );
         Test.stopTest();
 
@@ -182,7 +189,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, new List<String>{'core'}, relNames
+            acc.Id, 1, new List<String>{'core'}, relNames, null
         );
         Test.stopTest();
 
@@ -198,7 +205,8 @@ private class RecordContextService_Test {
             opp.Id,
             1,
             new List<String>{ 'core' },
-            new List<String>{ 'OpenActivities', 'RelatedClients' }
+            new List<String>{ 'OpenActivities', 'RelatedClients' },
+            null
         );
         Test.stopTest();
 
@@ -230,6 +238,28 @@ private class RecordContextService_Test {
             System.assertNotEquals(null, rrs);
             System.assert(!rrs.records.isEmpty());
         }
+    }
+
+    @IsTest
+    static void testGetRecordContext_RespectsMaxRelatedRecords() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            acc.Id,
+            1,
+            new List<String>{ 'core' },
+            new List<String>{ 'Contacts' },
+            1
+        );
+        Test.stopTest();
+
+        System.assertEquals(1, ctx.relatedRecordSets.size(), 'Selected Contacts relationship should be returned');
+        System.assertEquals(
+            1,
+            ctx.relatedRecordSets[0].records.size(),
+            'Top-level related record loading should respect the configured maxRelatedRecords setting'
+        );
     }
 
     @IsTest
@@ -276,7 +306,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, new List<String>{'core'}, null
+            acc.Id, 1, new List<String>{'core'}, null, null
         );
         Test.stopTest();
 
@@ -295,7 +325,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, new List<String>{'core'}, new List<String>{ relName }
+            acc.Id, 1, new List<String>{'core'}, new List<String>{ relName }, null
         );
         Test.stopTest();
 
@@ -313,7 +343,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 2, new List<String>{'core'}, new List<String>{ 'Opportunities' }
+            acc.Id, 2, new List<String>{'core'}, new List<String>{ 'Opportunities' }, null
         );
         Test.stopTest();
 
