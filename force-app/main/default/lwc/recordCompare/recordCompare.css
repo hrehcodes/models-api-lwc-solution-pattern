@@ -19,7 +19,9 @@
     gap: 12px;
     flex: 1;
     min-height: 0;
-    padding: 12px 0 0;
+    padding: 12px 0 16px;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .step-card {
@@ -165,6 +167,10 @@
     padding-top: 12px;
     margin-top: 12px;
     border-top: 1px solid #e5e5e5;
+    position: sticky;
+    bottom: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, #ffffff 24%);
+    padding-bottom: 4px;
 }
 
 .search-row {
