@@ -34,17 +34,19 @@
             </div>
         </template>
 
-        <!-- Depth Selector -->
-        <div class="slds-m-bottom_small">
-            <div class="depth-selector">
-                <span class="slds-text-title slds-m-right_x-small">Depth</span>
-                <lightning-helptext
-                    content="Controls how many levels of related records are included. Depth 1 = direct children (e.g., Account's Opportunities). Depth 2 = grandchildren (e.g., each Opportunity's Products). Depth 3 = great-grandchildren. Higher depth provides richer context but uses more tokens."
-                    class="slds-m-right_x-small"
-                ></lightning-helptext>
-                <lightning-button-group>
-                    <lightning-button label="1" variant={depth1Variant} onclick={handleDepth1} class="depth-btn" title="Direct children only"></lightning-button>
-                    <template lwc:if={showDepth2Button}>
+	        <!-- Depth Selector -->
+	        <div class="slds-m-bottom_small">
+	            <div class="depth-selector">
+	                <div class="header-copy">
+	                    <span class="slds-text-title">Depth</span>
+	                    <lightning-helptext
+	                        content="Controls how many levels of related records are included. Depth 1 = direct children (e.g., Account's Opportunities). Depth 2 = grandchildren (e.g., each Opportunity's Products). Depth 3 = great-grandchildren. Higher depth provides richer context but uses more tokens."
+	                        class="info-helptext"
+	                    ></lightning-helptext>
+	                </div>
+	                <lightning-button-group>
+	                    <lightning-button label="1" variant={depth1Variant} onclick={handleDepth1} class="depth-btn" title="Direct children only"></lightning-button>
+	                    <template lwc:if={showDepth2Button}>
                         <lightning-button label="2" variant={depth2Variant} onclick={handleDepth2} class="depth-btn" title="Include grandchildren"></lightning-button>
                     </template>
                     <template lwc:if={showDepth3Button}>
@@ -57,25 +59,29 @@
 
         <div class="divider slds-m-bottom_small"></div>
 
-        <!-- Field Categories -->
-        <div class="slds-m-bottom_small">
-            <div class="section-header" onclick={toggleFieldsSection}>
-                <lightning-icon icon-name={fieldsExpandIcon} size="xx-small" class="slds-m-right_xx-small"></lightning-icon>
-                <span class="slds-text-title_bold">Fields</span>
-                <span class="slds-text-color_weak slds-m-left_xx-small count-badge">{totalFieldCount}</span>
-                <lightning-helptext
-                    content="Field categories control which record fields are sent to the AI as context. More fields = richer insights but higher token usage. Use the edit button to see individual fields in each category."
-                    class="slds-m-left_xx-small"
-                ></lightning-helptext>
-                <lightning-button-icon
-                    icon-name="utility:edit"
-                    alternative-text="Edit field selection"
-                    title="Open detailed field selector"
-                    size="x-small"
-                    onclick={handleFieldSelect}
-                    class="slds-m-left_auto edit-btn"
-                ></lightning-button-icon>
-            </div>
+	        <!-- Field Categories -->
+	        <div class="slds-m-bottom_small">
+	            <div class="section-header">
+	                <button class="section-toggle" onclick={toggleFieldsSection} type="button">
+	                    <lightning-icon icon-name={fieldsExpandIcon} size="xx-small" class="slds-m-right_xx-small"></lightning-icon>
+	                    <span class="slds-text-title_bold">Fields</span>
+	                    <span class="slds-text-color_weak slds-m-left_xx-small count-badge">{totalFieldCount}</span>
+	                </button>
+	                <div class="section-actions">
+	                    <lightning-helptext
+	                        content="Field categories control which record fields are sent to the AI as context. More fields = richer insights but higher token usage. Use the edit button to see individual fields in each category."
+	                        class="info-helptext"
+	                    ></lightning-helptext>
+	                    <lightning-button-icon
+	                        icon-name="utility:edit"
+	                        alternative-text="Edit field selection"
+	                        title="Open detailed field selector"
+	                        size="x-small"
+	                        onclick={handleFieldSelect}
+	                        class="edit-btn"
+	                    ></lightning-button-icon>
+	                </div>
+	            </div>
 
             <template lwc:if={fieldsExpanded}>
                 <div class="select-all-row slds-m-top_xx-small slds-m-bottom_xx-small">
@@ -104,17 +110,21 @@
 
         <div class="divider slds-m-bottom_small"></div>
 
-        <!-- Related Records -->
-        <div>
-            <div class="section-header" onclick={toggleRelationshipsSection}>
-                <lightning-icon icon-name={relsExpandIcon} size="xx-small" class="slds-m-right_xx-small"></lightning-icon>
-                <span class="slds-text-title_bold">Related Records</span>
-                <span class="slds-text-color_weak slds-m-left_xx-small count-badge">{includedRelCount}</span>
-                <lightning-helptext
-                    content="Related records are child objects linked to this record (e.g., Opportunities on an Account). Toggle them on/off to control what context the AI receives. The number in parentheses is how many related records exist."
-                    class="slds-m-left_xx-small"
-                ></lightning-helptext>
-            </div>
+	        <!-- Related Records -->
+	        <div>
+	            <div class="section-header">
+	                <button class="section-toggle" onclick={toggleRelationshipsSection} type="button">
+	                    <lightning-icon icon-name={relsExpandIcon} size="xx-small" class="slds-m-right_xx-small"></lightning-icon>
+	                    <span class="slds-text-title_bold">Related Records</span>
+	                    <span class="slds-text-color_weak slds-m-left_xx-small count-badge">{includedRelCount}</span>
+	                </button>
+	                <div class="section-actions">
+	                    <lightning-helptext
+	                        content="Related records are child objects linked to this record (e.g., Opportunities on an Account). Toggle them on/off to control what context the AI receives. The number in parentheses is how many related records exist."
+	                        class="info-helptext"
+	                    ></lightning-helptext>
+	                </div>
+	            </div>
 
             <template lwc:if={relationshipsExpanded}>
                 <div class="select-all-row slds-m-top_xx-small slds-m-bottom_xx-small">
@@ -142,15 +152,18 @@
         </div>
 
         <!-- Usage Metrics -->
-        <template lwc:if={showUsageMetricsEnabled}>
-            <div class="divider slds-m-vertical_small"></div>
-            <div class="usage-section">
-                <div class="usage-header">
-                    <span class="slds-text-title_bold">Usage Estimate</span>
-                    <lightning-helptext
-                        content="Token estimate is approximate context size sent per message. Flex Credits are cumulative for this session. Each prompt is metered in 2,000-token chunks (rounded up). Credit cost per chunk depends on model tier: Basic models (GPT-4o Mini, Gemini Flash, Claude Haiku) = 2 flex credits per chunk. Standard models (GPT-5, GPT-4o, Gemini Pro, Claude Sonnet) = 4 flex credits per chunk. Advanced models = 16 flex credits per chunk. Example: a 6,500-token prompt on a Standard model = 4 chunks x 4 credits = 16 flex credits. Clearing the conversation resets the counter."
-                    ></lightning-helptext>
-                </div>
+	        <template lwc:if={showUsageMetricsEnabled}>
+	            <div class="divider slds-m-vertical_small"></div>
+	            <div class="usage-section">
+	                <div class="usage-header">
+	                    <div class="header-copy">
+	                        <span class="slds-text-title_bold">Usage Estimate</span>
+	                        <lightning-helptext
+	                            content="Token estimate is approximate context size sent per message. Flex Credits are cumulative for this session. Each prompt is metered in 2,000-token chunks (rounded up). Credit cost per chunk depends on model tier: Basic models (GPT-4o Mini, Gemini Flash, Claude Haiku) = 2 flex credits per chunk. Standard models (GPT-5, GPT-4o, Gemini Pro, Claude Sonnet) = 4 flex credits per chunk. Advanced models = 16 flex credits per chunk. Example: a 6,500-token prompt on a Standard model = 4 chunks x 4 credits = 16 flex credits. Clearing the conversation resets the counter."
+	                            class="info-helptext"
+	                        ></lightning-helptext>
+	                    </div>
+	                </div>
 
                 <!-- Context token estimate -->
                 <template lwc:if={tokenEstimate}>

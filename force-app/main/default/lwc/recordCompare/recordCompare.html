@@ -31,7 +31,7 @@
                 </div>
 
                 <!-- Object Type Picker (app page only, when no objectApiName) -->
-                <template lwc:if={showObjectPicker}>
+	                <template lwc:if={showObjectPicker}>
                     <lightning-input
                         type="search"
                         label="Filter Object Types"
@@ -61,11 +61,28 @@
                         <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_small">
                             No object types match the current filter.
                         </p>
-                    </template>
-                </template>
+	                    </template>
+	                </template>
 
-                <!-- Suggested Records -->
-                <template lwc:if={showSuggestions}>
+	                <template lwc:if={showSelectionActionBar}>
+	                    <div class="selection-actions">
+	                        <div class="selection-actions-copy">
+	                            <span class="selection-actions-title">Load Comparison</span>
+	                            <span class="selection-actions-message">{selectionActionMessage}</span>
+	                        </div>
+	                        <template lwc:if={canCompare}>
+	                            <lightning-button
+	                                label="Load Comparison"
+	                                variant="brand"
+	                                onclick={handleLoadComparison}
+	                                disabled={isLoadingComparison}
+	                            ></lightning-button>
+	                        </template>
+	                    </div>
+	                </template>
+
+	                <!-- Suggested Records -->
+	                <template lwc:if={showSuggestions}>
                     <div class="suggested-section slds-m-bottom_small">
                         <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_xx-small">
                             <span class="slds-text-title_bold slds-text-color_weak">Suggested</span>
@@ -139,24 +156,12 @@
                     </div>
                 </template>
 
-                <template lwc:if={hasReachedMaxCompareRecords}>
-                    <p class="picker-error slds-m-top_x-small">{compareLimitMessage}</p>
-                </template>
+	                <template lwc:if={hasReachedMaxCompareRecords}>
+	                    <p class="picker-error slds-m-top_x-small">{compareLimitMessage}</p>
+	                </template>
 
-                <!-- Compare Button -->
-                <template lwc:if={canCompare}>
-                    <div class="slds-m-top_small slds-text-align_center">
-                        <lightning-button
-                            label="Load Comparison"
-                            variant="brand"
-                            onclick={handleLoadComparison}
-                            disabled={isLoadingComparison}
-                        ></lightning-button>
-                    </div>
-                </template>
-
-                <!-- Loading -->
-                <template lwc:if={isLoadingComparison}>
+	                <!-- Loading -->
+	                <template lwc:if={isLoadingComparison}>
                     <div class="slds-text-align_center slds-p-around_medium">
                         <lightning-spinner alternative-text="Loading comparison..." size="small"></lightning-spinner>
                         <p class="slds-m-top_small slds-text-color_weak">Loading records for comparison...</p>
@@ -175,48 +180,61 @@
             </div>
         </template>
 
-        <template lwc:if={showCompareContextSettings}>
-            <div class="compare-settings-shell">
-                <template lwc:if={isLoadingCompareContext}>
-                    <div class="slds-text-align_center slds-p-around_medium">
-                        <lightning-spinner alternative-text="Loading compare context settings..." size="small"></lightning-spinner>
-                        <p class="slds-m-top_small slds-text-color_weak">Loading compare context settings...</p>
-                    </div>
-                </template>
+	        <template lwc:if={showCompareContextSettings}>
+	            <div class={compareSettingsShellClass}>
+	                <button class="compare-settings-toggle" onclick={toggleContextSettingsCollapsed} type="button">
+	                    <div class="compare-settings-toggle-copy">
+	                        <div class="compare-settings-toggle-title-row">
+	                            <lightning-icon icon-name={compareContextChevronIcon} size="xx-small" class="toggle-chevron"></lightning-icon>
+	                            <span class="slds-text-title_bold">Comparison Context</span>
+	                        </div>
+	                        <span class="compare-settings-summary">{compareContextSummary}</span>
+	                    </div>
+	                    <span class="compare-settings-toggle-label">{compareContextToggleLabel}</span>
+	                </button>
 
-                <template lwc:if={showCompareContextPanel}>
-                    <c-context-panel
-                        record-id={referenceRecordId}
-                        available-context={availableContext}
-                        included-categories={includedCategories}
-                        included-relationships={includedRelationships}
-                        depth={currentDepth}
-                        max-depth-allowed={normalizedMaxDepth}
-                        session-tokens={_sessionTokens}
-                        session-credits={_sessionCredits}
-                        show-usage-metrics={showUsageMetricsEnabled}
-                        context-status={contextStatus}
-                        context-warning-summary={contextWarningSummary}
-                        context-warning-messages={contextWarningMessages}
-                        hide-context-warnings={hideContextWarnings}
-                        context-token-estimate={compareContextTokenEstimate}
-                        token-warning-threshold={normalizedPromptWarningThreshold}
-                        oncontextchange={handleContextChange}
-                        ondepthchange={handleDepthChange}
-                        onfieldselect={handleOpenFieldSelector}
-                    ></c-context-panel>
-                </template>
+	                <template lwc:if={showCompareContextBody}>
+	                    <template lwc:if={isLoadingCompareContext}>
+	                    <div class="slds-text-align_center slds-p-around_medium">
+	                        <lightning-spinner alternative-text="Loading compare context settings..." size="small"></lightning-spinner>
+	                        <p class="slds-m-top_small slds-text-color_weak">Loading compare context settings...</p>
+	                    </div>
+	                    </template>
 
-                <template lwc:if={showCompareContextError}>
-                    <div class="compare-settings-error slds-p-around_small">
-                        <div class="slds-notify slds-notify_alert slds-alert_error" role="alert">
-                            <span class="slds-assistive-text">error</span>
-                            <h2>{contextWarningSummary}</h2>
-                        </div>
-                    </div>
-                </template>
-            </div>
-        </template>
+	                    <template lwc:if={showCompareContextPanel}>
+	                        <c-context-panel
+	                            record-id={referenceRecordId}
+	                            available-context={availableContext}
+	                            included-categories={includedCategories}
+	                            included-relationships={includedRelationships}
+	                            depth={currentDepth}
+	                            max-depth-allowed={normalizedMaxDepth}
+	                            session-tokens={_sessionTokens}
+	                            session-credits={_sessionCredits}
+	                            show-usage-metrics={showUsageMetricsEnabled}
+	                            context-status={contextStatus}
+	                            context-warning-summary={contextWarningSummary}
+	                            context-warning-messages={contextWarningMessages}
+	                            hide-context-warnings={hideContextWarnings}
+	                            context-token-estimate={compareContextTokenEstimate}
+	                            token-warning-threshold={normalizedPromptWarningThreshold}
+	                            oncontextchange={handleContextChange}
+	                            ondepthchange={handleDepthChange}
+	                            onfieldselect={handleOpenFieldSelector}
+	                        ></c-context-panel>
+	                    </template>
+
+	                    <template lwc:if={showCompareContextError}>
+	                        <div class="compare-settings-error slds-p-around_small">
+	                            <div class="slds-notify slds-notify_alert slds-alert_error" role="alert">
+	                                <span class="slds-assistive-text">error</span>
+	                                <h2>{contextWarningSummary}</h2>
+	                            </div>
+	                        </div>
+	                    </template>
+	                </template>
+	            </div>
+	        </template>
 
         <!-- Chat + Usage area (shown after comparison loaded) -->
         <template lwc:if={comparisonLoaded}>

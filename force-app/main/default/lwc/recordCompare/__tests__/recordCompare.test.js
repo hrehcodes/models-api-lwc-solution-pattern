@@ -216,8 +216,11 @@ describe('c-record-compare', () => {
         resultItem.click();
         await flushPromises();
 
-        const loadButton = [...element.shadowRoot.querySelectorAll('lightning-button')]
-            .find(button => button.label === 'Load Comparison');
+        const actionBar = element.shadowRoot.querySelector('.selection-actions');
+        expect(actionBar).not.toBeNull();
+        expect(actionBar.textContent).toContain('Ready to compare 2 records');
+
+        const loadButton = actionBar.querySelector('lightning-button');
         loadButton.click();
         await flushPromises();
 
@@ -229,6 +232,16 @@ describe('c-record-compare', () => {
             maxCompareRecords: 4,
             maxRelatedRecords: 7
         });
+
+        const compareSettingsShell = element.shadowRoot.querySelector('.compare-settings-shell');
+        expect(compareSettingsShell.classList.contains('compare-settings-collapsed')).toBe(true);
+        expect(element.shadowRoot.querySelector('c-context-panel')).toBeNull();
+
+        const compareSettingsToggle = element.shadowRoot.querySelector('.compare-settings-toggle');
+        compareSettingsToggle.click();
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('c-context-panel')).not.toBeNull();
     });
 
     it('prevents adding records beyond the configured compare limit and shows a warning', async () => {

@@ -42,6 +42,7 @@ export default class RecordCompare extends LightningElement {
     isLoadingComparison = false;
     compareError;
     selectionCollapsed = false;
+    contextSettingsCollapsed = false;
 
     @track suggestedRecords = [];
     isLoadingSuggestions = false;
@@ -222,6 +223,30 @@ export default class RecordCompare extends LightningElement {
         return `You have reached the configured compare limit of ${this.normalizedMaxCompareRecords} records. Remove a record to add another.`;
     }
 
+    get showSelectionActionBar() {
+        return this.selectionExpanded && (
+            this.selectedRecords.length > 0
+            || this.isLoadingComparison
+            || Boolean(this.compareError)
+        );
+    }
+
+    get selectionActionMessage() {
+        if (this.isLoadingComparison) {
+            return 'Loading the comparison and preparing the chat context.';
+        }
+
+        if (this.selectedRecords.length >= 2) {
+            return `Ready to compare ${this.selectedRecords.length} records. Load the comparison to shift focus to the chat.`;
+        }
+
+        if (this.selectedRecords.length === 1) {
+            return 'Select 1 more record to enable comparison.';
+        }
+
+        return 'Select at least 2 records to enable comparison.';
+    }
+
     get showCompareContextPanel() {
         return this.showCompareContextSettings && this.availableContext && !this.isLoadingCompareContext;
     }
@@ -274,6 +299,52 @@ export default class RecordCompare extends LightningElement {
             return 20000;
         }
         return Math.max(parsedThreshold, 0);
+    }
+
+    get showCompareContextBody() {
+        return !this.contextSettingsCollapsed;
+    }
+
+    get compareContextChevronIcon() {
+        return this.contextSettingsCollapsed ? 'utility:chevronright' : 'utility:chevrondown';
+    }
+
+    get compareContextToggleLabel() {
+        return this.contextSettingsCollapsed ? 'Show settings' : 'Hide settings';
+    }
+
+    get compareSettingsShellClass() {
+        return this.contextSettingsCollapsed
+            ? 'compare-settings-shell compare-settings-collapsed'
+            : 'compare-settings-shell';
+    }
+
+    get compareContextSummary() {
+        if (this.contextStatus === 'failed' && this.contextWarningSummary) {
+            return this.contextWarningSummary;
+        }
+
+        if (!this.availableContext) {
+            return 'Choose the fields, related records, and depth used for each compared record.';
+        }
+
+        const categoryCount = this.includedCategories.length;
+        const relationshipCount = this.includedRelationships.length;
+        const summaryParts = [
+            `${categoryCount} field ${categoryCount === 1 ? 'group' : 'groups'}`,
+            `${relationshipCount} ${relationshipCount === 1 ? 'relationship' : 'relationships'}`,
+            `Depth ${this.currentDepth}`
+        ];
+
+        if (this.compareContextTokenEstimate) {
+            summaryParts.push(`~${this.compareContextTokenEstimate.toLocaleString()} tokens`);
+        }
+
+        if (this.contextStatus === 'partial') {
+            summaryParts.push('Warnings present');
+        }
+
+        return summaryParts.join(' • ');
     }
 
     async loadAvailableObjectTypes() {
@@ -401,6 +472,8 @@ export default class RecordCompare extends LightningElement {
         this.suggestionsLoaded = false;
         this.includedCategories = [];
         this.includedRelationships = [];
+        this.selectionCollapsed = false;
+        this.contextSettingsCollapsed = false;
         this.invalidateComparison();
         this.loadCompareContextMetadata({ resetSelections: true });
     }
@@ -471,6 +544,10 @@ export default class RecordCompare extends LightningElement {
         this.selectionCollapsed = !this.selectionCollapsed;
     }
 
+    toggleContextSettingsCollapsed() {
+        this.contextSettingsCollapsed = !this.contextSettingsCollapsed;
+    }
+
     async handleLoadComparison() {
         if (this.selectedRecords.length < 2) return;
 
@@ -492,6 +569,7 @@ export default class RecordCompare extends LightningElement {
             this.comparisonContextJson = JSON.stringify(this.serializeComparisonForChat(ctx));
             this.comparisonLoaded = true;
             this.selectionCollapsed = true;
+            this.contextSettingsCollapsed = true;
             this.updateCompareWarningState(ctx.completeness);
 
             if (ctx.records) {
@@ -558,6 +636,7 @@ export default class RecordCompare extends LightningElement {
         this.comparisonContextJson = null;
         this.compareError = null;
         this.comparisonContextWarnings = [];
+        this.contextSettingsCollapsed = false;
     }
 
     resetCompareWarningState() {

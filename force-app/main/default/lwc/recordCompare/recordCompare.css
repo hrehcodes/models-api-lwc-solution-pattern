@@ -66,12 +66,102 @@
     overflow-y: auto;
 }
 
+.selection-actions {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 0;
+    margin-bottom: 12px;
+    background: linear-gradient(180deg, #ffffff 82%, rgba(255, 255, 255, 0.94) 100%);
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.selection-actions-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.selection-actions-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #181818;
+}
+
+.selection-actions-message {
+    font-size: 0.75rem;
+    color: #5c5c5c;
+}
+
 .compare-settings-shell {
     border-bottom: 1px solid #e5e5e5;
     background-color: #ffffff;
     flex-shrink: 0;
     max-height: 45%;
     overflow-y: auto;
+}
+
+.compare-settings-collapsed {
+    max-height: none;
+    overflow: visible;
+}
+
+.compare-settings-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: none;
+    border-bottom: 1px solid #e5e5e5;
+    background-color: #fafaf9;
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+}
+
+.compare-settings-toggle:hover {
+    background-color: #f3f2f2;
+}
+
+.compare-settings-collapsed .compare-settings-toggle {
+    border-bottom: none;
+}
+
+.compare-settings-toggle-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.compare-settings-toggle-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.compare-settings-summary {
+    font-size: 0.75rem;
+    color: #5c5c5c;
+    white-space: normal;
+}
+
+.compare-settings-toggle-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #0176d3;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .search-row {
@@ -163,4 +253,19 @@
 .compare-chat > c-chat-panel {
     flex: 1;
     min-height: 0;
+}
+
+@media (max-width: 48rem) {
+    .selection-actions,
+    .compare-settings-toggle {
+        align-items: flex-start;
+    }
+
+    .compare-settings-toggle {
+        flex-direction: column;
+    }
+
+    .compare-settings-toggle-label {
+        padding-left: 18px;
+    }
 }
