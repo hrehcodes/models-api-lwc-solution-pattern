@@ -22,7 +22,11 @@ jest.mock(
 );
 
 const getAvailableModelsAdapter = registerApexTestWireAdapter(getAvailableModels);
-const flushPromises = () => new Promise(setImmediate);
+const flushPromises = async (count = 4) => {
+    for (let index = 0; index < count; index += 1) {
+        await Promise.resolve();
+    }
+};
 
 const baseAvailableContext = {
     objectApiName: 'Account',
@@ -88,10 +92,10 @@ describe('c-agentforce-record-insights', () => {
         });
         element.recordId = '001000000000001AAA';
         element.objectApiName = 'Account';
+        element.startWithContextPanelOpen = true;
         document.body.appendChild(element);
 
         getAvailableModelsAdapter.emit([]);
-        await flushPromises();
         await flushPromises();
 
         const contextPanel = element.shadowRoot.querySelector('c-context-panel');
@@ -118,10 +122,10 @@ describe('c-agentforce-record-insights', () => {
         });
         element.recordId = '001000000000001AAA';
         element.objectApiName = 'Account';
+        element.startWithContextPanelOpen = true;
         document.body.appendChild(element);
 
         getAvailableModelsAdapter.emit([]);
-        await flushPromises();
         await flushPromises();
 
         const contextPanel = element.shadowRoot.querySelector('c-context-panel');
@@ -146,10 +150,10 @@ describe('c-agentforce-record-insights', () => {
         });
         element.recordId = '001000000000001AAA';
         element.objectApiName = 'Account';
+        element.startWithContextPanelOpen = true;
         document.body.appendChild(element);
 
         getAvailableModelsAdapter.emit([]);
-        await flushPromises();
         await flushPromises();
 
         const contextPanel = element.shadowRoot.querySelector('c-context-panel');

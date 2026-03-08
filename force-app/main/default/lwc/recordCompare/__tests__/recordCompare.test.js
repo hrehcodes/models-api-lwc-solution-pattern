@@ -37,7 +37,11 @@ jest.mock(
     { virtual: true }
 );
 
-const flushPromises = () => new Promise(setImmediate);
+const flushPromises = async (count = 4) => {
+    for (let index = 0; index < count; index += 1) {
+        await Promise.resolve();
+    }
+};
 
 describe('c-record-compare', () => {
     beforeEach(() => {

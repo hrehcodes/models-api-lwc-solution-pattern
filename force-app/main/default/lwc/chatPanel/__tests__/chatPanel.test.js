@@ -4,7 +4,11 @@ import ChatPanel from 'c/chatPanel';
 import getAvailableModels from '@salesforce/apex/RecordAdvisorController.getAvailableModels';
 
 const getAvailableModelsAdapter = registerApexTestWireAdapter(getAvailableModels);
-const flushPromises = () => new Promise(setImmediate);
+const flushPromises = async (count = 4) => {
+    for (let index = 0; index < count; index += 1) {
+        await Promise.resolve();
+    }
+};
 
 describe('c-chat-panel', () => {
     let getItemSpy;
@@ -43,6 +47,8 @@ describe('c-chat-panel', () => {
     });
 
     it('restores persisted chat state when persistence is enabled', async () => {
+        const usageHandler = jest.fn();
+
         localStorage.setItem(
             'ari_chat_saved',
             JSON.stringify([
@@ -66,15 +72,23 @@ describe('c-chat-panel', () => {
         });
         element.storageKey = 'ari_chat_saved';
         element.persistConversation = true;
+        element.addEventListener('usageupdate', usageHandler);
         document.body.appendChild(element);
 
         getAvailableModelsAdapter.emit([]);
         await flushPromises();
 
+        const renderedMessage = element.shadowRoot.querySelector('lightning-formatted-rich-text');
+        const usageEvent = usageHandler.mock.calls[usageHandler.mock.calls.length - 1][0];
+
         expect(getItemSpy).toHaveBeenCalledWith('ari_chat_saved');
-        expect(element.messages).toHaveLength(1);
-        expect(element.sessionTokens).toBe(12);
-        expect(element.sessionCredits).toBe(4);
+        expect(getItemSpy).toHaveBeenCalledWith('ari_chat_saved_usage');
+        expect(element.shadowRoot.querySelectorAll('.message-row')).toHaveLength(1);
+        expect(renderedMessage.value).toBe('<p>Saved reply</p>');
+        expect(usageEvent.detail).toEqual({
+            sessionTokens: 12,
+            sessionCredits: 4
+        });
     });
 
     it('renders a warning banner for partial context', async () => {
