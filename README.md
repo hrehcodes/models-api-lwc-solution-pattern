@@ -55,10 +55,11 @@ Platform:
 ### Prerequisites
 
 - [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) (`sf`) installed
-- Node.js and npm installed for local LWC tests
 - Authenticated Salesforce org with Salesforce Models API enabled
 - At least one supported Salesforce model alias available in the target org
 - API version `66.0+`
+
+Node.js and npm are optional for deployment. They are only needed if you want to run the local LWC Jest test suite.
 
 ### Authenticate to an org
 
@@ -73,26 +74,56 @@ sf org display
 ### Deploy the project
 
 ```bash
-# Deploy to your default org (--source-dir can be omitted when using the default package directory)
-sf project deploy start --source-dir force-app
-
 # Deploy to a specific org
 sf project deploy start --source-dir force-app --target-org my-org
 
-# Validate deployment (dry run) without writing to the org
-sf project deploy start --source-dir force-app --dry-run
+# Or deploy to your default org
+sf project deploy start --source-dir force-app
 
-# Deploy with test execution (required for production)
-sf project deploy start --source-dir force-app --test-level RunLocalTests
+# Validate deployment (dry run) without writing to the org
+sf project deploy start --source-dir force-app --target-org my-org --dry-run
+
+# Deploy with Apex test execution
+sf project deploy start --source-dir force-app --target-org my-org --test-level RunLocalTests
 ```
 
 ### Post-deployment
 
 1. Assign the `Agentforce Record Insights User` permission set to users who need access to the component's Apex services.
-2. Add the `agentforceRecordInsights` component to a Record Page, App Page, or Home Page, or assign the packaged **Agentforce Record Insights Demo** flexipage to an app.
+2. Add the `agentforceRecordInsights` component to a Record Page, App Page, or Home Page in Lightning App Builder.
 3. Confirm that the target org has Salesforce Models API access and at least one of the configured model aliases available.
 
 The permission set grants Apex class access only. Object access, field-level security, and sharing remain controlled by the user's existing Salesforce permissions.
+
+### Recommended deploy flow
+
+```bash
+# 1. Deploy the metadata
+sf project deploy start --source-dir force-app --target-org my-org
+
+# 2. Assign the packaged permission set to the default org user
+sf org assign permset --name Agentforce_Record_Insights_User --target-org my-org
+
+# 3. Optionally run Apex tests after deployment
+sf apex run test --target-org my-org --test-level RunLocalTests
+```
+
+### Add the component in Lightning App Builder
+
+After deployment:
+
+1. Open Lightning App Builder.
+2. Edit the target Record Page, App Page, or Home Page.
+3. Drag **Agentforce Record Insights** onto the page.
+4. Configure the builder properties you want, such as default mode, preload compare mode, and usage visibility.
+5. Save and activate the page.
+
+### Do `package.json` or `sfdx-project.json` need to stay in the repo?
+
+- `sfdx-project.json`: Yes, if you plan to deploy this source with `sf project deploy start`. The `sf project` commands expect a Salesforce DX project.
+- `package.json`: No, not for deployment itself. It is only used here for local development tasks such as LWC Jest tests.
+
+If someone only wants to deploy metadata without using a DX project, they can convert or deploy in metadata format instead of using `sf project deploy start`. For this repo and its documented workflow, keep both files.
 
 ## Usage
 
@@ -157,10 +188,8 @@ force-app/main/default/
 │   └── recordPicker/                     — Shared object/record picker
 ├── permissionsets/
 │   └── Agentforce_Record_Insights_User.permissionset-meta.xml
-├── staticresources/
-│   └── Agentforce_Icon.svg
-└── flexipages/
-    └── Agentforce_Record_Insights_Demo.flexipage-meta.xml
+└── staticresources/
+    └── Agentforce_Icon.svg
 ```
 
 ## Runtime Requirements
@@ -175,4 +204,4 @@ force-app/main/default/
 
 - The source is structured for DX and can be packaged as a 2GP unlocked package from the `force-app` directory.
 - Package consumers still need runtime prerequisites in the subscriber org: Salesforce Models API access, available model aliases, and permission set assignment.
-- The demo flexipage is optional but safe to keep in the package as a ready-made sample page.
+- The current source no longer includes a demo flexipage. Installers should add the component to pages manually.
