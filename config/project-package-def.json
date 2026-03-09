@@ -1,0 +1,21 @@
+{
+  "orgName": "Agentforce Record Insights Packaging",
+  "edition": "developer",
+  "country": "US",
+  "language": "en_US",
+  "features": [
+    "EnableSetPasswordInApi",
+    "Einstein1AIPlatform"
+  ],
+  "settings": {
+    "agentPlatformSettings": {
+      "enableAgentPlatform": true
+    },
+    "einsteinGptSettings": {
+      "enableEinsteinGptPlatform": true
+    },
+    "lightningExperienceSettings": {
+      "enableS1DesktopEnabled": true
+    }
+  }
+}

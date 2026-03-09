@@ -2,11 +2,20 @@
   "packageDirectories": [
     {
       "path": "force-app",
-      "default": true
+      "default": true,
+      "package": "agentforce_record_insights",
+      "versionName": "ver 1.0",
+      "versionNumber": "1.0.0.NEXT",
+      "definitionFile": "config/project-package-def.json"
     }
   ],
   "name": "AgentforceRecordInsights",
   "namespace": "",
+  "packageAliases": {
+    "Agentforce Record Insights": "0HoHp000000CeBCKA0",
+    "agentforce_record_insights": "0HoHp000000CeBCKA0",
+    "Agentforce Record Insights@1.0.0-1": "04tHp000001yuJkIAI"
+  },
   "sfdcLoginUrl": "https://login.salesforce.com",
   "sourceApiVersion": "66.0"
 }

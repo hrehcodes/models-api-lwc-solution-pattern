@@ -165,6 +165,96 @@ sf apex run test --target-org my-org --test-level RunLocalTests
 
 If you are preparing this for packaging, use an org with Salesforce Models API access and validate package-relevant Apex coverage in addition to local LWC tests.
 
+## 2GP Unlocked Packaging
+
+This repo is now structured for a namespace-free 2GP unlocked package built from `force-app`.
+
+### Packaging prerequisites
+
+- Dev Hub enabled in the packaging org
+- Unlocked packages and second-generation managed packages enabled
+- Einstein / Agentforce features enabled in the Dev Hub
+- Einstein Terms of Service already accepted in the Dev Hub
+- A clean scratch org created from that Dev Hub for install validation
+
+### Set the Dev Hub alias
+
+```bash
+sf alias set ari-devhub=trailsignup.74904417c4b82c@salesforce.com
+sf config set target-dev-hub=ari-devhub
+```
+
+### Create the package
+
+```bash
+sf package create \
+  --name "Agentforce Record Insights" \
+  --package-type Unlocked \
+  --path force-app \
+  --no-namespace \
+  --target-dev-hub ari-devhub
+```
+
+After package creation, copy the returned `0Ho...` package ID into `sfdx-project.json` as `packageAliases.agentforce_record_insights`.
+
+### Create and promote a package version
+
+```bash
+sf package version create \
+  --package agentforce_record_insights \
+  --definition-file config/project-package-def.json \
+  --code-coverage \
+  --installation-key-bypass \
+  --language en_US \
+  --wait 60 \
+  --target-dev-hub ari-devhub
+
+sf package version promote \
+  --package 04t... \
+  --target-dev-hub ari-devhub \
+  --no-prompt
+```
+
+### Create a clean validation scratch org
+
+```bash
+sf org create scratch \
+  --definition-file config/project-package-def.json \
+  --alias ari-install-qa \
+  --target-dev-hub ari-devhub \
+  --duration-days 7
+```
+
+The packaging definition file includes the required AI runtime settings. Einstein Terms acceptance does not need to be repeated in scratch orgs created from this Dev Hub.
+
+### Install and validate the package
+
+```bash
+sf package install \
+  --package 04t... \
+  --target-org ari-install-qa \
+  --security-type AdminsOnly \
+  --wait 20 \
+  --publish-wait 20 \
+  --no-prompt
+
+sf org assign permset \
+  --name Agentforce_Record_Insights_User \
+  --target-org ari-install-qa
+```
+
+After install:
+
+1. Open Lightning App Builder in the scratch org.
+2. Add `agentforceRecordInsights` to a Record Page, App Page, or Home Page.
+3. Manually smoke test insights mode and compare mode.
+
+### Notes
+
+- The package is standard unlocked, not org-dependent.
+- The current source does not include a demo flexipage.
+- Package consumers still need Salesforce Models API access, available model aliases, and permission set assignment in the subscriber org.
+
 ## Files
 
 ```text
@@ -205,3 +295,4 @@ force-app/main/default/
 - The source is structured for DX and can be packaged as a 2GP unlocked package from the `force-app` directory.
 - Package consumers still need runtime prerequisites in the subscriber org: Salesforce Models API access, available model aliases, and permission set assignment.
 - The current source no longer includes a demo flexipage. Installers should add the component to pages manually.
+- The package version scratch-org shape is defined in `config/project-package-def.json`.
