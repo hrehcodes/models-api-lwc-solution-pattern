@@ -9,6 +9,7 @@ const flushPromises = async (count = 3) => {
 
 describe('c-record-picker', () => {
     afterEach(() => {
+        jest.useRealTimers();
         while (document.body.firstChild) {
             document.body.removeChild(document.body.firstChild);
         }
@@ -122,5 +123,28 @@ describe('c-record-picker', () => {
 
         expect(handler).toHaveBeenCalledTimes(1);
         expect(handler.mock.calls[0][0].detail).toEqual({ id: '001000000000001AAA' });
+    });
+
+    it('shows metadata-oriented loading copy while object types are loading', async () => {
+        jest.useFakeTimers();
+        const element = createElement('c-record-picker', {
+            is: RecordPicker
+        });
+        element.mode = 'compare';
+        element.showObjectPicker = true;
+        element.isLoadingObjectTypes = true;
+        document.body.appendChild(element);
+        await flushPromises();
+
+        expect(element.shadowRoot.textContent).toContain('Preparing compare-ready objects');
+        expect(element.shadowRoot.textContent).toContain('Getting org metadata');
+
+        jest.advanceTimersByTime(1400);
+        await flushPromises();
+        expect(element.shadowRoot.textContent).toContain('Discovering compare-ready objects');
+
+        jest.advanceTimersByTime(1400);
+        await flushPromises();
+        expect(element.shadowRoot.textContent).toContain('Mapping relationships');
     });
 });

@@ -386,7 +386,13 @@ describe('c-record-compare', () => {
         await flushPromises();
 
         expect(element.shadowRoot.textContent).toContain('Checking compare support for Opportunity.');
+        expect(element.shadowRoot.textContent).toContain('Preparing compare for Opportunity');
+        expect(element.shadowRoot.textContent).toContain('Getting org metadata');
         expect(element.shadowRoot.textContent).not.toContain('Compare mode is not supported for Opportunity.');
+
+        jest.advanceTimersByTime(1400);
+        await flushPromises();
+        expect(element.shadowRoot.textContent).toContain('Checking Opportunity');
 
         deferred.resolve([
             { apiName: 'Opportunity', label: 'Opportunity' }
@@ -394,6 +400,48 @@ describe('c-record-compare', () => {
         await flushPromises(6);
 
         expect(element.shadowRoot.textContent).toContain('Select 1 more record to enable comparison.');
+    });
+
+    it('keeps the support-check state visible while the current record-page object is being validated directly', async () => {
+        const validationDeferred = createDeferred();
+        getAvailableCompareObjects.mockResolvedValue([
+            { apiName: 'Account', label: 'Account' }
+        ]);
+        searchRecords.mockImplementation(({ objectApiName, searchTerm }) => {
+            if (objectApiName === 'Opportunity' && searchTerm === '') {
+                return validationDeferred.promise;
+            }
+
+            return Promise.resolve([
+                { id: '006000000000010AAA', name: 'Renewal Deal' }
+            ]);
+        });
+
+        const element = createElement('c-record-compare', {
+            is: RecordCompare
+        });
+        element.objectApiName = 'Opportunity';
+        element.recordId = '006000000000001AAA';
+        document.body.appendChild(element);
+
+        await flushPromises(2);
+
+        expect(element.shadowRoot.textContent).toContain('Checking compare support for Opportunity.');
+        expect(element.shadowRoot.textContent).toContain('Preparing compare for Opportunity');
+        expect(element.shadowRoot.textContent).toContain('Getting org metadata');
+        expect(element.shadowRoot.textContent).not.toContain('Opportunity is not supported for compare mode.');
+
+        jest.advanceTimersByTime(1400);
+        await flushPromises();
+        expect(element.shadowRoot.textContent).toContain('Checking Opportunity');
+
+        validationDeferred.resolve([
+            { id: '006000000000010AAA', name: 'Renewal Deal' }
+        ]);
+        await flushPromises(6);
+
+        expect(element.shadowRoot.textContent).toContain('Select 1 more record to enable comparison.');
+        expect(element.shadowRoot.textContent).not.toContain('Opportunity is not supported for compare mode.');
     });
 
     it('keeps the current record-page object supported when direct validation succeeds even if it is absent from the options list', async () => {

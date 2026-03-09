@@ -151,9 +151,20 @@
 
                 <!-- Loading -->
                 <template lwc:if={isLoadingContext}>
-                    <div class="slds-p-around_large slds-text-align_center">
-                        <lightning-spinner alternative-text="Loading context..." size="medium"></lightning-spinner>
-                        <p class="slds-m-top_medium slds-text-color_weak">Discovering record context...</p>
+                    <div class="insights-loading" role="status">
+                        <lightning-spinner alternative-text={insightsLoadingTitle} size="medium"></lightning-spinner>
+                        <div class="insights-loading-copy">
+                            <p class="insights-loading-title">{insightsLoadingTitle}</p>
+                            <p class="insights-loading-message">{insightsLoadingMessage}</p>
+                            <div class="insights-loading-progress">
+                                <span class="insights-loading-phase">{activeInsightsLoadingStep}</span>
+                                <div class="insights-loading-dots" aria-hidden="true">
+                                    <template for:each={insightsLoadingIndicators} for:item="indicator">
+                                        <span key={indicator.id} class={indicator.className}></span>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </template>
 
@@ -169,28 +180,30 @@
             </template>
 
             <!-- Compare Mode -->
-            <template lwc:if={isCompareMode}>
-                <c-record-compare
-                    record-id={recordId}
-                    object-api-name={objectApiName}
-                    storage-key={compareStorageKey}
-                    show-model-picker={showModelPickerEnabled}
-                    default-model-api-name={defaultModelApiName}
-                    show-suggested-prompts={showSuggestedPromptsEnabled}
-                    show-usage-metrics={showUsageMetricsEnabled}
-                    persist-conversation={persistConversationEnabled}
-                    show-suggested-comparison-records={showSuggestedComparisonRecordsEnabled}
-                    enable-suggested-follow-ups={enableSuggestedFollowUpsEnabled}
-                    default-depth={defaultDepth}
-                    max-depth-allowed={normalizedMaxDepth}
-                    default-field-categories-csv={defaultFieldCategoriesCsv}
-                    default-relationships-csv={defaultRelationshipsCsv}
-                    hide-context-warnings={hideContextWarningsEnabled}
-                    prompt-warning-threshold-tokens={normalizedPromptWarningThreshold}
-                    max-compare-records={normalizedMaxCompareRecords}
-                    related-records-per-relationship={normalizedRelatedRecordsPerRelationship}
-                    onusageupdate={handleUsageUpdate}
-                ></c-record-compare>
+            <template lwc:if={shouldRenderCompareMode}>
+                <div class={compareContainerClass}>
+                    <c-record-compare
+                        record-id={recordId}
+                        object-api-name={objectApiName}
+                        storage-key={compareStorageKey}
+                        show-model-picker={showModelPickerEnabled}
+                        default-model-api-name={defaultModelApiName}
+                        show-suggested-prompts={showSuggestedPromptsEnabled}
+                        show-usage-metrics={showUsageMetricsEnabled}
+                        persist-conversation={persistConversationEnabled}
+                        show-suggested-comparison-records={showSuggestedComparisonRecordsEnabled}
+                        enable-suggested-follow-ups={enableSuggestedFollowUpsEnabled}
+                        default-depth={defaultDepth}
+                        max-depth-allowed={normalizedMaxDepth}
+                        default-field-categories-csv={defaultFieldCategoriesCsv}
+                        default-relationships-csv={defaultRelationshipsCsv}
+                        hide-context-warnings={hideContextWarningsEnabled}
+                        prompt-warning-threshold-tokens={normalizedPromptWarningThreshold}
+                        max-compare-records={normalizedMaxCompareRecords}
+                        related-records-per-relationship={normalizedRelatedRecordsPerRelationship}
+                        onusageupdate={handleUsageUpdate}
+                    ></c-record-compare>
+                </div>
             </template>
         </div>
     </lightning-card>

@@ -12,6 +12,7 @@ const OBJECT_ICON_MAP = {
     Case: 'standard:case',
     Lead: 'standard:lead'
 };
+const LOADING_STEP_ROTATION_MS = 1400;
 
 export default class RecordCompare extends LightningElement {
     @api recordId;
@@ -67,6 +68,10 @@ export default class RecordCompare extends LightningElement {
     _loadedContextObjectType;
     _loadedContextReferenceRecordId;
     _validatedCurrentObjectType;
+    _isValidatingCurrentObjectType = false;
+    _supportStatusStepIndex = 0;
+    _supportStatusInterval;
+    _supportStatusSignature;
 
     _searchTimeout;
 
@@ -84,8 +89,13 @@ export default class RecordCompare extends LightningElement {
         }
     }
 
+    renderedCallback() {
+        this.syncSupportStatusRotation();
+    }
+
     disconnectedCallback() {
         clearTimeout(this._searchTimeout);
+        this.stopSupportStatusRotation();
     }
 
     // ── Getters ──
@@ -152,9 +162,62 @@ export default class RecordCompare extends LightningElement {
 
     get isObjectSupportPending() {
         return Boolean(this.activeObjectType)
-            && this.isLoadingObjectTypes
-            && this.objectTypeOptions.length === 0
-            && !this.objectTypeError;
+            && !this.objectTypeError
+            && !this.isActiveObjectTypeSupported
+            && (this.isLoadingObjectTypes || this._isValidatingCurrentObjectType);
+    }
+
+    get showSupportStatus() {
+        return this.isObjectSupportPending;
+    }
+
+    get supportStatusTitle() {
+        if (this.recordId && this.objectApiName === this.activeObjectType) {
+            return `Preparing compare for ${this.activeObjectType}`;
+        }
+
+        return 'Preparing compare mode';
+    }
+
+    get supportStatusMessage() {
+        if (this.recordId && this.objectApiName === this.activeObjectType) {
+            return `Getting org metadata, checking ${this.activeObjectType}, and mapping supported relationships before additional records can be selected.`;
+        }
+
+        return 'Getting org metadata, discovering compare-ready objects, and mapping supported relationships for this org.';
+    }
+
+    get supportStatusSteps() {
+        if (this.recordId && this.objectApiName === this.activeObjectType) {
+            return [
+                'Getting org metadata',
+                `Checking ${this.activeObjectType}`,
+                'Mapping relationships'
+            ];
+        }
+
+        return [
+            'Getting org metadata',
+            'Discovering compare-ready objects',
+            'Mapping relationships'
+        ];
+    }
+
+    get activeSupportStatusStep() {
+        if (!this.supportStatusSteps.length) {
+            return null;
+        }
+
+        return this.supportStatusSteps[this._supportStatusStepIndex] || this.supportStatusSteps[0];
+    }
+
+    get supportStatusIndicators() {
+        return this.supportStatusSteps.map((step, index) => ({
+            id: `${index}-${step}`,
+            className: index === this._supportStatusStepIndex
+                ? 'support-status-dot support-status-dot-active'
+                : 'support-status-dot'
+        }));
     }
 
     get objectIconName() {
@@ -269,8 +332,21 @@ export default class RecordCompare extends LightningElement {
 
     get showSelectionActionBar() {
         return this.selectedRecords.length > 0
+            || this.isObjectSupportPending
             || this.isLoadingComparison
             || Boolean(this.compareError);
+    }
+
+    get selectionActionTitle() {
+        if (this.isObjectSupportPending) {
+            return 'Checking object support';
+        }
+
+        if (this.activeObjectType && !this.isActiveObjectTypeSupported) {
+            return 'Compare unavailable';
+        }
+
+        return 'Load Comparison';
     }
 
     get selectionActionMessage() {
@@ -279,7 +355,7 @@ export default class RecordCompare extends LightningElement {
         }
 
         if (this.isObjectSupportPending) {
-            return `Checking compare support for ${this.activeObjectType}.`;
+            return this.supportStatusMessage;
         }
 
         if (this.activeObjectType && !this.isActiveObjectTypeSupported) {
@@ -404,6 +480,14 @@ export default class RecordCompare extends LightningElement {
     }
 
     get recordsStepSummary() {
+        if (this.isObjectSupportPending && this.selectedRecords.length > 0) {
+            return `${this.selectedRecordPreview}. Checking compare support for ${this.activeObjectType}.`;
+        }
+
+        if (this.isObjectSupportPending) {
+            return `Checking compare support for ${this.activeObjectType}.`;
+        }
+
         if (!this.selectedRecords.length) {
             return 'Choose at least 2 records to compare.';
         }
@@ -670,6 +754,8 @@ export default class RecordCompare extends LightningElement {
             return false;
         }
 
+        this._isValidatingCurrentObjectType = true;
+
         try {
             await searchRecords({
                 objectApiName: this.activeObjectType,
@@ -681,6 +767,42 @@ export default class RecordCompare extends LightningElement {
         } catch (error) {
             this._validatedCurrentObjectType = null;
             return false;
+        } finally {
+            this._isValidatingCurrentObjectType = false;
+        }
+    }
+
+    syncSupportStatusRotation() {
+        const steps = this.supportStatusSteps;
+        const shouldRotate = this.showSupportStatus && steps.length > 1;
+        const nextSignature = steps.join('|');
+
+        if (!shouldRotate) {
+            this.stopSupportStatusRotation();
+            return;
+        }
+
+        if (this._supportStatusInterval && this._supportStatusSignature === nextSignature) {
+            return;
+        }
+
+        this.stopSupportStatusRotation(false);
+        this._supportStatusSignature = nextSignature;
+        this._supportStatusStepIndex = 0;
+        this._supportStatusInterval = setInterval(() => {
+            this._supportStatusStepIndex = (this._supportStatusStepIndex + 1) % steps.length;
+        }, LOADING_STEP_ROTATION_MS);
+    }
+
+    stopSupportStatusRotation(resetIndex = true) {
+        if (this._supportStatusInterval) {
+            clearInterval(this._supportStatusInterval);
+            this._supportStatusInterval = null;
+        }
+
+        this._supportStatusSignature = null;
+        if (resetIndex) {
+            this._supportStatusStepIndex = 0;
         }
     }
 

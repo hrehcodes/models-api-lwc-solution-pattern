@@ -46,6 +46,17 @@ const flushPromises = async (count = 4) => {
     }
 };
 
+const createDeferred = () => {
+    let resolve;
+    let reject;
+    const promise = new Promise((innerResolve, innerReject) => {
+        resolve = innerResolve;
+        reject = innerReject;
+    });
+
+    return { promise, resolve, reject };
+};
+
 const baseAvailableContext = {
     objectApiName: 'Account',
     objectLabel: 'Account',
@@ -104,6 +115,7 @@ describe('c-agentforce-record-insights', () => {
     });
 
     afterEach(() => {
+        jest.useRealTimers();
         while (document.body.firstChild) {
             document.body.removeChild(document.body.firstChild);
         }
@@ -138,6 +150,49 @@ describe('c-agentforce-record-insights', () => {
         expect(chatPanel.recordContextJson).toContain('"selectionSummary"');
         expect(chatPanel.recordContextJson).toContain('"recordContext"');
         expect(chatPanel.recordContextJson).toContain('"completeness"');
+        expect(element.shadowRoot.querySelector('c-record-compare')).not.toBeNull();
+    });
+
+    it('does not mount compare mode in the background when preload compare mode is turned off', async () => {
+        const element = createElement('c-agentforce-record-insights', {
+            is: AgentforceRecordInsights
+        });
+        element.recordId = '001000000000001AAA';
+        element.objectApiName = 'Account';
+        element.preloadCompareMode = false;
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('c-record-compare')).toBeNull();
+    });
+
+    it('shows richer loading copy while insights context is being prepared', async () => {
+        jest.useFakeTimers();
+        const availableDeferred = createDeferred();
+        getAvailableContext.mockReturnValue(availableDeferred.promise);
+
+        const element = createElement('c-agentforce-record-insights', {
+            is: AgentforceRecordInsights
+        });
+        element.recordId = '001000000000001AAA';
+        element.objectApiName = 'Account';
+        element.preloadCompareMode = false;
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        expect(element.shadowRoot.textContent).toContain('Preparing grounded insights');
+        expect(element.shadowRoot.textContent).toContain('Getting org metadata');
+
+        jest.advanceTimersByTime(1400);
+        await flushPromises();
+        expect(element.shadowRoot.textContent).toContain('Discovering relationships');
+
+        availableDeferred.resolve(baseAvailableContext);
+        await flushPromises();
     });
 
     it('surfaces partial context warnings from Apex completeness metadata', async () => {

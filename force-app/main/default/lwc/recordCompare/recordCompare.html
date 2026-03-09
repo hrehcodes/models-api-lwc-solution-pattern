@@ -42,10 +42,31 @@
                             onrecordremove={handleRemoveRecord}
                         ></c-record-picker>
 
+                        <template lwc:if={showSupportStatus}>
+                            <div class="support-status" role="status">
+                                <lightning-spinner
+                                    alternative-text={supportStatusTitle}
+                                    size="small"
+                                ></lightning-spinner>
+                                <div class="support-status-copy">
+                                    <span class="support-status-title">{supportStatusTitle}</span>
+                                    <span class="support-status-message">{supportStatusMessage}</span>
+                                    <div class="support-status-progress">
+                                        <span class="support-status-phase">{activeSupportStatusStep}</span>
+                                        <div class="support-status-dots" aria-hidden="true">
+                                            <template for:each={supportStatusIndicators} for:item="indicator">
+                                                <span key={indicator.id} class={indicator.className}></span>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+
                         <template lwc:if={showSelectionActionBar}>
                             <div class="selection-actions">
                                 <div class="selection-actions-copy">
-                                    <span class="selection-actions-title">Load Comparison</span>
+                                    <span class="selection-actions-title">{selectionActionTitle}</span>
                                     <span class="selection-actions-message">{selectionActionMessage}</span>
                                 </div>
                                 <div class="step-footer-actions">

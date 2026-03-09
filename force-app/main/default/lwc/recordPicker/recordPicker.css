@@ -17,6 +17,66 @@
     font-size: 0.8125rem;
 }
 
+.picker-loading {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border: 1px solid #e5e5e5;
+    border-radius: 10px;
+    background-color: #fafaf9;
+}
+
+.picker-loading-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.picker-loading-title {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: #181818;
+}
+
+.picker-loading-message {
+    font-size: 0.75rem;
+    color: #5c5c5c;
+    line-height: 1.4;
+}
+
+.picker-loading-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.picker-loading-phase {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: #5c5c5c;
+}
+
+.picker-loading-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.picker-loading-dot {
+    display: inline-block;
+    border-radius: 999px;
+    width: 0.4rem;
+    height: 0.4rem;
+    background-color: #c9c7c5;
+}
+
+.picker-loading-dot-active {
+    background-color: #5c5c5c;
+}
+
 .search-row {
     display: flex;
     align-items: center;

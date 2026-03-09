@@ -105,6 +105,75 @@
     flex-direction: column;
 }
 
+.insights-loading {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 24px;
+}
+
+.insights-loading-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.insights-loading-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #181818;
+}
+
+.insights-loading-message {
+    margin: 0;
+    font-size: 0.875rem;
+    color: #5c5c5c;
+    line-height: 1.5;
+}
+
+.insights-loading-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.insights-loading-phase {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #5c5c5c;
+}
+
+.insights-loading-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.insights-loading-dot {
+    display: inline-block;
+    border-radius: 999px;
+    width: 0.45rem;
+    height: 0.45rem;
+    background-color: #c9c7c5;
+}
+
+.insights-loading-dot-active {
+    background-color: #5c5c5c;
+}
+
+.mode-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.compare-panel-hidden {
+    display: none;
+}
+
 .layout-with-context {
     flex: 1;
     min-height: 0;

@@ -1,4 +1,5 @@
 import { LightningElement, api } from 'lwc';
+const LOADING_STEP_ROTATION_MS = 1400;
 
 export default class RecordPicker extends LightningElement {
     @api mode = 'insights';
@@ -24,6 +25,17 @@ export default class RecordPicker extends LightningElement {
     @api selectionLimitMessage;
 
     showManualEntry = false;
+    _objectTypeLoadingStepIndex = 0;
+    _objectTypeLoadingInterval;
+    _objectTypeLoadingSignature;
+
+    renderedCallback() {
+        this.syncObjectTypeLoadingRotation();
+    }
+
+    disconnectedCallback() {
+        this.stopObjectTypeLoadingRotation();
+    }
 
     get objectFilterPlaceholder() {
         return 'Filter object types...';
@@ -55,6 +67,79 @@ export default class RecordPicker extends LightningElement {
 
     get manualToggleLabel() {
         return this.showManualEntrySection ? 'Hide record ID entry' : 'Use a record ID instead';
+    }
+
+    get objectTypeLoadingTitle() {
+        if (!this.isLoadingObjectTypes) {
+            return null;
+        }
+
+        if (this.mode === 'compare') {
+            return this.selectedObjectType
+                ? `Preparing ${this.selectedObjectType} for compare`
+                : 'Preparing compare-ready objects';
+        }
+
+        return 'Preparing insights search';
+    }
+
+    get objectTypeLoadingMessage() {
+        if (!this.isLoadingObjectTypes) {
+            return null;
+        }
+
+        if (this.mode === 'compare') {
+            return this.selectedObjectType
+                ? `Getting org metadata, checking ${this.selectedObjectType}, and mapping supported relationships.`
+                : 'Getting org metadata, discovering compare-ready objects, and mapping supported relationships.';
+        }
+
+        return 'Getting org metadata, discovering searchable objects, and preparing the record picker.';
+    }
+
+    get objectTypeLoadingSteps() {
+        if (!this.isLoadingObjectTypes) {
+            return [];
+        }
+
+        if (this.mode === 'compare') {
+            if (this.selectedObjectType) {
+                return [
+                    'Getting org metadata',
+                    `Checking ${this.selectedObjectType}`,
+                    'Mapping relationships'
+                ];
+            }
+
+            return [
+                'Getting org metadata',
+                'Discovering compare-ready objects',
+                'Mapping relationships'
+            ];
+        }
+
+        return [
+            'Getting org metadata',
+            'Discovering searchable objects',
+            'Preparing record search'
+        ];
+    }
+
+    get activeObjectTypeLoadingStep() {
+        if (!this.objectTypeLoadingSteps.length) {
+            return null;
+        }
+
+        return this.objectTypeLoadingSteps[this._objectTypeLoadingStepIndex] || this.objectTypeLoadingSteps[0];
+    }
+
+    get objectTypeLoadingIndicators() {
+        return this.objectTypeLoadingSteps.map((step, index) => ({
+            id: `${index}-${step}`,
+            className: index === this._objectTypeLoadingStepIndex
+                ? 'picker-loading-dot picker-loading-dot-active'
+                : 'picker-loading-dot'
+        }));
     }
 
     handleObjectTypeChange(event) {
@@ -115,5 +200,39 @@ export default class RecordPicker extends LightningElement {
         this.dispatchEvent(new CustomEvent('manualload', {
             detail: { value: this.manualRecordId }
         }));
+    }
+
+    syncObjectTypeLoadingRotation() {
+        const steps = this.objectTypeLoadingSteps;
+        const shouldRotate = this.isLoadingObjectTypes && steps.length > 1;
+        const nextSignature = steps.join('|');
+
+        if (!shouldRotate) {
+            this.stopObjectTypeLoadingRotation();
+            return;
+        }
+
+        if (this._objectTypeLoadingInterval && this._objectTypeLoadingSignature === nextSignature) {
+            return;
+        }
+
+        this.stopObjectTypeLoadingRotation(false);
+        this._objectTypeLoadingSignature = nextSignature;
+        this._objectTypeLoadingStepIndex = 0;
+        this._objectTypeLoadingInterval = setInterval(() => {
+            this._objectTypeLoadingStepIndex = (this._objectTypeLoadingStepIndex + 1) % steps.length;
+        }, LOADING_STEP_ROTATION_MS);
+    }
+
+    stopObjectTypeLoadingRotation(resetIndex = true) {
+        if (this._objectTypeLoadingInterval) {
+            clearInterval(this._objectTypeLoadingInterval);
+            this._objectTypeLoadingInterval = null;
+        }
+
+        this._objectTypeLoadingSignature = null;
+        if (resetIndex) {
+            this._objectTypeLoadingStepIndex = 0;
+        }
     }
 }

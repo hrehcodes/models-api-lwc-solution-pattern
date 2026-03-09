@@ -10,6 +10,7 @@ const MODE_COMPARE = 'compare';
 const AVAILABLE_MODES_BOTH = 'both';
 const AVAILABLE_MODES_INSIGHTS_ONLY = 'insightsonly';
 const AVAILABLE_MODES_COMPARE_ONLY = 'compareonly';
+const LOADING_STEP_ROTATION_MS = 1400;
 
 export default class AgentforceRecordInsights extends LightningElement {
     agentforceIcon = AGENTFORCE_ICON;
@@ -20,6 +21,7 @@ export default class AgentforceRecordInsights extends LightningElement {
     @api defaultDepth = 1;
     @api defaultMode = MODE_INSIGHTS;
     @api availableModes = AVAILABLE_MODES_BOTH;
+    @api preloadCompareMode;
     @api startWithContextPanelOpen;
     @api maxDepthAllowed = 3;
     @api defaultFieldCategoriesCsv;
@@ -66,9 +68,13 @@ export default class AgentforceRecordInsights extends LightningElement {
     searchError;
     selectedInsightsRecords = [];
     isLoadingObjectTypes = false;
+    contextLoadingPhase = 'discovering';
     _contextLoadTimeout;
     _searchTimeout;
     _resizeObserver;
+    _insightsLoadingStepIndex = 0;
+    _insightsLoadingInterval;
+    _insightsLoadingSignature;
     headerWidth = 0;
 
     connectedCallback() {
@@ -86,34 +92,34 @@ export default class AgentforceRecordInsights extends LightningElement {
     }
 
     renderedCallback() {
-        if (this._resizeObserver) {
-            return;
-        }
+        if (!this._resizeObserver) {
+            const headerElement = this.refs?.header;
+            if (headerElement) {
+                this._resizeObserver = new ResizeObserver(entries => {
+                    const width = entries?.[0]?.contentRect?.width;
+                    if (!width) {
+                        return;
+                    }
 
-        const headerElement = this.refs?.header;
-        if (!headerElement) {
-            return;
-        }
+                    // Observe the actual header region, not the host, so compact mode follows usable space.
+                    this.headerWidth = width;
+                });
 
-        this._resizeObserver = new ResizeObserver(entries => {
-            const width = entries?.[0]?.contentRect?.width;
-            if (!width) {
-                return;
+                this._resizeObserver.observe(headerElement);
             }
+        }
 
-            // Observe the actual header region, not the host, so compact mode follows usable space.
-            this.headerWidth = width;
-        });
-
-        this._resizeObserver.observe(headerElement);
+        this.syncInsightsLoadingRotation();
     }
 
     disconnectedCallback() {
         clearTimeout(this._searchTimeout);
+        clearTimeout(this._contextLoadTimeout);
         if (this._resizeObserver) {
             this._resizeObserver.disconnect();
             this._resizeObserver = null;
         }
+        this.stopInsightsLoadingRotation();
     }
 
     get isInsightsMode() { return this.mode === MODE_INSIGHTS; }
@@ -130,6 +136,17 @@ export default class AgentforceRecordInsights extends LightningElement {
     get allowsInsightsMode() { return this.normalizedAvailableModes !== AVAILABLE_MODES_COMPARE_ONLY; }
     get allowsCompareMode() { return this.normalizedAvailableModes !== AVAILABLE_MODES_INSIGHTS_ONLY; }
     get showModeSwitcher() { return this.allowsInsightsMode && this.allowsCompareMode; }
+    get preloadCompareModeEnabled() {
+        return Boolean(this.recordId) && this.isBooleanEnabled(this.preloadCompareMode);
+    }
+    get shouldRenderCompareMode() {
+        return this.allowsCompareMode && (this.isCompareMode || this.preloadCompareModeEnabled);
+    }
+    get compareContainerClass() {
+        return this.isCompareMode
+            ? 'mode-panel compare-panel'
+            : 'mode-panel compare-panel compare-panel-hidden';
+    }
     get showModelPickerEnabled() { return this.isBooleanEnabled(this.showModelPicker); }
     get showSuggestedPromptsEnabled() { return this.isBooleanEnabled(this.showSuggestedPrompts); }
     get showUsageMetricsEnabled() { return this.isBooleanEnabled(this.showUsageMetrics); }
@@ -239,6 +256,55 @@ export default class AgentforceRecordInsights extends LightningElement {
             : 'layout-chat-only';
     }
 
+    get insightsLoadingTitle() {
+        if (this.contextLoadingPhase === 'mapping') {
+            return 'Mapping record context';
+        }
+
+        return 'Preparing grounded insights';
+    }
+
+    get insightsLoadingMessage() {
+        if (this.contextLoadingPhase === 'mapping') {
+            return 'Mapping fields and related records into grounded context for the chat experience.';
+        }
+
+        return 'Getting org metadata, discovering accessible relationships, and preparing the context panel.';
+    }
+
+    get insightsLoadingSteps() {
+        if (this.contextLoadingPhase === 'mapping') {
+            return [
+                'Mapping selected fields',
+                'Collecting related records',
+                'Finalizing grounded context'
+            ];
+        }
+
+        return [
+            'Getting org metadata',
+            'Discovering relationships',
+            'Preparing context settings'
+        ];
+    }
+
+    get activeInsightsLoadingStep() {
+        if (!this.insightsLoadingSteps.length) {
+            return null;
+        }
+
+        return this.insightsLoadingSteps[this._insightsLoadingStepIndex] || this.insightsLoadingSteps[0];
+    }
+
+    get insightsLoadingIndicators() {
+        return this.insightsLoadingSteps.map((step, index) => ({
+            id: `${index}-${step}`,
+            className: index === this._insightsLoadingStepIndex
+                ? 'insights-loading-dot insights-loading-dot-active'
+                : 'insights-loading-dot'
+        }));
+    }
+
     get storageKey() {
         return this.activeRecordId ? `ari_chat_${this.activeRecordId}` : null;
     }
@@ -309,6 +375,7 @@ export default class AgentforceRecordInsights extends LightningElement {
 
     async loadAvailableContext() {
         this.isLoadingContext = true;
+        this.contextLoadingPhase = 'discovering';
         this.contextError = null;
         this.availableContext = null;
         this.recordContextJson = null;
@@ -333,15 +400,20 @@ export default class AgentforceRecordInsights extends LightningElement {
             );
             this.currentDepth = this.normalizeDepth(this.currentDepth);
 
+            this.contextLoadingPhase = 'mapping';
             await this.loadRecordContext();
         } catch (error) {
             this.contextError = this.extractErrorMessage(error);
         } finally {
             this.isLoadingContext = false;
+            this.contextLoadingPhase = null;
         }
     }
 
     async loadRecordContext() {
+        if (this.isLoadingContext) {
+            this.contextLoadingPhase = 'mapping';
+        }
         try {
             const ctx = await getRecordContext({
                 recordId: this.activeRecordId,
@@ -356,6 +428,40 @@ export default class AgentforceRecordInsights extends LightningElement {
             console.error('Error loading record context:', error);
             this.recordContextJson = null;
             this.setContextFailureState(error);
+        }
+    }
+
+    syncInsightsLoadingRotation() {
+        const steps = this.insightsLoadingSteps;
+        const shouldRotate = this.isLoadingContext && steps.length > 1;
+        const nextSignature = steps.join('|');
+
+        if (!shouldRotate) {
+            this.stopInsightsLoadingRotation();
+            return;
+        }
+
+        if (this._insightsLoadingInterval && this._insightsLoadingSignature === nextSignature) {
+            return;
+        }
+
+        this.stopInsightsLoadingRotation(false);
+        this._insightsLoadingSignature = nextSignature;
+        this._insightsLoadingStepIndex = 0;
+        this._insightsLoadingInterval = setInterval(() => {
+            this._insightsLoadingStepIndex = (this._insightsLoadingStepIndex + 1) % steps.length;
+        }, LOADING_STEP_ROTATION_MS);
+    }
+
+    stopInsightsLoadingRotation(resetIndex = true) {
+        if (this._insightsLoadingInterval) {
+            clearInterval(this._insightsLoadingInterval);
+            this._insightsLoadingInterval = null;
+        }
+
+        this._insightsLoadingSignature = null;
+        if (resetIndex) {
+            this._insightsLoadingStepIndex = 0;
         }
     }
 
