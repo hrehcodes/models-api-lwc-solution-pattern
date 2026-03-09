@@ -120,7 +120,8 @@ export default class RecordCompare extends LightningElement {
     }
 
     get canSearch() {
-        return this.isActiveObjectTypeSupported
+        return !this.isObjectSupportPending
+            && this.isActiveObjectTypeSupported
             && this.selectedRecords.length < this.normalizedMaxCompareRecords;
     }
 
@@ -145,6 +146,13 @@ export default class RecordCompare extends LightningElement {
             && this.objectTypeOptions.some(option => option.value === this.activeObjectType);
     }
 
+    get isObjectSupportPending() {
+        return Boolean(this.activeObjectType)
+            && this.isLoadingObjectTypes
+            && this.objectTypeOptions.length === 0
+            && !this.objectTypeError;
+    }
+
     get objectIconName() {
         return OBJECT_ICON_MAP[this.activeObjectType] || 'standard:custom_notification';
     }
@@ -160,6 +168,7 @@ export default class RecordCompare extends LightningElement {
     get showSuggestions() {
         return this.showSuggestedComparisonRecordsEnabled
             && this.recordId
+            && !this.isObjectSupportPending
             && this.isActiveObjectTypeSupported
             && this.selectedRecords.length < this.normalizedMaxCompareRecords;
     }
@@ -189,7 +198,7 @@ export default class RecordCompare extends LightningElement {
     }
 
     get showCompareContextSettings() {
-        return this.isActiveObjectTypeSupported;
+        return !this.isObjectSupportPending && this.isActiveObjectTypeSupported;
     }
 
     get normalizedMaxCompareRecords() {
@@ -225,7 +234,9 @@ export default class RecordCompare extends LightningElement {
     }
 
     get canAccessSettingsStep() {
-        return this.isActiveObjectTypeSupported && this.hasMinimumSelectedRecords;
+        return !this.isObjectSupportPending
+            && this.isActiveObjectTypeSupported
+            && this.hasMinimumSelectedRecords;
     }
 
     get settingsStepDisabled() {
@@ -259,6 +270,14 @@ export default class RecordCompare extends LightningElement {
     }
 
     get selectionActionMessage() {
+        if (this.objectTypeError) {
+            return this.objectTypeError;
+        }
+
+        if (this.isObjectSupportPending) {
+            return `Checking compare support for ${this.activeObjectType}.`;
+        }
+
         if (this.activeObjectType && !this.isActiveObjectTypeSupported) {
             return `Compare mode is not supported for ${this.activeObjectType}.`;
         }

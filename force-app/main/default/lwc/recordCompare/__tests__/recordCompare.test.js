@@ -52,6 +52,17 @@ const flushPromises = async (count = 4) => {
     }
 };
 
+const createDeferred = () => {
+    let resolve;
+    let reject;
+    const promise = new Promise((innerResolve, innerReject) => {
+        resolve = innerResolve;
+        reject = innerReject;
+    });
+
+    return { promise, resolve, reject };
+};
+
 describe('c-record-compare', () => {
     beforeEach(() => {
         jest.useFakeTimers();
@@ -348,8 +359,31 @@ describe('c-record-compare', () => {
 
         const picker = element.shadowRoot.querySelector('c-record-picker');
         expect(picker.objectTypeError).toBe('OpportunityLineItem is not supported for compare mode.');
-        expect(element.shadowRoot.textContent).toContain('Compare mode is not supported for OpportunityLineItem.');
+        expect(element.shadowRoot.textContent).toContain('OpportunityLineItem is not supported for compare mode.');
         expect(searchRecords).not.toHaveBeenCalled();
         expect(getSuggestedRecords).not.toHaveBeenCalled();
+    });
+
+    it('shows a support-check message while object support is still loading for record-page compare mode', async () => {
+        const deferred = createDeferred();
+        getAvailableCompareObjects.mockReturnValue(deferred.promise);
+
+        const element = createElement('c-record-compare', {
+            is: RecordCompare
+        });
+        element.objectApiName = 'Opportunity';
+        element.recordId = '006000000000001AAA';
+        document.body.appendChild(element);
+        await flushPromises();
+
+        expect(element.shadowRoot.textContent).toContain('Checking compare support for Opportunity.');
+        expect(element.shadowRoot.textContent).not.toContain('Compare mode is not supported for Opportunity.');
+
+        deferred.resolve([
+            { apiName: 'Opportunity', label: 'Opportunity' }
+        ]);
+        await flushPromises(6);
+
+        expect(element.shadowRoot.textContent).toContain('Select 1 more record to enable comparison.');
     });
 });
