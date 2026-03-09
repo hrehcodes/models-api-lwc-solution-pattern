@@ -348,6 +348,11 @@ describe('c-record-compare', () => {
     });
 
     it('shows an unsupported-object message when the current object is not in the safe compare subset', async () => {
+        searchRecords.mockRejectedValue({
+            body: {
+                message: 'Invalid or inaccessible object type.'
+            }
+        });
         const element = createElement('c-record-compare', {
             is: RecordCompare
         });
@@ -360,7 +365,11 @@ describe('c-record-compare', () => {
         const picker = element.shadowRoot.querySelector('c-record-picker');
         expect(picker.objectTypeError).toBe('OpportunityLineItem is not supported for compare mode.');
         expect(element.shadowRoot.textContent).toContain('OpportunityLineItem is not supported for compare mode.');
-        expect(searchRecords).not.toHaveBeenCalled();
+        expect(searchRecords).toHaveBeenCalledWith({
+            objectApiName: 'OpportunityLineItem',
+            searchTerm: '',
+            maxResults: 1
+        });
         expect(getSuggestedRecords).not.toHaveBeenCalled();
     });
 
@@ -385,5 +394,54 @@ describe('c-record-compare', () => {
         await flushPromises(6);
 
         expect(element.shadowRoot.textContent).toContain('Select 1 more record to enable comparison.');
+    });
+
+    it('keeps the current record-page object supported when direct validation succeeds even if it is absent from the options list', async () => {
+        getAvailableCompareObjects.mockResolvedValue([
+            { apiName: 'Account', label: 'Account' }
+        ]);
+        getAvailableContextForObject.mockResolvedValue({
+            objectApiName: 'Opportunity',
+            objectLabel: 'Opportunity',
+            recordName: 'Opportunity comparison settings',
+            fieldCategories: [
+                {
+                    name: 'core',
+                    label: 'Core Fields',
+                    includedByDefault: true,
+                    fieldCount: 1,
+                    fields: [{ apiName: 'Name', label: 'Opportunity Name', fieldType: 'STRING' }]
+                }
+            ],
+            relationships: [],
+            completeness: {
+                isComplete: true,
+                hasWarnings: false,
+                warningMessages: []
+            }
+        });
+        searchRecords.mockResolvedValue([
+            { id: '006000000000010AAA', name: 'Renewal Deal' }
+        ]);
+
+        const element = createElement('c-record-compare', {
+            is: RecordCompare
+        });
+        element.objectApiName = 'Opportunity';
+        element.recordId = '006000000000001AAA';
+        document.body.appendChild(element);
+
+        await flushPromises(6);
+
+        expect(element.shadowRoot.textContent).not.toContain('Opportunity is not supported for compare mode.');
+        expect(searchRecords).toHaveBeenCalledWith({
+            objectApiName: 'Opportunity',
+            searchTerm: '',
+            maxResults: 1
+        });
+        expect(getAvailableContextForObject).toHaveBeenCalledWith({
+            objectApiName: 'Opportunity',
+            referenceRecordId: '006000000000001AAA'
+        });
     });
 });

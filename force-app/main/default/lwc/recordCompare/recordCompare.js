@@ -66,6 +66,7 @@ export default class RecordCompare extends LightningElement {
     _sessionCredits = 0;
     _loadedContextObjectType;
     _loadedContextReferenceRecordId;
+    _validatedCurrentObjectType;
 
     _searchTimeout;
 
@@ -143,7 +144,10 @@ export default class RecordCompare extends LightningElement {
 
     get isActiveObjectTypeSupported() {
         return Boolean(this.activeObjectType)
-            && this.objectTypeOptions.some(option => option.value === this.activeObjectType);
+            && (
+                this.objectTypeOptions.some(option => option.value === this.activeObjectType)
+                || this._validatedCurrentObjectType === this.activeObjectType
+            );
     }
 
     get isObjectSupportPending() {
@@ -503,6 +507,16 @@ export default class RecordCompare extends LightningElement {
             }));
 
             if (this.activeObjectType && !this.isActiveObjectTypeSupported) {
+                if (await this.validateCurrentRecordPageObjectSupport()) {
+                    this.objectTypeError = null;
+                    this.performSearch();
+                    this.loadCompareContextMetadata({ resetSelections: true });
+                    if (this.recordId && this.objectApiName && this.showSuggestedComparisonRecordsEnabled) {
+                        this.loadSuggestions();
+                    }
+                    return;
+                }
+
                 this.objectTypeError = `${this.activeObjectType} is not supported for compare mode.`;
                 this.availableContext = null;
                 this.searchResults = [];
@@ -622,6 +636,7 @@ export default class RecordCompare extends LightningElement {
 
     handleObjectTypeChange(event) {
         this.selectedObjectType = event.detail.value;
+        this._validatedCurrentObjectType = null;
         this.selectedRecords = [];
         this.searchResults = [];
         this.suggestedRecords = [];
@@ -648,6 +663,25 @@ export default class RecordCompare extends LightningElement {
         this._searchTimeout = setTimeout(() => {
             this.performSearch();
         }, 300);
+    }
+
+    async validateCurrentRecordPageObjectSupport() {
+        if (!this.recordId || !this.objectApiName || this.activeObjectType !== this.objectApiName) {
+            return false;
+        }
+
+        try {
+            await searchRecords({
+                objectApiName: this.activeObjectType,
+                searchTerm: '',
+                maxResults: 1
+            });
+            this._validatedCurrentObjectType = this.activeObjectType;
+            return true;
+        } catch (error) {
+            this._validatedCurrentObjectType = null;
+            return false;
+        }
     }
 
     async performSearch() {
