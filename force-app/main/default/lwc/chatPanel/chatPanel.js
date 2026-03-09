@@ -54,6 +54,7 @@ export default class ChatPanel extends LightningElement {
     @api showModelPicker;
     @api defaultModelApiName;
     @api showSuggestedPrompts;
+    @api showInlineUsageStatus = false;
     @api persistConversation;
     @api enableSuggestedFollowUps;
     @api contextStatus;
@@ -199,6 +200,10 @@ export default class ChatPanel extends LightningElement {
         return this.isBooleanEnabled(this.persistConversation);
     }
 
+    get showInlineUsageStatusEnabled() {
+        return this.showInlineUsageStatus === true || this.showInlineUsageStatus === 'true';
+    }
+
     get enableSuggestedFollowUpsEnabled() {
         return this.isBooleanEnabled(this.enableSuggestedFollowUps);
     }
@@ -235,6 +240,14 @@ export default class ChatPanel extends LightningElement {
 
     get largePromptWarningBody() {
         return `That exceeds the configured warning threshold of ${this.normalizedTokenWarningThreshold.toLocaleString()} tokens. Large prompts can be slower, use more flex credits, and may cause some context to be truncated before the model responds.`;
+    }
+
+    get formattedSessionTokens() {
+        return this.formatMetricValue(this.sessionTokens);
+    }
+
+    get formattedSessionCredits() {
+        return this.formatMetricValue(this.sessionCredits);
     }
 
     // ── Event Handlers ──
@@ -608,6 +621,11 @@ export default class ChatPanel extends LightningElement {
 
     isBooleanEnabled(value) {
         return value !== false && value !== 'false';
+    }
+
+    formatMetricValue(value) {
+        const numericValue = Number(value) || 0;
+        return numericValue.toLocaleString();
     }
 
     // ── Markdown Rendering ──

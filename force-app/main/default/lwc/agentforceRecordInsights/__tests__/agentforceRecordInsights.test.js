@@ -129,6 +129,7 @@ describe('c-agentforce-record-insights', () => {
         element.recordId = '001000000000001AAA';
         element.objectApiName = 'Account';
         element.startWithContextPanelOpen = true;
+        element.showInlineUsageStatus = true;
         element.relatedRecordsPerRelationship = 7;
         document.body.appendChild(element);
 
@@ -150,7 +151,9 @@ describe('c-agentforce-record-insights', () => {
         expect(chatPanel.recordContextJson).toContain('"selectionSummary"');
         expect(chatPanel.recordContextJson).toContain('"recordContext"');
         expect(chatPanel.recordContextJson).toContain('"completeness"');
+        expect(chatPanel.showInlineUsageStatus).toBe(true);
         expect(element.shadowRoot.querySelector('c-record-compare')).not.toBeNull();
+        expect(element.shadowRoot.querySelector('c-record-compare').showInlineUsageStatus).toBe(true);
     });
 
     it('does not mount compare mode in the background when preload compare mode is turned off', async () => {

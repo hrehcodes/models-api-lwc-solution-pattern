@@ -156,6 +156,18 @@
                 size="medium"
             ></lightning-button-icon>
         </div>
+        <template lwc:if={showInlineUsageStatusEnabled}>
+            <div class="usage-status-bar" role="status" aria-live="polite">
+                <span class="usage-status-label">Usage</span>
+                <span class="usage-status-metric">
+                    <strong>{formattedSessionTokens}</strong> session tokens
+                </span>
+                <span class="usage-status-divider" aria-hidden="true">•</span>
+                <span class="usage-status-metric">
+                    <strong>{formattedSessionCredits}</strong> flex credits
+                </span>
+            </div>
+        </template>
     </div>
 
     <template lwc:if={showLargePromptWarningModal}>

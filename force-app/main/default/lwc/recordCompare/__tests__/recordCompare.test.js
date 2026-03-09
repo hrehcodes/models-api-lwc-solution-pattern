@@ -205,6 +205,7 @@ describe('c-record-compare', () => {
         });
         element.objectApiName = 'Account';
         element.recordId = '001000000000001AAA';
+        element.showInlineUsageStatus = true;
         element.maxCompareRecords = 4;
         element.relatedRecordsPerRelationship = 7;
         document.body.appendChild(element);
@@ -255,6 +256,7 @@ describe('c-record-compare', () => {
         });
 
         expect(element.shadowRoot.querySelector('c-chat-panel')).not.toBeNull();
+        expect(element.shadowRoot.querySelector('c-chat-panel').showInlineUsageStatus).toBe(true);
     });
 
     it('prevents adding records beyond the configured compare limit and shows a warning', async () => {

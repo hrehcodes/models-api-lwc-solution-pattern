@@ -108,6 +108,25 @@ describe('c-chat-panel', () => {
         expect(warning.textContent).toContain('Some record context was skipped or truncated.');
     });
 
+    it('renders a compact usage footer near the composer when enabled', async () => {
+        const element = createElement('c-chat-panel', {
+            is: ChatPanel
+        });
+        element.showInlineUsageStatus = true;
+        element.sessionTokens = 1234;
+        element.sessionCredits = 8;
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        const usageFooter = element.shadowRoot.querySelector('.usage-status-bar');
+        expect(usageFooter).not.toBeNull();
+        expect(usageFooter.textContent).toContain('Usage');
+        expect(usageFooter.textContent).toContain('1,234');
+        expect(usageFooter.textContent).toContain('8');
+    });
+
     it('renders a failed warning banner for ungrounded chat state', async () => {
         const element = createElement('c-chat-panel', {
             is: ChatPanel

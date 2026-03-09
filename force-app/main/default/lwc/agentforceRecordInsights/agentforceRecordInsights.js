@@ -30,6 +30,7 @@ export default class AgentforceRecordInsights extends LightningElement {
     @api defaultModelApiName;
     @api showSuggestedPrompts;
     @api showUsageMetrics;
+    @api showInlineUsageStatus = false;
     @api persistConversation;
     @api showSuggestedComparisonRecords;
     @api enableSuggestedFollowUps;
@@ -150,6 +151,9 @@ export default class AgentforceRecordInsights extends LightningElement {
     get showModelPickerEnabled() { return this.isBooleanEnabled(this.showModelPicker); }
     get showSuggestedPromptsEnabled() { return this.isBooleanEnabled(this.showSuggestedPrompts); }
     get showUsageMetricsEnabled() { return this.isBooleanEnabled(this.showUsageMetrics); }
+    get showInlineUsageStatusEnabled() {
+        return this.showInlineUsageStatus === true || this.showInlineUsageStatus === 'true';
+    }
     get persistConversationEnabled() { return this.isBooleanEnabled(this.persistConversation); }
     get showSuggestedComparisonRecordsEnabled() { return this.isBooleanEnabled(this.showSuggestedComparisonRecords); }
     get enableSuggestedFollowUpsEnabled() { return this.isBooleanEnabled(this.enableSuggestedFollowUps); }

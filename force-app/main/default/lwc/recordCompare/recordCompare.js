@@ -22,6 +22,7 @@ export default class RecordCompare extends LightningElement {
     @api defaultModelApiName;
     @api showSuggestedPrompts;
     @api showUsageMetrics;
+    @api showInlineUsageStatus = false;
     @api persistConversation;
     @api showSuggestedComparisonRecords;
     @api enableSuggestedFollowUps;
