@@ -139,4 +139,118 @@ private class RecordAdvisorController_Test {
         System.assert(prompt.contains('active or open records over closed or completed ones'));
         System.assert(prompt.contains('Use markdown tables only for compact scalar field comparisons.'));
     }
+
+    @IsTest
+    static void testBuildInsightsSystemPrompt_IncludesNoDataFallbackAndGuidance() {
+        String prompt = RecordAdvisorController.buildInsightsSystemPrompt(null);
+
+        System.assert(prompt.contains('No record data provided.'));
+        System.assert(prompt.contains('selectionSummary'));
+        System.assert(prompt.contains('If completeness metadata indicates warnings'));
+    }
+
+    @IsTest
+    static void testBuildModelFallbackChain_DeduplicatesAndKeepsPrimaryFirst() {
+        List<String> fallbackChain = RecordAdvisorController.buildModelFallbackChain('sfdc_ai__DefaultGPT5');
+        Integer primaryCount = 0;
+        for (String modelName : fallbackChain) {
+            if (modelName == 'sfdc_ai__DefaultGPT5') {
+                primaryCount++;
+            }
+        }
+
+        System.assertEquals('sfdc_ai__DefaultGPT5', fallbackChain[0]);
+        System.assertEquals(1, primaryCount, 'The primary model should only appear once in the fallback chain');
+        System.assert(fallbackChain.contains('sfdc_ai__DefaultGPT4Omni'));
+    }
+
+    @IsTest
+    static void testBuildModelFallbackChain_BlankPrimaryStartsWithDefault() {
+        List<String> fallbackChain = RecordAdvisorController.buildModelFallbackChain(null);
+
+        System.assert(!fallbackChain.isEmpty(), 'Fallback chain should not be empty');
+        System.assertEquals('sfdc_ai__DefaultVertexAIGeminiPro30', fallbackChain[0]);
+        System.assert(!fallbackChain.contains(null), 'Fallback chain should not include null values');
+    }
+
+    @IsTest
+    static void testGetAvailableModels_ContainsFollowUpAliasAndSingleDefault() {
+        List<RecordAdvisorController.ModelInfo> models = RecordAdvisorController.getAvailableModels();
+        Integer defaultCount = 0;
+        Boolean hasFollowUpAlias = false;
+
+        for (RecordAdvisorController.ModelInfo model : models) {
+            if (model.isDefault) {
+                defaultCount++;
+            }
+            if (model.apiName == 'sfdc_ai__DefaultVertexAIGemini30Flash') {
+                hasFollowUpAlias = true;
+            }
+        }
+
+        System.assertEquals(1, defaultCount, 'Exactly one default model should be advertised');
+        System.assert(hasFollowUpAlias, 'The follow-up model alias should be part of the curated catalog');
+    }
+
+    @IsTest
+    static void testAddHistoryMessages_FiltersRolesAndTruncatesLongMessages() {
+        String longAssistantMessage = 'a'.repeat(9000);
+        String historyJson = JSON.serialize(new List<Object>{
+            new Map<String, Object>{ 'role' => 'USER', 'message' => 'First prompt' },
+            new Map<String, Object>{ 'role' => 'assistant', 'message' => longAssistantMessage },
+            new Map<String, Object>{ 'role' => 'system', 'message' => 'Skip this' },
+            new Map<String, Object>{ 'role' => 'user', 'message' => '' }
+        });
+        List<aiplatform.ModelsAPI_ChatMessageRequest> messages = new List<aiplatform.ModelsAPI_ChatMessageRequest>();
+
+        RecordAdvisorController.addHistoryMessages(messages, historyJson);
+
+        System.assertEquals(2, messages.size(), 'Only user and assistant history should be preserved');
+        System.assertEquals('user', messages[0].role);
+        System.assertEquals('First prompt', messages[0].content);
+        System.assertEquals('assistant', messages[1].role);
+        System.assertEquals(8000, messages[1].content.length(), 'Long history entries should be truncated');
+    }
+
+    @IsTest
+    static void testAddHistoryMessages_IgnoresMalformedJson() {
+        List<aiplatform.ModelsAPI_ChatMessageRequest> messages = new List<aiplatform.ModelsAPI_ChatMessageRequest>();
+
+        RecordAdvisorController.addHistoryMessages(messages, 'not-json');
+
+        System.assertEquals(0, messages.size(), 'Malformed history should be ignored instead of throwing');
+    }
+
+    @IsTest
+    static void testValidateContextLength_AllowsBoundaryAndThrowsAboveLimit() {
+        RecordAdvisorController.validateContextLength('x'.repeat(300000), 'Boundary should be allowed');
+
+        try {
+            RecordAdvisorController.validateContextLength('x'.repeat(300001), 'Context too large');
+            System.assert(false, 'Expected a size validation exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('Context too large'));
+        }
+    }
+
+    @IsTest
+    static void testThrowUnavailableModelsException_UsesConfiguredFailureMessage() {
+        try {
+            RecordAdvisorController.throwUnavailableModelsException('sfdc_ai__DefaultGPT5', 503, true);
+            System.assert(false, 'Expected an unavailable model exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('sfdc_ai__DefaultGPT5'));
+            System.assert(e.getMessage().contains('503'));
+        }
+    }
+
+    @IsTest
+    static void testThrowUnavailableModelsException_UsesGenericFailureMessage() {
+        try {
+            RecordAdvisorController.throwUnavailableModelsException(null, null, false);
+            System.assert(false, 'Expected a generic failure exception');
+        } catch (AuraHandledException e) {
+            System.assertEquals('Script-thrown exception', e.getMessage());
+        }
+    }
 }

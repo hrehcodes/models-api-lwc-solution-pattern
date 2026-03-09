@@ -27,7 +27,12 @@ private class RecordContextService_Test {
             Phone = '555-9012',
             AccountId = testAccount.Id
         );
-        insert new List<Contact>{ testContact, secondContact };
+        Contact blankContact = new Contact(
+            FirstName = 'Blank',
+            LastName = 'Contact',
+            AccountId = testAccount.Id
+        );
+        insert new List<Contact>{ testContact, secondContact, blankContact };
 
         Opportunity testOpp = new Opportunity(
             Name = 'Test Opportunity',
@@ -260,6 +265,41 @@ private class RecordContextService_Test {
             1,
             ctx.relatedRecordSets[0].records.size(),
             'Top-level related record loading should respect the configured maxRelatedRecords setting'
+        );
+    }
+
+    @IsTest
+    static void testGetRecordContext_RelatedRecordsIncludeExplicitNullValues() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            acc.Id,
+            1,
+            new List<String>{ 'core' },
+            new List<String>{ 'Contacts' },
+            5
+        );
+        Test.stopTest();
+
+        Map<String, Object> blankContact;
+        for (Map<String, Object> contactRecord : ctx.relatedRecordSets[0].records) {
+            Map<String, Object> lastNameField = (Map<String, Object>) contactRecord.get('LastName');
+            if (lastNameField != null && String.valueOf(lastNameField.get('value')) == 'Contact') {
+                Map<String, Object> firstNameField = (Map<String, Object>) contactRecord.get('FirstName');
+                if (firstNameField != null && String.valueOf(firstNameField.get('value')) == 'Blank') {
+                    blankContact = contactRecord;
+                    break;
+                }
+            }
+        }
+
+        System.assertNotEquals(null, blankContact, 'Expected the blank contact to be included in related records');
+        System.assert(blankContact.containsKey('Email'), 'Null related-record fields should still be serialized');
+        System.assertEquals(
+            null,
+            ((Map<String, Object>) blankContact.get('Email')).get('value'),
+            'Blank related-record fields should be represented as explicit null values'
         );
     }
 

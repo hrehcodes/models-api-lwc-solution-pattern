@@ -13,6 +13,7 @@ public with sharing class RecordAdvisorController {
     private static final Integer MAX_HISTORY_MESSAGES = 60;
     private static final Integer MAX_HISTORY_MESSAGE_LENGTH = 8000;
     private static final String DEFAULT_MODEL = 'sfdc_ai__DefaultVertexAIGeminiPro30';
+    private static final String FOLLOW_UP_MODEL = 'sfdc_ai__DefaultVertexAIGemini30Flash';
     private static final Set<String> ALLOWED_HISTORY_ROLES = new Set<String>{ 'user', 'assistant' };
 
     // ── Wrapper Classes ──
@@ -36,6 +37,26 @@ public with sharing class RecordAdvisorController {
             this.provider = provider;
             this.isDefault = isDefault;
             this.creditType = creditType;
+        }
+    }
+
+    private class ModelCatalogEntry {
+        public String apiName { get; private set; }
+        public String label { get; private set; }
+        public String provider { get; private set; }
+        public Boolean isDefault { get; private set; }
+        public String creditType { get; private set; }
+
+        public ModelCatalogEntry(String apiName, String label, String provider, Boolean isDefault, String creditType) {
+            this.apiName = apiName;
+            this.label = label;
+            this.provider = provider;
+            this.isDefault = isDefault;
+            this.creditType = creditType;
+        }
+
+        public ModelInfo toModelInfo() {
+            return new ModelInfo(apiName, label, provider, isDefault, creditType);
         }
     }
 
@@ -196,7 +217,7 @@ public with sharing class RecordAdvisorController {
             userMsg.content = prompt;
             messages.add(userMsg);
 
-            String response = callModelsAPI(messages, 'sfdc_ai__DefaultVertexAIGemini30Flash');
+            String response = callModelsAPI(messages, FOLLOW_UP_MODEL);
 
             List<String> prompts = new List<String>();
             if (String.isNotBlank(response)) {
@@ -233,39 +254,11 @@ public with sharing class RecordAdvisorController {
      */
     @AuraEnabled(cacheable=true)
     public static List<ModelInfo> getAvailableModels() {
-        return new List<ModelInfo>{
-            // ── Google Vertex AI ──
-            new ModelInfo('sfdc_ai__DefaultVertexAIGeminiPro30', 'Gemini 3 Pro (Beta)', 'Google', true, 'standard'),
-            new ModelInfo('sfdc_ai__DefaultVertexAIGemini30Flash', 'Gemini 3 Flash (Beta)', 'Google', false, 'basic'),
-            new ModelInfo('sfdc_ai__DefaultVertexAIGeminiPro25', 'Gemini 2.5 Pro', 'Google', false, 'standard'),
-            new ModelInfo('sfdc_ai__DefaultVertexAIGemini25Flash001', 'Gemini 2.5 Flash', 'Google', false, 'basic'),
-            new ModelInfo('sfdc_ai__DefaultVertexAIGemini25FlashLite001', 'Gemini 2.5 Flash Lite', 'Google', false, 'basic'),
-
-            // ── OpenAI / Azure OpenAI ──
-            new ModelInfo('sfdc_ai__DefaultGPT5', 'GPT-5', 'OpenAI', false, 'standard'),
-            new ModelInfo('sfdc_ai__DefaultGPT5Mini', 'GPT-5 Mini', 'OpenAI', false, 'basic'),
-            new ModelInfo('sfdc_ai__DefaultGPT51', 'GPT-5.1 (Beta)', 'OpenAI', false, 'standard'),
-            new ModelInfo('sfdc_ai__DefaultGPT52', 'GPT-5.2 (Beta)', 'OpenAI', false, 'standard'),
-            new ModelInfo('sfdc_ai__DefaultGPT41', 'GPT-4.1', 'OpenAI', false, 'standard'),
-            new ModelInfo('sfdc_ai__DefaultGPT41Mini', 'GPT-4.1 Mini', 'OpenAI', false, 'basic'),
-            new ModelInfo('sfdc_ai__DefaultGPT4Omni', 'GPT-4o', 'OpenAI', false, 'standard'),
-            new ModelInfo('sfdc_ai__DefaultGPT4OmniMini', 'GPT-4o Mini', 'OpenAI', false, 'basic'),
-            new ModelInfo('sfdc_ai__DefaultO3', 'O3', 'OpenAI', false, 'standard'),
-            new ModelInfo('sfdc_ai__DefaultO4Mini', 'O4 Mini', 'OpenAI', false, 'standard'),
-
-            // ── Anthropic on Amazon Bedrock ──
-            new ModelInfo('sfdc_ai__DefaultBedrockAnthropicClaude45Sonnet', 'Claude Sonnet 4.5', 'Anthropic', false, 'standard'),
-            new ModelInfo('sfdc_ai__DefaultBedrockAnthropicClaude4Sonnet', 'Claude Sonnet 4', 'Anthropic', false, 'standard'),
-            new ModelInfo('sfdc_ai__DefaultBedrockAnthropicClaude45Haiku', 'Claude Haiku 4.5', 'Anthropic', false, 'standard'),
-            new ModelInfo('sfdc_ai__DefaultBedrockAnthropicClaude45Opus', 'Claude Opus 4.5 (Beta)', 'Anthropic', false, 'advanced'),
-
-            // ── Amazon on Bedrock ──
-            new ModelInfo('sfdc_ai__DefaultBedrockAmazonNovaPro', 'Nova Pro', 'Amazon', false, 'standard'),
-            new ModelInfo('sfdc_ai__DefaultBedrockAmazonNovaLite', 'Nova Lite', 'Amazon', false, 'basic'),
-
-            // ── NVIDIA on Amazon Bedrock ──
-            new ModelInfo('sfdc_ai__DefaultBedrockNvidiaNemotronNano330b', 'Nemotron 3 Nano 30B (Beta)', 'NVIDIA', false, 'basic')
-        };
+        List<ModelInfo> models = new List<ModelInfo>();
+        for (ModelCatalogEntry entry : getModelCatalog()) {
+            models.add(entry.toModelInfo());
+        }
+        return models;
     }
 
     // ── Private Methods ──
@@ -370,6 +363,63 @@ public with sharing class RecordAdvisorController {
         return prompt;
     }
 
+    @TestVisible
+    private static List<ModelCatalogEntry> getModelCatalog() {
+        return new List<ModelCatalogEntry>{
+            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGeminiPro30', 'Gemini 3 Pro (Beta)', 'Google', true, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini30Flash', 'Gemini 3 Flash (Beta)', 'Google', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGeminiPro25', 'Gemini 2.5 Pro', 'Google', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini25Flash001', 'Gemini 2.5 Flash', 'Google', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini25FlashLite001', 'Gemini 2.5 Flash Lite', 'Google', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT5', 'GPT-5', 'OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT5Mini', 'GPT-5 Mini', 'OpenAI', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT51', 'GPT-5.1 (Beta)', 'OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT52', 'GPT-5.2 (Beta)', 'OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT41', 'GPT-4.1', 'OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT41Mini', 'GPT-4.1 Mini', 'OpenAI', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT4Omni', 'GPT-4o', 'OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT4OmniMini', 'GPT-4o Mini', 'OpenAI', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultO3', 'O3', 'OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultO4Mini', 'O4 Mini', 'OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude45Sonnet', 'Claude Sonnet 4.5', 'Anthropic', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude4Sonnet', 'Claude Sonnet 4', 'Anthropic', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude45Haiku', 'Claude Haiku 4.5', 'Anthropic', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude45Opus', 'Claude Opus 4.5 (Beta)', 'Anthropic', false, 'advanced'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAmazonNovaPro', 'Nova Pro', 'Amazon', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAmazonNovaLite', 'Nova Lite', 'Amazon', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockNvidiaNemotronNano330b', 'Nemotron 3 Nano 30B (Beta)', 'NVIDIA', false, 'basic')
+        };
+    }
+
+    @TestVisible
+    private static List<String> buildModelFallbackChain(String primaryModel) {
+        List<String> modelsToTry = new List<String>();
+        if (String.isNotBlank(primaryModel)) {
+            modelsToTry.add(primaryModel);
+        }
+
+        modelsToTry.addAll(new List<String>{
+            DEFAULT_MODEL,
+            'sfdc_ai__DefaultGPT5',
+            'sfdc_ai__DefaultBedrockAnthropicClaude4Sonnet',
+            'sfdc_ai__DefaultGPT4Omni',
+            'sfdc_ai__DefaultVertexAIGemini25Flash001',
+            'sfdc_ai__DefaultGPT4OmniMini'
+        });
+
+        Set<String> seen = new Set<String>();
+        List<String> uniqueModels = new List<String>();
+        for (String modelName : modelsToTry) {
+            if (String.isBlank(modelName) || !seen.add(modelName)) {
+                continue;
+            }
+            uniqueModels.add(modelName);
+        }
+
+        return uniqueModels;
+    }
+
+    @TestVisible
     private static void addHistoryMessages(
         List<aiplatform.ModelsAPI_ChatMessageRequest> messages,
         String conversationHistoryJson
@@ -402,6 +452,7 @@ public with sharing class RecordAdvisorController {
         }
     }
 
+    @TestVisible
     private static void validateContextLength(String contextJson, String errorMessage) {
         if (String.isNotBlank(contextJson) && contextJson.length() > MAX_CONTEXT_LENGTH) {
             throw new AuraHandledException(errorMessage);
@@ -412,29 +463,13 @@ public with sharing class RecordAdvisorController {
         List<aiplatform.ModelsAPI_ChatMessageRequest> messages,
         String primaryModel
     ) {
-        List<String> modelsToTry = new List<String>{
-            primaryModel,
-            DEFAULT_MODEL,
-            'sfdc_ai__DefaultGPT5',
-            'sfdc_ai__DefaultBedrockAnthropicClaude4Sonnet',
-            'sfdc_ai__DefaultGPT4Omni',
-            'sfdc_ai__DefaultVertexAIGemini25Flash001',
-            'sfdc_ai__DefaultGPT4OmniMini'
-        };
+        List<String> modelsToTry = buildModelFallbackChain(primaryModel);
+        Boolean sawResponseException = false;
+        Integer lastResponseCode;
 
-        // Deduplicate while preserving order
-        Set<String> seen = new Set<String>();
-        List<String> uniqueModels = new List<String>();
-        for (String m : modelsToTry) {
-            if (seen.add(m)) {
-                uniqueModels.add(m);
-            }
-        }
-
-        for (Integer i = 0; i < uniqueModels.size(); i++) {
-            String modelName = uniqueModels[i];
-            Boolean isLast = (i == uniqueModels.size() - 1);
-
+        for (Integer i = 0; i < modelsToTry.size(); i++) {
+            String modelName = modelsToTry[i];
+            Boolean isLast = (i == modelsToTry.size() - 1);
             try {
                 aiplatform.ModelsAPI modelsAPI = new aiplatform.ModelsAPI();
                 aiplatform.ModelsAPI.createChatGenerations_Request request =
@@ -462,18 +497,47 @@ public with sharing class RecordAdvisorController {
                 }
 
             } catch (aiplatform.ModelsAPI.createChatGenerations_ResponseException e) {
+                sawResponseException = true;
+                lastResponseCode = e.responseCode;
                 System.debug('Model ' + modelName + ' failed: ' + e.responseCode + ' - ' + e.getMessage());
                 if (isLast) {
-                    throw new AuraHandledException('AI model error (code ' + e.responseCode + '). Please try again.');
+                    throwUnavailableModelsException(primaryModel, lastResponseCode, sawResponseException);
                 }
             } catch (AuraHandledException e) {
                 throw e;
             } catch (Exception e) {
                 System.debug('Model ' + modelName + ' unexpected error: ' + e.getMessage());
                 if (isLast) {
+                    if (sawResponseException) {
+                        throwUnavailableModelsException(primaryModel, lastResponseCode, true);
+                    }
                     throw new AuraHandledException('Error calling AI model: ' + e.getMessage());
                 }
             }
+        }
+
+        throw new AuraHandledException('Failed to get response from AI models.');
+    }
+
+    @TestVisible
+    private static void throwUnavailableModelsException(
+        String primaryModel,
+        Integer lastResponseCode,
+        Boolean hadConfiguredModelFailures
+    ) {
+        if (hadConfiguredModelFailures) {
+            String targetModel = String.isNotBlank(primaryModel) ? primaryModel : DEFAULT_MODEL;
+            String message = 'No configured AI models are currently available in this org. '
+                + 'Verify Salesforce Models API access and the configured model aliases';
+            if (String.isNotBlank(targetModel)) {
+                message += ' (starting with ' + targetModel + ')';
+            }
+            if (lastResponseCode != null) {
+                message += '. Last model error code: ' + lastResponseCode + '.';
+            } else {
+                message += '.';
+            }
+            throw new AuraHandledException(message);
         }
 
         throw new AuraHandledException('Failed to get response from AI models.');

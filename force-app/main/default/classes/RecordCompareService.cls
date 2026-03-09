@@ -9,7 +9,9 @@ public with sharing class RecordCompareService {
 
     private static final Integer MIN_RECORDS = 2;
     private static final Integer ABSOLUTE_MAX_RECORDS = 5;
+    private static final Integer MAX_SUGGESTION_LOOKUPS = 10;
     private static final String RECORD_ID_PATTERN = '^[a-zA-Z0-9]{15}$|^[a-zA-Z0-9]{18}$';
+    @TestVisible private static Integer suggestionLookupLimitOverride;
 
     // ── Wrapper Classes ──
 
@@ -65,7 +67,8 @@ public with sharing class RecordCompareService {
         List<String> includedCategories,
         List<String> includedRelationships,
         Integer maxCompareRecords,
-        Integer maxRelatedRecords
+        Integer maxRelatedRecords,
+        Integer promptWarningThresholdTokens
     ) {
         maxCompareRecords = normalizeMaxCompareRecords(maxCompareRecords);
         if (recordIds == null || recordIds.size() < MIN_RECORDS) {
@@ -144,6 +147,8 @@ public with sharing class RecordCompareService {
         ctx.commonFields = new List<String>(commonFieldSet);
         ctx.commonFields.sort();
 
+        enforceComparisonContextTokenLimit(ctx, promptWarningThresholdTokens);
+
         return ctx;
     }
 
@@ -155,12 +160,7 @@ public with sharing class RecordCompareService {
 
         for (String objectApiName : globalDescribe.keySet()) {
             Schema.DescribeSObjectResult objDescribe = globalDescribe.get(objectApiName).getDescribe();
-            if (!objDescribe.isAccessible() || !objDescribe.isQueryable() || objDescribe.isDeprecatedAndHidden()) {
-                continue;
-            }
-
-            String nameField = RecordSchemaUtils.getNameField(objDescribe);
-            if (nameField == 'Id') {
+            if (!isCompareSupportedObject(objDescribe)) {
                 continue;
             }
 
@@ -200,6 +200,9 @@ public with sharing class RecordCompareService {
         if (!objDescribe.isAccessible()) {
             throw new AuraHandledException('You do not have access to this object type.');
         }
+        if (!isCompareSupportedObject(objDescribe)) {
+            return new List<Map<String, String>>();
+        }
 
         if (maxResults == null || maxResults <= 0) maxResults = 8;
         if (maxResults > 20) maxResults = 20;
@@ -210,19 +213,17 @@ public with sharing class RecordCompareService {
         Set<String> usedIds = new Set<String>{ recordId };
 
         // Strategy 1: find siblings via lookup/master-detail fields pointing to same parent
-        List<String> parentLookups = new List<String>();
-        for (String fn : fieldMap.keySet()) {
-            Schema.DescribeFieldResult dfr = fieldMap.get(fn).getDescribe();
-            if (!dfr.isAccessible()) continue;
-            if (dfr.getType() == Schema.DisplayType.REFERENCE && fn != 'id') {
-                parentLookups.add(fn);
-            }
-        }
+        List<String> parentLookups = getSuggestionLookupFields(objDescribe);
 
         if (!parentLookups.isEmpty()) {
             // Object/field names sourced from Schema Describe, not user input -- safe for dynamic SOQL
-            String parentQuery = 'SELECT ' + String.join(parentLookups, ', ') + ' FROM ' + objectApiName + ' WHERE Id = :sfId';
-            List<SObject> parentResult = Database.query(parentQuery);
+            List<SObject> parentResult = new List<SObject>();
+            try {
+                String parentQuery = 'SELECT ' + String.join(parentLookups, ', ') + ' FROM ' + objectApiName + ' WHERE Id = :sfId';
+                parentResult = Database.query(parentQuery);
+            } catch (Exception e) {
+                parentResult = new List<SObject>();
+            }
 
             if (!parentResult.isEmpty()) {
                 SObject currentRec = parentResult[0];
@@ -241,14 +242,18 @@ public with sharing class RecordCompareService {
                         + ' ORDER BY LastModifiedDate DESC'
                         + ' LIMIT ' + remaining;
 
-                    for (SObject sib : Database.query(siblingQuery)) {
-                        String sibId = sib.Id;
-                        if (usedIds.contains(sibId)) continue;
-                        usedIds.add(sibId);
-                        results.add(new Map<String, String>{
-                            'id' => sibId,
-                            'name' => String.valueOf(sib.get(nameField))
-                        });
+                    try {
+                        for (SObject sib : Database.query(siblingQuery)) {
+                            String sibId = sib.Id;
+                            if (usedIds.contains(sibId)) continue;
+                            usedIds.add(sibId);
+                            results.add(new Map<String, String>{
+                                'id' => sibId,
+                                'name' => String.valueOf(sib.get(nameField))
+                            });
+                        }
+                    } catch (Exception e) {
+                        continue;
                     }
                 }
             }
@@ -263,14 +268,18 @@ public with sharing class RecordCompareService {
                 + ' ORDER BY LastModifiedDate DESC'
                 + ' LIMIT ' + remaining;
 
-            for (SObject rec : Database.query(recentQuery)) {
-                String recId = rec.Id;
-                if (usedIds.contains(recId)) continue;
-                usedIds.add(recId);
-                results.add(new Map<String, String>{
-                    'id' => recId,
-                    'name' => String.valueOf(rec.get(nameField))
-                });
+            try {
+                for (SObject rec : Database.query(recentQuery)) {
+                    String recId = rec.Id;
+                    if (usedIds.contains(recId)) continue;
+                    usedIds.add(recId);
+                    results.add(new Map<String, String>{
+                        'id' => recId,
+                        'name' => String.valueOf(rec.get(nameField))
+                    });
+                }
+            } catch (Exception e) {
+                return results;
             }
         }
 
@@ -295,41 +304,42 @@ public with sharing class RecordCompareService {
         if (maxResults > 50) maxResults = 50;
 
         Schema.DescribeSObjectResult objDescribe = objType.getDescribe();
-        if (!objDescribe.isAccessible() || !objDescribe.isQueryable()) {
+        if (!isCompareSupportedObject(objDescribe)) {
             throw new AuraHandledException('Invalid or inaccessible object type.');
         }
-
         String nameField = RecordSchemaUtils.getNameField(objDescribe);
-        if (nameField == 'Id') {
-            throw new AuraHandledException('This object type does not support record-name search.');
-        }
 
         List<Map<String, String>> results = new List<Map<String, String>>();
 
-        if (String.isBlank(searchTerm) || searchTerm.length() < 2) {
-            // Return recent records
-            String soql = 'SELECT Id, ' + nameField
-                + ' FROM ' + objectApiName
-                + ' ORDER BY LastModifiedDate DESC LIMIT ' + maxResults;
-            for (SObject rec : Database.query(soql)) {
-                results.add(new Map<String, String>{
-                    'id' => rec.Id,
-                    'name' => String.valueOf(rec.get(nameField))
-                });
+        try {
+            if (String.isBlank(searchTerm) || searchTerm.length() < 2) {
+                String soql = 'SELECT Id, ' + nameField
+                    + ' FROM ' + objectApiName
+                    + ' ORDER BY LastModifiedDate DESC LIMIT ' + maxResults;
+                for (SObject rec : Database.query(soql)) {
+                    results.add(new Map<String, String>{
+                        'id' => rec.Id,
+                        'name' => String.valueOf(rec.get(nameField))
+                    });
+                }
+            } else {
+                String searchPattern = '%' + searchTerm.trim() + '%';
+                String soql = 'SELECT Id, ' + nameField
+                    + ' FROM ' + objectApiName
+                    + ' WHERE ' + nameField + ' LIKE :searchPattern'
+                    + ' ORDER BY LastModifiedDate DESC'
+                    + ' LIMIT ' + maxResults;
+                for (SObject rec : Database.query(soql)) {
+                    results.add(new Map<String, String>{
+                        'id' => rec.Id,
+                        'name' => String.valueOf(rec.get(nameField))
+                    });
+                }
             }
-        } else {
-            String searchPattern = '%' + searchTerm.trim() + '%';
-            String soql = 'SELECT Id, ' + nameField
-                + ' FROM ' + objectApiName
-                + ' WHERE ' + nameField + ' LIKE :searchPattern'
-                + ' ORDER BY LastModifiedDate DESC'
-                + ' LIMIT ' + maxResults;
-            for (SObject rec : Database.query(soql)) {
-                results.add(new Map<String, String>{
-                    'id' => rec.Id,
-                    'name' => String.valueOf(rec.get(nameField))
-                });
-            }
+        } catch (Exception e) {
+            throw new AuraHandledException(
+                'Unable to search records for this object type. Try a different object or reduce the scope of the picker.'
+            );
         }
 
         return results;
@@ -381,6 +391,82 @@ public with sharing class RecordCompareService {
             return ABSOLUTE_MAX_RECORDS;
         }
         return Math.min(Math.max(maxCompareRecords, MIN_RECORDS), ABSOLUTE_MAX_RECORDS);
+    }
+
+    @TestVisible
+    private static Boolean isCompareSupportedObject(Schema.DescribeSObjectResult objDescribe) {
+        if (objDescribe == null || !objDescribe.isAccessible() || !objDescribe.isQueryable()
+            || objDescribe.isDeprecatedAndHidden()) {
+            return false;
+        }
+
+        String nameField = RecordSchemaUtils.getNameField(objDescribe);
+        if (nameField == 'Id') {
+            return false;
+        }
+
+        Map<String, Schema.SObjectField> fieldMap = objDescribe.fields.getMap();
+        if (!fieldMap.containsKey(nameField) || !fieldMap.containsKey('LastModifiedDate')) {
+            return false;
+        }
+
+        Schema.DescribeFieldResult nameFieldDescribe = fieldMap.get(nameField).getDescribe();
+        Schema.DescribeFieldResult lastModifiedDescribe = fieldMap.get('LastModifiedDate').getDescribe();
+
+        return nameFieldDescribe.isAccessible()
+            && nameFieldDescribe.isFilterable()
+            && lastModifiedDescribe.isAccessible()
+            && lastModifiedDescribe.isSortable();
+    }
+
+    @TestVisible
+    private static List<String> getSuggestionLookupFields(Schema.DescribeSObjectResult objDescribe) {
+        List<String> parentLookups = new List<String>();
+        if (objDescribe == null) {
+            return parentLookups;
+        }
+
+        Integer lookupLimit = suggestionLookupLimitOverride == null
+            ? MAX_SUGGESTION_LOOKUPS
+            : Math.max(suggestionLookupLimitOverride, 0);
+
+        Map<String, Schema.SObjectField> fieldMap = objDescribe.fields.getMap();
+        for (String fn : fieldMap.keySet()) {
+            if (parentLookups.size() >= lookupLimit) {
+                break;
+            }
+
+            Schema.DescribeFieldResult dfr = fieldMap.get(fn).getDescribe();
+            if (!dfr.isAccessible()) continue;
+            if (dfr.getType() == Schema.DisplayType.REFERENCE && fn != 'Id') {
+                parentLookups.add(fn);
+            }
+        }
+
+        return parentLookups;
+    }
+
+    @TestVisible
+    private static Integer estimateJsonTokens(String jsonValue) {
+        return String.isBlank(jsonValue) ? 0 : (jsonValue.length() + 3) / 4;
+    }
+
+    private static void enforceComparisonContextTokenLimit(
+        ComparisonContext ctx,
+        Integer promptWarningThresholdTokens
+    ) {
+        if (ctx == null || promptWarningThresholdTokens == null || promptWarningThresholdTokens <= 0) {
+            return;
+        }
+
+        Integer estimatedTokens = estimateJsonTokens(JSON.serialize(ctx));
+        if (estimatedTokens > promptWarningThresholdTokens) {
+            throw new AuraHandledException(
+                'The selected comparison context is estimated at about ' + estimatedTokens
+                + ' tokens, above the configured limit of ' + promptWarningThresholdTokens
+                + '. Reduce the number of records, relationships, depth, or related records per relationship and try again.'
+            );
+        }
     }
 
 }

@@ -109,7 +109,7 @@ describe('c-record-compare', () => {
         jest.clearAllMocks();
     });
 
-    it('loads object options from Apex instead of a hardcoded list', async () => {
+    it('loads object options from Apex into the shared picker', async () => {
         const element = createElement('c-record-compare', {
             is: RecordCompare
         });
@@ -117,8 +117,8 @@ describe('c-record-compare', () => {
 
         await flushPromises();
 
-        const combo = element.shadowRoot.querySelector('lightning-combobox');
-        expect(combo.options).toEqual([
+        const picker = element.shadowRoot.querySelector('c-record-picker');
+        expect(picker.objectTypeOptions).toEqual([
             { label: 'Account', value: 'Account' },
             { label: 'Custom Object', value: 'Custom_Object__c' }
         ]);
@@ -132,18 +132,16 @@ describe('c-record-compare', () => {
 
         await flushPromises();
 
-        const combo = element.shadowRoot.querySelector('lightning-combobox');
-        combo.dispatchEvent(
-            new CustomEvent('change', {
+        const picker = element.shadowRoot.querySelector('c-record-picker');
+        picker.dispatchEvent(
+            new CustomEvent('objecttypechange', {
                 detail: { value: 'Custom_Object__c' }
             })
         );
         await flushPromises();
 
-        const inputs = element.shadowRoot.querySelectorAll('lightning-input');
-        const recordSearchInput = inputs[1];
-        recordSearchInput.dispatchEvent(
-            new CustomEvent('change', {
+        picker.dispatchEvent(
+            new CustomEvent('searchchange', {
                 detail: { value: 'Alpha' }
             })
         );
@@ -151,7 +149,7 @@ describe('c-record-compare', () => {
         jest.advanceTimersByTime(300);
         await flushPromises();
 
-        expect(searchRecords).toHaveBeenCalledWith({
+        expect(searchRecords).toHaveBeenLastCalledWith({
             objectApiName: 'Custom_Object__c',
             searchTerm: 'Alpha',
             maxResults: 10
@@ -200,11 +198,11 @@ describe('c-record-compare', () => {
         element.relatedRecordsPerRelationship = 7;
         document.body.appendChild(element);
 
-        await flushPromises();
+        await flushPromises(6);
 
-        const searchInput = element.shadowRoot.querySelector('lightning-input');
-        searchInput.dispatchEvent(
-            new CustomEvent('change', {
+        const picker = element.shadowRoot.querySelector('c-record-picker');
+        picker.dispatchEvent(
+            new CustomEvent('searchchange', {
                 detail: { value: 'Second' }
             })
         );
@@ -212,29 +210,27 @@ describe('c-record-compare', () => {
         jest.advanceTimersByTime(300);
         await flushPromises();
 
-        const resultItem = element.shadowRoot.querySelector('.result-item');
-        resultItem.click();
+        picker.dispatchEvent(
+            new CustomEvent('recordselect', {
+                detail: { id: '001000000000010AAA', name: 'Alpha Account' }
+            })
+        );
         await flushPromises();
 
         const actionBar = element.shadowRoot.querySelector('.selection-actions');
         expect(actionBar).not.toBeNull();
         expect(actionBar.textContent).toContain('Ready to compare 2 records');
 
-        const stepHeaders = [...element.shadowRoot.querySelectorAll('.step-header')];
-        expect(stepHeaders[0].textContent).toContain('Choose records');
-        expect(stepHeaders[1].textContent).toContain('Optional context settings');
-        expect(stepHeaders[2].textContent).toContain('Chat');
-
-        const settingsButton = [...actionBar.querySelectorAll('lightning-button')]
-            .find(button => button.label === 'Optional Context Settings');
-        settingsButton.click();
+        [...actionBar.querySelectorAll('lightning-button')]
+            .find(button => button.label === 'Optional Context Settings')
+            .click();
         await flushPromises();
 
         expect(element.shadowRoot.querySelector('c-context-panel')).not.toBeNull();
 
-        const loadButton = [...element.shadowRoot.querySelectorAll('lightning-button')]
-            .find(button => button.label === 'Load Comparison');
-        loadButton.click();
+        [...element.shadowRoot.querySelectorAll('lightning-button')]
+            .find(button => button.label === 'Load Comparison')
+            .click();
         await flushPromises();
 
         expect(getComparisonContext).toHaveBeenCalledWith({
@@ -243,18 +239,14 @@ describe('c-record-compare', () => {
             includedCategories: ['core'],
             includedRelationships: ['Contacts'],
             maxCompareRecords: 4,
-            maxRelatedRecords: 7
+            maxRelatedRecords: 7,
+            promptWarningThresholdTokens: 20000
         });
 
         expect(element.shadowRoot.querySelector('c-chat-panel')).not.toBeNull();
     });
 
     it('prevents adding records beyond the configured compare limit and shows a warning', async () => {
-        searchRecords.mockResolvedValue([
-            { id: '001000000000010AAA', name: 'Alpha Account' },
-            { id: '001000000000011AAA', name: 'Beta Account' }
-        ]);
-
         const element = createElement('c-record-compare', {
             is: RecordCompare
         });
@@ -263,24 +255,18 @@ describe('c-record-compare', () => {
         element.maxCompareRecords = 2;
         document.body.appendChild(element);
 
-        await flushPromises();
+        await flushPromises(6);
 
-        const searchInput = element.shadowRoot.querySelector('lightning-input');
-        searchInput.dispatchEvent(
-            new CustomEvent('change', {
-                detail: { value: 'Account' }
+        const picker = element.shadowRoot.querySelector('c-record-picker');
+        picker.dispatchEvent(
+            new CustomEvent('recordselect', {
+                detail: { id: '001000000000010AAA', name: 'Alpha Account' }
             })
         );
-
-        jest.advanceTimersByTime(300);
         await flushPromises();
 
-        const resultItems = element.shadowRoot.querySelectorAll('.result-item');
-        resultItems[0].click();
-        await flushPromises();
-
-        expect(element.shadowRoot.textContent).toContain('configured compare limit of 2 records');
-        expect(element.shadowRoot.querySelectorAll('.result-item')).toHaveLength(0);
+        expect(picker.hasReachedSelectionLimit).toBe(true);
+        expect(picker.selectionLimitMessage).toContain('configured compare limit of 2 records');
     });
 
     it('keeps discovery-only count warnings local and does not mark the comparison incomplete', async () => {
@@ -319,19 +305,14 @@ describe('c-record-compare', () => {
         element.recordId = '001000000000001AAA';
         document.body.appendChild(element);
 
-        await flushPromises();
+        await flushPromises(6);
 
-        const searchInput = element.shadowRoot.querySelector('lightning-input');
-        searchInput.dispatchEvent(
-            new CustomEvent('change', {
-                detail: { value: 'Second' }
+        const picker = element.shadowRoot.querySelector('c-record-picker');
+        picker.dispatchEvent(
+            new CustomEvent('recordselect', {
+                detail: { id: '001000000000010AAA', name: 'Alpha Account' }
             })
         );
-
-        jest.advanceTimersByTime(300);
-        await flushPromises();
-
-        element.shadowRoot.querySelector('.result-item').click();
         await flushPromises();
 
         [...element.shadowRoot.querySelectorAll('lightning-button')]
@@ -353,5 +334,22 @@ describe('c-record-compare', () => {
         expect(chatPanel.contextStatus).toBe('ready');
         expect(chatPanel.contextWarningSummary).toBeNull();
         expect(chatPanel.comparisonContextJson).toContain('"contextStatus":"ready"');
+    });
+
+    it('shows an unsupported-object message when the current object is not in the safe compare subset', async () => {
+        const element = createElement('c-record-compare', {
+            is: RecordCompare
+        });
+        element.objectApiName = 'OpportunityLineItem';
+        element.recordId = '00k000000000001AAA';
+        document.body.appendChild(element);
+
+        await flushPromises(6);
+
+        const picker = element.shadowRoot.querySelector('c-record-picker');
+        expect(picker.objectTypeError).toBe('OpportunityLineItem is not supported for compare mode.');
+        expect(element.shadowRoot.textContent).toContain('Compare mode is not supported for OpportunityLineItem.');
+        expect(searchRecords).not.toHaveBeenCalled();
+        expect(getSuggestedRecords).not.toHaveBeenCalled();
     });
 });

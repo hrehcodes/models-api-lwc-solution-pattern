@@ -310,6 +310,7 @@ public with sharing class RecordContextService {
                 'SELECT ' + fallbackFields + ' FROM ' + objectApiName + ' WHERE Id = :recordId LIMIT 1'
             );
         }
+        records = stripReadableRecords(records);
 
         if (records.isEmpty()) {
             throw new AuraHandledException('Record not found or you do not have access.');
@@ -760,12 +761,13 @@ public with sharing class RecordContextService {
                 + ' WHERE ' + foreignKeyField + ' = :recordId LIMIT ' + maxRecords
             );
         }
+        records = stripReadableRecords(records);
 
         RelatedRecordSet rrs = new RelatedRecordSet(relName, childObjectName, childDescribe.getLabel());
         Map<String, Schema.SObjectField> childFieldMap = childDescribe.fields.getMap();
 
         for (SObject rec : records) {
-            rrs.records.add(buildRecordMap(rec, childFieldMap));
+            rrs.records.add(buildRecordMap(rec, childFieldMap, queryFields));
         }
 
         return rrs;
@@ -845,13 +847,15 @@ public with sharing class RecordContextService {
         return wrapped != null ? String.valueOf(wrapped) : null;
     }
 
-    private static Map<String, Object> buildRecordMap(SObject record, Map<String, Schema.SObjectField> fieldMap) {
+    private static Map<String, Object> buildRecordMap(
+        SObject record,
+        Map<String, Schema.SObjectField> fieldMap,
+        List<String> queriedFields
+    ) {
         Map<String, Object> result = new Map<String, Object>();
-        Map<String, Object> populated = record.getPopulatedFieldsAsMap();
-
-        for (String fieldName : populated.keySet()) {
+        for (String fieldName : queriedFields) {
             try {
-                Object val = populated.get(fieldName);
+                Object val = record.get(fieldName);
                 Map<String, Object> fieldData = new Map<String, Object>();
                 fieldData.put('value', RecordSchemaUtils.normalizeValue(val));
 
@@ -952,7 +956,7 @@ public with sharing class RecordContextService {
             String nameField = RecordSchemaUtils.getNameField(objDescribe);
             // Object/field names sourced from Schema Describe, not user input -- safe for dynamic SOQL
             String soql = 'SELECT ' + nameField + ' FROM ' + objectApiName + ' WHERE Id = :recordId LIMIT 1';
-            List<SObject> records = Database.query(soql);
+            List<SObject> records = stripReadableRecords(Database.query(soql));
             if (!records.isEmpty()) {
                 return String.valueOf(records[0].get(nameField));
             }
@@ -988,6 +992,19 @@ public with sharing class RecordContextService {
         Integer zero = 0;
         Integer failure = 1 / zero;
         failure++;
+    }
+
+    private static List<SObject> stripReadableRecords(List<SObject> records) {
+        if (records == null || records.isEmpty()) {
+            return records;
+        }
+
+        try {
+            SObjectAccessDecision decision = Security.stripInaccessible(AccessType.READABLE, records);
+            return decision == null ? records : decision.getRecords();
+        } catch (Exception e) {
+            return records;
+        }
     }
 
 }

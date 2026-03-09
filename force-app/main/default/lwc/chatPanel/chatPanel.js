@@ -164,8 +164,17 @@ export default class ChatPanel extends LightningElement {
         return SUGGESTED_PROMPTS[this.objectApiName] || SUGGESTED_PROMPTS.default;
     }
 
+    get hasGroundedContext() {
+        if (this.mode === 'compare') {
+            return Boolean(this.comparisonContextJson);
+        }
+        return Boolean(this.recordContextJson);
+    }
+
     get showSuggestedPromptButtons() {
-        return this.showSuggestedPromptsEnabled && this.suggestedPrompts.length > 0;
+        return this.hasGroundedContext
+            && this.showSuggestedPromptsEnabled
+            && this.suggestedPrompts.length > 0;
     }
 
     get followUpPromptsKeyed() {
@@ -173,7 +182,9 @@ export default class ChatPanel extends LightningElement {
     }
 
     get hasFollowUpPrompts() {
-        return this.enableSuggestedFollowUpsEnabled && this.followUpPromptsKeyed.length > 0;
+        return this.hasGroundedContext
+            && this.enableSuggestedFollowUpsEnabled
+            && this.followUpPromptsKeyed.length > 0;
     }
 
     get showModelPickerEnabled() {
@@ -323,7 +334,7 @@ export default class ChatPanel extends LightningElement {
             if (result.success) {
                 this.addMessage('assistant', result.response);
                 this.trackUsage(text, result.response);
-                if (this.enableSuggestedFollowUpsEnabled) {
+                if (this.enableSuggestedFollowUpsEnabled && this.hasGroundedContext) {
                     this.generateFollowUps();
                 }
             } else {
@@ -473,7 +484,7 @@ export default class ChatPanel extends LightningElement {
     // ── Follow-up Generation ──
 
     async generateFollowUps() {
-        if (!this.enableSuggestedFollowUpsEnabled) {
+        if (!this.enableSuggestedFollowUpsEnabled || !this.hasGroundedContext) {
             return;
         }
 

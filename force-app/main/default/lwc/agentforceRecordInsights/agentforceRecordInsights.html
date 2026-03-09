@@ -68,36 +68,35 @@
             <!-- Insights Mode -->
             <template lwc:if={isInsightsMode}>
                 <!-- No record context (app page) -->
-                <template lwc:if={needsRecordSelection}>
+                <template lwc:if={showInsightsRecordPicker}>
                     <div class="slds-p-around_medium slds-text-align_center">
                         <lightning-icon icon-name="utility:info" size="small" class="slds-m-bottom_small"></lightning-icon>
                         <p class="slds-text-body_regular slds-m-bottom_medium">
-                            Place this component on a record page for automatic context detection, or select a record below.
+                            Place this component on a record page for automatic context detection, or search for a supported record below.
                         </p>
-                        <div class="slds-m-bottom_small">
-                            <lightning-combobox
-                                label="Object Type"
-                                value={selectedObjectType}
-                                options={objectTypeOptions}
-                                onchange={handleObjectTypeChange}
-                                placeholder="Select object type..."
-                            ></lightning-combobox>
-                        </div>
-                        <template lwc:if={selectedObjectType}>
-                            <lightning-input
-                                label="Record ID"
-                                value={manualRecordId}
-                                onchange={handleManualRecordIdChange}
-                                placeholder="Paste a record ID..."
-                            ></lightning-input>
-                            <lightning-button
-                                label="Load Record"
-                                variant="brand"
-                                onclick={handleLoadManualRecord}
-                                disabled={loadRecordDisabled}
-                                class="slds-m-top_small"
-                            ></lightning-button>
-                        </template>
+                        <c-record-picker
+                            mode="insights"
+                            object-type-options={filteredObjectTypeOptions}
+                            selected-object-type={selectedObjectType}
+                            object-type-filter={objectTypeFilter}
+                            is-loading-object-types={isLoadingObjectTypes}
+                            object-type-error={objectTypeError}
+                            no-filtered-object-options={noFilteredObjectOptions}
+                            selected-records={selectedInsightsRecords}
+                            can-search={insightsCanSearch}
+                            search-term={searchTerm}
+                            search-results={searchResults}
+                            search-error={searchError}
+                            show-advanced-id-entry="true"
+                            manual-record-id={manualRecordId}
+                            onobjecttypechange={handleObjectTypeChange}
+                            onobjectfilterchange={handleObjectFilterChange}
+                            onsearchchange={handleSearchChange}
+                            onrecordselect={handleInsightsRecordSelect}
+                            onrecordremove={handleInsightsRecordRemove}
+                            onmanualidchange={handleManualRecordIdChange}
+                            onmanualload={handleLoadManualRecord}
+                        ></c-record-picker>
                     </div>
                 </template>
 

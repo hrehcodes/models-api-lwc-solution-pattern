@@ -37,6 +37,7 @@ export default class RecordCompare extends LightningElement {
     @track selectedRecords = [];
     searchTerm = '';
     @track searchResults = [];
+    searchError;
     comparisonContextJson;
     comparisonLoaded = false;
     isLoadingComparison = false;
@@ -72,19 +73,18 @@ export default class RecordCompare extends LightningElement {
         this.currentDepth = this.normalizeDepth(this.defaultDepth);
         if (this.objectApiName) {
             this.selectedObjectType = this.objectApiName;
-            this.loadCompareContextMetadata({ resetSelections: true });
-        } else {
-            this.loadAvailableObjectTypes();
         }
+        this.loadAvailableObjectTypes();
         if (this.recordId && this.objectApiName) {
             this.selectedRecords = [{
                 id: this.recordId,
                 name: 'Current Record'
             }];
-            if (this.showSuggestedComparisonRecordsEnabled) {
-                this.loadSuggestions();
-            }
         }
+    }
+
+    disconnectedCallback() {
+        clearTimeout(this._searchTimeout);
     }
 
     // ── Getters ──
@@ -120,7 +120,8 @@ export default class RecordCompare extends LightningElement {
     }
 
     get canSearch() {
-        return this.selectedObjectType && this.selectedRecords.length < this.normalizedMaxCompareRecords;
+        return this.isActiveObjectTypeSupported
+            && this.selectedRecords.length < this.normalizedMaxCompareRecords;
     }
 
     get canCompare() {
@@ -139,6 +140,11 @@ export default class RecordCompare extends LightningElement {
         return this.selectedObjectType || this.objectApiName;
     }
 
+    get isActiveObjectTypeSupported() {
+        return Boolean(this.activeObjectType)
+            && this.objectTypeOptions.some(option => option.value === this.activeObjectType);
+    }
+
     get objectIconName() {
         return OBJECT_ICON_MAP[this.activeObjectType] || 'standard:custom_notification';
     }
@@ -154,6 +160,7 @@ export default class RecordCompare extends LightningElement {
     get showSuggestions() {
         return this.showSuggestedComparisonRecordsEnabled
             && this.recordId
+            && this.isActiveObjectTypeSupported
             && this.selectedRecords.length < this.normalizedMaxCompareRecords;
     }
 
@@ -182,7 +189,7 @@ export default class RecordCompare extends LightningElement {
     }
 
     get showCompareContextSettings() {
-        return Boolean(this.activeObjectType);
+        return this.isActiveObjectTypeSupported;
     }
 
     get normalizedMaxCompareRecords() {
@@ -218,7 +225,7 @@ export default class RecordCompare extends LightningElement {
     }
 
     get canAccessSettingsStep() {
-        return Boolean(this.activeObjectType) && this.hasMinimumSelectedRecords;
+        return this.isActiveObjectTypeSupported && this.hasMinimumSelectedRecords;
     }
 
     get settingsStepDisabled() {
@@ -252,6 +259,10 @@ export default class RecordCompare extends LightningElement {
     }
 
     get selectionActionMessage() {
+        if (this.activeObjectType && !this.isActiveObjectTypeSupported) {
+            return `Compare mode is not supported for ${this.activeObjectType}.`;
+        }
+
         if (this.isLoadingComparison) {
             return 'Loading the comparison and preparing the chat context.';
         }
@@ -471,6 +482,24 @@ export default class RecordCompare extends LightningElement {
                 label: option.label,
                 value: option.apiName
             }));
+
+            if (this.activeObjectType && !this.isActiveObjectTypeSupported) {
+                this.objectTypeError = `${this.activeObjectType} is not supported for compare mode.`;
+                this.availableContext = null;
+                this.searchResults = [];
+                this.suggestedRecords = [];
+                this.suggestionsLoaded = true;
+                return;
+            }
+
+            if (this.activeObjectType) {
+                this.objectTypeError = null;
+                this.performSearch();
+                this.loadCompareContextMetadata({ resetSelections: true });
+                if (this.recordId && this.objectApiName && this.showSuggestedComparisonRecordsEnabled) {
+                    this.loadSuggestions();
+                }
+            }
         } catch (error) {
             this.objectTypeOptions = [];
             this.objectTypeError = error?.body?.message || error?.message || 'Failed to load object types.';
@@ -480,7 +509,7 @@ export default class RecordCompare extends LightningElement {
     }
 
     async loadCompareContextMetadata({ resetSelections = false } = {}) {
-        if (!this.activeObjectType) {
+        if (!this.activeObjectType || !this.isActiveObjectTypeSupported) {
             this.availableContext = null;
             this.resetCompareWarningState();
             return;
@@ -532,6 +561,12 @@ export default class RecordCompare extends LightningElement {
     }
 
     refreshCompareContextMetadata(resetSelections = false) {
+        if (!this.isActiveObjectTypeSupported) {
+            this.availableContext = null;
+            this.resetCompareWarningState();
+            return;
+        }
+
         const nextReferenceRecordId = this.referenceRecordId;
         if (
             resetSelections
@@ -546,7 +581,7 @@ export default class RecordCompare extends LightningElement {
     // ── Suggestions ──
 
     async loadSuggestions() {
-        if (!this.recordId) return;
+        if (!this.recordId || !this.isActiveObjectTypeSupported) return;
         this.isLoadingSuggestions = true;
         try {
             const results = await getSuggestedRecords({
@@ -564,19 +599,6 @@ export default class RecordCompare extends LightningElement {
         }
     }
 
-    handleAddSuggested(event) {
-        const id = event.currentTarget.dataset.id;
-        const name = event.currentTarget.dataset.name;
-        if (!id || !name) return;
-        if (!this.canAddRecord(id)) return;
-
-        this.selectedRecords = [...this.selectedRecords, { id, name }];
-        this.suggestedRecords = this.suggestedRecords.filter(r => r.id !== id);
-        this.invalidateComparison();
-        this.refreshCompareContextMetadata();
-        this.syncActiveStepAfterSelectionChange();
-    }
-
     // ── Event Handlers ──
 
     handleObjectTypeChange(event) {
@@ -587,9 +609,12 @@ export default class RecordCompare extends LightningElement {
         this.suggestionsLoaded = false;
         this.includedCategories = [];
         this.includedRelationships = [];
+        this.searchError = null;
+        this.objectTypeError = null;
         this.activeStep = 'records';
         this.invalidateComparison();
         this.loadCompareContextMetadata({ resetSelections: true });
+        this.performSearch();
     }
 
     handleObjectFilterChange(event) {
@@ -607,7 +632,10 @@ export default class RecordCompare extends LightningElement {
     }
 
     async performSearch() {
-        if (!this.activeObjectType) return;
+        if (!this.activeObjectType || !this.isActiveObjectTypeSupported) {
+            this.searchResults = [];
+            return;
+        }
 
         try {
             const results = await searchRecords({
@@ -618,36 +646,38 @@ export default class RecordCompare extends LightningElement {
 
             const selectedIds = new Set(this.selectedRecords.map(r => r.id));
             this.searchResults = (results || []).filter(r => !selectedIds.has(r.id));
+            this.searchError = null;
         } catch (error) {
-            console.error('Search error:', error);
             this.searchResults = [];
+            this.searchError = error?.body?.message || error?.message || 'Search failed.';
         }
     }
 
-    handleAddRecord(event) {
-        const id = event.currentTarget.dataset.id;
-        const name = event.currentTarget.dataset.name;
+    handleRecordSelect(event) {
+        const { id, name } = event.detail;
 
         if (!this.canAddRecord(id)) return;
 
         this.selectedRecords = [...this.selectedRecords, { id, name }];
         this.searchResults = this.searchResults.filter(r => r.id !== id);
         this.suggestedRecords = this.suggestedRecords.filter(r => r.id !== id);
+        this.searchError = null;
         this.invalidateComparison();
         this.refreshCompareContextMetadata();
         this.syncActiveStepAfterSelectionChange();
     }
 
     handleRemoveRecord(event) {
-        const id = event.target.dataset.id;
+        const id = event.detail.id;
         this.selectedRecords = this.selectedRecords.filter(r => r.id !== id);
         this.invalidateComparison();
         this.refreshCompareContextMetadata();
+        this.performSearch();
         this.syncActiveStepAfterSelectionChange();
     }
 
     async handleLoadComparison() {
-        if (this.selectedRecords.length < 2) return;
+        if (this.selectedRecords.length < 2 || !this.isActiveObjectTypeSupported) return;
 
         this.isLoadingComparison = true;
         this.compareError = null;
@@ -661,7 +691,8 @@ export default class RecordCompare extends LightningElement {
                 includedCategories: this.includedCategories,
                 includedRelationships: this.includedRelationships,
                 maxCompareRecords: this.normalizedMaxCompareRecords,
-                maxRelatedRecords: this.normalizedRelatedRecordsPerRelationship
+                maxRelatedRecords: this.normalizedRelatedRecordsPerRelationship,
+                promptWarningThresholdTokens: this.normalizedPromptWarningThreshold
             });
 
             this.comparisonContextJson = JSON.stringify(this.serializeComparisonForChat(ctx));

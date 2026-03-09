@@ -2,6 +2,8 @@ import { LightningElement, api } from 'lwc';
 import AGENTFORCE_ICON from '@salesforce/resourceUrl/Agentforce_Icon';
 import getAvailableContext from '@salesforce/apex/RecordContextService.getAvailableContext';
 import getRecordContext from '@salesforce/apex/RecordContextService.getRecordContext';
+import getAvailableCompareObjects from '@salesforce/apex/RecordCompareService.getAvailableCompareObjects';
+import searchRecords from '@salesforce/apex/RecordCompareService.searchRecords';
 
 const MODE_INSIGHTS = 'insights';
 const MODE_COMPARE = 'compare';
@@ -56,19 +58,18 @@ export default class AgentforceRecordInsights extends LightningElement {
     activeRecordId;
     activeObjectApiName;
     activeRecordName;
-
+    objectTypeOptions = [];
+    objectTypeFilter = '';
+    objectTypeError;
+    searchTerm = '';
+    searchResults = [];
+    searchError;
+    selectedInsightsRecords = [];
+    isLoadingObjectTypes = false;
     _contextLoadTimeout;
+    _searchTimeout;
     _resizeObserver;
     headerWidth = 0;
-
-    objectTypeOptions = [
-        { label: 'Account', value: 'Account' },
-        { label: 'Opportunity', value: 'Opportunity' },
-        { label: 'Contact', value: 'Contact' },
-        { label: 'Case', value: 'Case' },
-        { label: 'Lead', value: 'Lead' },
-        { label: 'Custom Object (enter ID)', value: 'custom' }
-    ];
 
     connectedCallback() {
         this.contextPanelOpen = this.isBooleanEnabled(this.startWithContextPanelOpen);
@@ -79,6 +80,8 @@ export default class AgentforceRecordInsights extends LightningElement {
             this.activeRecordId = this.recordId;
             this.activeObjectApiName = this.objectApiName;
             this.loadAvailableContext();
+        } else if (this.mode === MODE_INSIGHTS) {
+            this.ensureInsightsPickerInitialized();
         }
     }
 
@@ -106,6 +109,7 @@ export default class AgentforceRecordInsights extends LightningElement {
     }
 
     disconnectedCallback() {
+        clearTimeout(this._searchTimeout);
         if (this._resizeObserver) {
             this._resizeObserver.disconnect();
             this._resizeObserver = null;
@@ -161,8 +165,15 @@ export default class AgentforceRecordInsights extends LightningElement {
         return this.isInsightsMode && this.hasRecordContext;
     }
 
-    get needsRecordSelection() {
-        return !this.activeRecordId && !this.isLoadingContext && !this.contextError;
+    get isStandaloneInsightsEntry() {
+        return !this.recordId;
+    }
+
+    get showInsightsRecordPicker() {
+        return this.isStandaloneInsightsEntry
+            && this.isInsightsMode
+            && !this.isLoadingContext
+            && (!this.activeRecordId || Boolean(this.contextError));
     }
 
     get hasRecordContext() {
@@ -174,6 +185,33 @@ export default class AgentforceRecordInsights extends LightningElement {
     }
 
     get loadRecordDisabled() { return !this.manualRecordId; }
+    get filteredObjectTypeOptions() {
+        const normalizedFilter = this.objectTypeFilter.trim().toLowerCase();
+        let options = this.objectTypeOptions;
+
+        if (normalizedFilter) {
+            options = options.filter(option =>
+                option.label.toLowerCase().includes(normalizedFilter)
+                || option.value.toLowerCase().includes(normalizedFilter)
+            );
+        }
+
+        const selectedOption = this.objectTypeOptions.find(option => option.value === this.selectedObjectType);
+        if (selectedOption && !options.some(option => option.value === selectedOption.value)) {
+            options = [selectedOption, ...options];
+        }
+
+        return options;
+    }
+    get noFilteredObjectOptions() {
+        return !this.isLoadingObjectTypes
+            && !this.objectTypeError
+            && this.objectTypeOptions.length > 0
+            && this.filteredObjectTypeOptions.length === 0;
+    }
+    get insightsCanSearch() {
+        return Boolean(this.selectedObjectType) && !this.isLoadingContext;
+    }
     get contextToggleVariant() { return this.contextPanelOpen ? 'brand' : 'border'; }
     get useModeMenu() { return this.headerWidth > 0 && this.headerWidth < 940; }
     get useShortTitle() { return this.headerWidth > 0 && this.headerWidth < 760; }
@@ -216,15 +254,57 @@ export default class AgentforceRecordInsights extends LightningElement {
         this.setMode(event.detail.value);
     }
 
-    handleObjectTypeChange(event) { this.selectedObjectType = event.detail.value; }
+    handleObjectTypeChange(event) {
+        this.selectedObjectType = event.detail.value;
+        this.searchTerm = '';
+        this.searchResults = [];
+        this.searchError = null;
+        this.objectTypeError = null;
+        this.manualRecordId = '';
+        this.clearStandaloneInsightsSelection();
+        this.performInsightsSearch();
+    }
     handleManualRecordIdChange(event) { this.manualRecordId = event.detail.value; }
 
     handleLoadManualRecord() {
         if (this.manualRecordId) {
+            this.selectedInsightsRecords = [{ id: this.manualRecordId, name: this.manualRecordId }];
             this.activeRecordId = this.manualRecordId;
-            this.activeObjectApiName = this.selectedObjectType === 'custom' ? null : this.selectedObjectType;
+            this.activeObjectApiName = null;
             this.loadAvailableContext();
         }
+    }
+
+    handleObjectFilterChange(event) {
+        this.objectTypeFilter = event.detail.value || '';
+    }
+
+    handleSearchChange(event) {
+        this.searchTerm = event.detail.value || '';
+
+        clearTimeout(this._searchTimeout);
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        this._searchTimeout = setTimeout(() => {
+            this.performInsightsSearch();
+        }, 300);
+    }
+
+    handleInsightsRecordSelect(event) {
+        const { id, name } = event.detail;
+        if (!id) {
+            return;
+        }
+
+        this.searchError = null;
+        this.contextError = null;
+        this.selectedInsightsRecords = [{ id, name }];
+        this.activeRecordId = id;
+        this.activeObjectApiName = this.selectedObjectType || null;
+        this.loadAvailableContext();
+    }
+
+    handleInsightsRecordRemove() {
+        this.clearStandaloneInsightsSelection();
     }
 
     async loadAvailableContext() {
@@ -380,6 +460,9 @@ export default class AgentforceRecordInsights extends LightningElement {
 
     setMode(nextMode) {
         this.mode = this.resolveAllowedMode(this.normalizeMode(nextMode));
+        if (this.mode === MODE_INSIGHTS && this.isStandaloneInsightsEntry) {
+            this.ensureInsightsPickerInitialized();
+        }
     }
 
     resolveAllowedMode(candidateMode) {
@@ -442,6 +525,68 @@ export default class AgentforceRecordInsights extends LightningElement {
 
     isBooleanEnabled(value) {
         return value !== false && value !== 'false';
+    }
+
+    async ensureInsightsPickerInitialized() {
+        if (this.objectTypeOptions.length > 0 || this.isLoadingObjectTypes) {
+            return;
+        }
+
+        await this.loadInsightsObjectTypes();
+    }
+
+    async loadInsightsObjectTypes() {
+        this.isLoadingObjectTypes = true;
+        this.objectTypeError = null;
+
+        try {
+            const options = await getAvailableCompareObjects();
+            this.objectTypeOptions = (options || []).map(option => ({
+                label: option.label,
+                value: option.apiName
+            }));
+        } catch (error) {
+            this.objectTypeOptions = [];
+            this.objectTypeError = this.extractErrorMessage(error);
+        } finally {
+            this.isLoadingObjectTypes = false;
+        }
+    }
+
+    async performInsightsSearch() {
+        if (!this.selectedObjectType) {
+            this.searchResults = [];
+            return;
+        }
+
+        try {
+            const results = await searchRecords({
+                objectApiName: this.selectedObjectType,
+                searchTerm: this.searchTerm,
+                maxResults: 10
+            });
+            const selectedIds = new Set(this.selectedInsightsRecords.map(record => record.id));
+            this.searchResults = (results || []).filter(record => !selectedIds.has(record.id));
+            this.searchError = null;
+        } catch (error) {
+            this.searchResults = [];
+            this.searchError = this.extractErrorMessage(error);
+        }
+    }
+
+    clearStandaloneInsightsSelection() {
+        if (this.recordId) {
+            return;
+        }
+
+        this.selectedInsightsRecords = [];
+        this.activeRecordId = null;
+        this.activeObjectApiName = null;
+        this.activeRecordName = null;
+        this.availableContext = null;
+        this.recordContextJson = null;
+        this.contextError = null;
+        this.resetContextWarningState();
     }
 
     extractErrorMessage(error) {

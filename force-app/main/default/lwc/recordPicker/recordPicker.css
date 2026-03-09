@@ -1,0 +1,111 @@
+:host {
+    display: block;
+}
+
+.record-picker {
+    display: flex;
+    flex-direction: column;
+}
+
+.picker-copy {
+    color: #5c5c5c;
+    font-size: 0.8125rem;
+}
+
+.picker-error {
+    color: #8e030f;
+    font-size: 0.8125rem;
+}
+
+.search-row {
+    display: flex;
+    align-items: center;
+}
+
+.search-input {
+    flex: 1;
+}
+
+.search-results {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border: 1px solid #d8dde6;
+    border-radius: 6px;
+    max-height: 140px;
+    overflow-y: auto;
+}
+
+.result-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    cursor: pointer;
+    border-bottom: 1px solid #f3f3f3;
+    transition: background-color 0.15s;
+    font-size: 0.8125rem;
+}
+
+.result-item:last-child {
+    border-bottom: none;
+}
+
+.result-item:hover {
+    background-color: #f3f3f3;
+}
+
+.selected-records {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.selected-records-primary {
+    margin-bottom: 12px;
+}
+
+.suggested-section {
+    background-color: #fafaf9;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.suggested-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.compare-helptext {
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+    transform: translateY(-1px);
+}
+
+.suggestion-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.suggestion-pill {
+    cursor: pointer;
+    font-size: 0.75rem;
+}
+
+.manual-entry {
+    padding-top: 4px;
+    border-top: 1px solid #e5e5e5;
+}
+
+.manual-toggle {
+    align-self: flex-start;
+}
+
+.manual-entry-body {
+    margin-top: 8px;
+}

@@ -3,6 +3,8 @@ import { registerApexTestWireAdapter } from '@salesforce/sfdx-lwc-jest';
 import AgentforceRecordInsights from 'c/agentforceRecordInsights';
 import getAvailableContext from '@salesforce/apex/RecordContextService.getAvailableContext';
 import getRecordContext from '@salesforce/apex/RecordContextService.getRecordContext';
+import getAvailableCompareObjects from '@salesforce/apex/RecordCompareService.getAvailableCompareObjects';
+import searchRecords from '@salesforce/apex/RecordCompareService.searchRecords';
 import getAvailableModels from '@salesforce/apex/RecordAdvisorController.getAvailableModels';
 
 jest.mock(
@@ -15,6 +17,22 @@ jest.mock(
 
 jest.mock(
     '@salesforce/apex/RecordContextService.getRecordContext',
+    () => ({
+        default: jest.fn()
+    }),
+    { virtual: true }
+);
+
+jest.mock(
+    '@salesforce/apex/RecordCompareService.getAvailableCompareObjects',
+    () => ({
+        default: jest.fn()
+    }),
+    { virtual: true }
+);
+
+jest.mock(
+    '@salesforce/apex/RecordCompareService.searchRecords',
     () => ({
         default: jest.fn()
     }),
@@ -77,6 +95,12 @@ describe('c-agentforce-record-insights', () => {
 
         getAvailableContext.mockResolvedValue(baseAvailableContext);
         getRecordContext.mockResolvedValue(baseRecordContext);
+        getAvailableCompareObjects.mockResolvedValue([
+            { apiName: 'Account', label: 'Account' }
+        ]);
+        searchRecords.mockResolvedValue([
+            { id: '001000000000010AAA', name: 'App Picker Account' }
+        ]);
     });
 
     afterEach(() => {
@@ -231,5 +255,82 @@ describe('c-agentforce-record-insights', () => {
 
         expect(contextPanel.hideContextWarnings).toBe(true);
         expect(chatPanel.hideContextWarnings).toBe(true);
+    });
+
+    it('uses the shared picker to search and load a record for app-page insights mode', async () => {
+        const element = createElement('c-agentforce-record-insights', {
+            is: AgentforceRecordInsights
+        });
+        element.defaultMode = 'insights';
+        element.availableModes = 'insightsOnly';
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        const picker = element.shadowRoot.querySelector('c-record-picker');
+        expect(picker).not.toBeNull();
+        expect(picker.objectTypeOptions).toEqual([{ label: 'Account', value: 'Account' }]);
+
+        picker.dispatchEvent(
+            new CustomEvent('objecttypechange', {
+                detail: { value: 'Account' }
+            })
+        );
+        await flushPromises();
+
+        picker.dispatchEvent(
+            new CustomEvent('recordselect', {
+                detail: { id: '001000000000010AAA', name: 'App Picker Account' }
+            })
+        );
+        await flushPromises();
+
+        expect(getAvailableContext).toHaveBeenCalledWith({
+            recordId: '001000000000010AAA'
+        });
+        expect(getRecordContext).toHaveBeenCalledWith({
+            recordId: '001000000000010AAA',
+            depth: 1,
+            includedCategories: ['core'],
+            includedRelationships: [],
+            maxRelatedRecords: 10
+        });
+    });
+
+    it('supports manual record ID loading for app-page insights mode', async () => {
+        const element = createElement('c-agentforce-record-insights', {
+            is: AgentforceRecordInsights
+        });
+        element.defaultMode = 'insights';
+        element.availableModes = 'insightsOnly';
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        const picker = element.shadowRoot.querySelector('c-record-picker');
+        picker.dispatchEvent(
+            new CustomEvent('manualidchange', {
+                detail: { value: '001000000000099AAA' }
+            })
+        );
+        picker.dispatchEvent(
+            new CustomEvent('manualload', {
+                detail: { value: '001000000000099AAA' }
+            })
+        );
+        await flushPromises();
+
+        expect(getAvailableContext).toHaveBeenCalledWith({
+            recordId: '001000000000099AAA'
+        });
+        expect(getRecordContext).toHaveBeenCalledWith({
+            recordId: '001000000000099AAA',
+            depth: 1,
+            includedCategories: ['core'],
+            includedRelationships: [],
+            maxRelatedRecords: 10
+        });
     });
 });

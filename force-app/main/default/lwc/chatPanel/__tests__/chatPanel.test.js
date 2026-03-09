@@ -141,6 +141,24 @@ describe('c-chat-panel', () => {
         expect(element.shadowRoot.querySelector('.context-warning')).toBeNull();
     });
 
+    it('suppresses suggested prompts when chat is ungrounded', async () => {
+        const element = createElement('c-chat-panel', {
+            is: ChatPanel
+        });
+        element.contextStatus = 'failed';
+        element.contextWarningSummary = 'Record context could not be loaded.';
+        element.showSuggestedPrompts = true;
+        element.recordContextJson = null;
+        element.objectApiName = 'Account';
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('.suggested-prompts')).toBeNull();
+        expect(element.shadowRoot.querySelector('.context-warning-failed')).not.toBeNull();
+    });
+
     it('shows a confirmation modal before sending prompts above the configured token threshold', async () => {
         const element = createElement('c-chat-panel', {
             is: ChatPanel
