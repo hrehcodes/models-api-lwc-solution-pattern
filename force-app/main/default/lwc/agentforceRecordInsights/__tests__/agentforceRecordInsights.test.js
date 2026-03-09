@@ -147,6 +147,36 @@ describe('c-agentforce-record-insights', () => {
         );
     });
 
+    it('does not treat discovery-only count warnings as incomplete loaded context', async () => {
+        getAvailableContext.mockResolvedValue({
+            ...baseAvailableContext,
+            completeness: {
+                isComplete: false,
+                hasWarnings: true,
+                warningMessages: ['Some related record counts could not be calculated and are shown without counts.']
+            }
+        });
+
+        const element = createElement('c-agentforce-record-insights', {
+            is: AgentforceRecordInsights
+        });
+        element.recordId = '001000000000001AAA';
+        element.objectApiName = 'Account';
+        element.startWithContextPanelOpen = true;
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        const contextPanel = element.shadowRoot.querySelector('c-context-panel');
+        const chatPanel = element.shadowRoot.querySelector('c-chat-panel');
+
+        expect(contextPanel.contextStatus).toBe('ready');
+        expect(chatPanel.contextStatus).toBe('ready');
+        expect(chatPanel.contextWarningSummary).toBeNull();
+        expect(chatPanel.recordContextJson).toContain('"contextStatus":"ready"');
+    });
+
     it('keeps chat available and marks it ungrounded when record context load fails', async () => {
         getRecordContext.mockRejectedValue({
             body: {

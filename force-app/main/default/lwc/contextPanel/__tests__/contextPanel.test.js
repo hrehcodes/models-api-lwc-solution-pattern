@@ -66,4 +66,29 @@ describe('c-context-panel', () => {
         expect(element.shadowRoot.textContent).toContain('250 tokens');
         expect(element.shadowRoot.querySelector('.token-meter-fill')).not.toBeNull();
     });
+
+    it('shows a local related-record count note when some relationship counts are unavailable', async () => {
+        const element = createElement('c-context-panel', {
+            is: ContextPanel
+        });
+        element.availableContext = {
+            ...baseAvailableContext,
+            recordId: '001000000000001AAA',
+            relationships: [
+                {
+                    relationshipName: 'Contacts',
+                    childObjectLabel: 'Contact',
+                    countStatus: 'unknown',
+                    includedByDefault: true
+                }
+            ]
+        };
+        document.body.appendChild(element);
+
+        await flushPromises();
+
+        expect(element.shadowRoot.textContent).toContain(
+            'Some relationship counts are unavailable and are shown without counts.'
+        );
+    });
 });

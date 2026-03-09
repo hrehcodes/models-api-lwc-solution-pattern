@@ -98,6 +98,7 @@ private class RecordContextService_Test {
         Test.stopTest();
 
         System.assertEquals('Contact', ctx.objectApiName);
+        System.assertEquals(false, ctx.completeness.hasWarnings, 'Discovery count metadata should not mark the context incomplete');
     }
 
     @IsTest
@@ -367,7 +368,16 @@ private class RecordContextService_Test {
         Test.stopTest();
 
         RecordContextService.resetTestHooks();
-        System.assertEquals(true, ctx.completeness.hasWarnings, 'Truncation should produce warnings');
-        System.assert(ctx.completeness.truncatedRelationshipCount > 0, 'Truncation count should be recorded');
+        System.assertEquals(false, ctx.completeness.hasWarnings, 'Count-only discovery gaps should not mark the context incomplete');
+
+        Boolean foundUnknownCount = false;
+        for (RecordContextService.RelationshipInfo relationshipInfo : ctx.relationships) {
+            if (relationshipInfo.countStatus == 'unknown') {
+                foundUnknownCount = true;
+                break;
+            }
+        }
+
+        System.assertEquals(true, foundUnknownCount, 'Relationships with unavailable counts should be labeled with countStatus=unknown');
     }
 }

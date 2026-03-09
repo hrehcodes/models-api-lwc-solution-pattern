@@ -11,6 +11,8 @@ public with sharing class RecordContextService {
     private static final Integer MAX_CONFIGURABLE_RELATED_RECORD_LIMIT = 20;
     private static final Integer MAX_RELATIONSHIP_QUERIES = 20;
     private static final Integer QUERY_SAFETY_BUFFER = 10;
+    private static final String COUNT_STATUS_KNOWN = 'known';
+    private static final String COUNT_STATUS_UNKNOWN = 'unknown';
     private static final Set<String> UNSUPPORTED_RELATIONSHIP_NAMES = new Set<String>{
         'RelatedClients', 'AttachedContentNotes', 'FieldChangeSnapshots',
         'NotesAndAttachments', 'OpenActivities', 'RecentFieldChanges'
@@ -107,6 +109,7 @@ public with sharing class RecordContextService {
         @AuraEnabled public String childObjectLabel { get; set; }
         @AuraEnabled public String fieldName { get; set; }
         @AuraEnabled public Integer recordCount { get; set; }
+        @AuraEnabled public String countStatus { get; set; }
         @AuraEnabled public Boolean includedByDefault { get; set; }
     }
 
@@ -573,8 +576,7 @@ public with sharing class RecordContextService {
 
         for (RelationshipCandidate candidate : defaultCandidates) {
             if (countQueriesUsed >= MAX_RELATIONSHIP_QUERIES) {
-                candidate.info.recordCount = null;
-                noteTruncatedRelationshipCount(completeness);
+                markRelationshipCountUnknown(candidate.info);
                 relationships.add(candidate.info);
                 continue;
             }
@@ -582,27 +584,34 @@ public with sharing class RecordContextService {
             countQueriesUsed++;
             Integer recordCount = countRelationshipRecords(candidate, recordId);
             if (recordCount == null) {
-                candidate.info.recordCount = null;
-                noteTruncatedRelationshipCount(completeness);
+                markRelationshipCountUnknown(candidate.info);
                 relationships.add(candidate.info);
                 continue;
             }
 
+            markRelationshipCountKnown(candidate.info, recordCount);
             if (recordCount > 0) {
-                candidate.info.recordCount = recordCount;
                 relationships.add(candidate.info);
             }
         }
 
         for (RelationshipCandidate candidate : optionalCandidates) {
             if (countQueriesUsed >= MAX_RELATIONSHIP_QUERIES) {
-                break;
+                markRelationshipCountUnknown(candidate.info);
+                relationships.add(candidate.info);
+                continue;
             }
 
             countQueriesUsed++;
             Integer recordCount = countRelationshipRecords(candidate, recordId);
-            if (recordCount != null && recordCount > 0) {
-                candidate.info.recordCount = recordCount;
+            if (recordCount == null) {
+                markRelationshipCountUnknown(candidate.info);
+                relationships.add(candidate.info);
+                continue;
+            }
+
+            markRelationshipCountKnown(candidate.info, recordCount);
+            if (recordCount > 0) {
                 relationships.add(candidate.info);
             }
         }
@@ -663,6 +672,7 @@ public with sharing class RecordContextService {
         info.childObjectLabel = childDescribe.getLabel();
         info.fieldName = cr.getField().getDescribe().getName();
         info.includedByDefault = isDefaultRelationship(childDescribe.getName());
+        info.countStatus = null;
 
         return new RelationshipCandidate(cr, childDescribe, info);
     }
@@ -718,10 +728,7 @@ public with sharing class RecordContextService {
             'OpportunityLineItem', 'OpportunityContactRole',
             'CampaignMember', 'Lead'
         };
-        if (defaults.contains(childObjectName)) return true;
-        // Include custom objects by default
-        if (childObjectName.endsWith('__c')) return true;
-        return false;
+        return defaults.contains(childObjectName);
     }
 
     private static RelatedRecordSet fetchRelatedRecords(
@@ -908,6 +915,18 @@ public with sharing class RecordContextService {
             completeness,
             'Some related record counts could not be calculated and are shown without counts.'
         );
+    }
+
+    private static void markRelationshipCountKnown(RelationshipInfo info, Integer recordCount) {
+        if (info == null) return;
+        info.recordCount = recordCount;
+        info.countStatus = COUNT_STATUS_KNOWN;
+    }
+
+    private static void markRelationshipCountUnknown(RelationshipInfo info) {
+        if (info == null) return;
+        info.recordCount = null;
+        info.countStatus = COUNT_STATUS_UNKNOWN;
     }
 
     private static void markIncomplete(ContextCompleteness completeness, String warningMessage) {

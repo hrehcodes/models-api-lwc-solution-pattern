@@ -146,10 +146,21 @@ export default class ContextPanel extends LightningElement {
         return this.availableContext.relationships.map(rel => ({
             ...rel,
             isIncluded: included.has(rel.relationshipName),
-            displayCount: typeof rel.recordCount === 'number' && rel.recordCount >= 0
+            countUnavailable: rel.countStatus === 'unknown',
+            displayCount: this.isRelationshipCountKnown(rel)
                 ? `(${rel.recordCount})`
                 : ''
         }));
+    }
+
+    get showRelationshipCountNote() {
+        return !this.hideContextWarningsEnabled
+            && Boolean(this.availableContext?.recordId)
+            && this.relationshipsWithState.some(rel => rel.countUnavailable);
+    }
+
+    get relationshipCountNote() {
+        return 'Some relationship counts are unavailable and are shown without counts.';
     }
 
     get allRelsSelected() {
@@ -250,6 +261,12 @@ export default class ContextPanel extends LightningElement {
 
     isBooleanEnabled(value) {
         return value !== false && value !== 'false';
+    }
+
+    isRelationshipCountKnown(relationship) {
+        return relationship?.countStatus !== 'unknown'
+            && typeof relationship.recordCount === 'number'
+            && relationship.recordCount >= 0;
     }
 
     toggleFieldsSection() { this.fieldsExpanded = !this.fieldsExpanded; }

@@ -145,6 +145,12 @@
     padding: 2px 0 2px 16px;
 }
 
+.section-note {
+    margin: 0.125rem 0 0.25rem 1.25rem;
+    font-size: 0.75rem;
+    color: #5c3b00;
+}
+
 .category-label {
     font-size: 0.75rem;
 }

@@ -59,7 +59,6 @@ export default class RecordCompare extends LightningElement {
     contextStatus;
     contextWarningSummary;
     @track contextWarningMessages = [];
-    availableContextWarnings = [];
     comparisonContextWarnings = [];
 
     _sessionTokens = 0;
@@ -498,7 +497,6 @@ export default class RecordCompare extends LightningElement {
             });
 
             this.availableContext = ctx;
-            this.availableContextWarnings = this.extractCompletenessMessages(ctx.completeness);
             this._loadedContextObjectType = this.activeObjectType;
             this._loadedContextReferenceRecordId = referenceRecordId;
 
@@ -762,21 +760,16 @@ export default class RecordCompare extends LightningElement {
         this.contextStatus = null;
         this.contextWarningSummary = null;
         this.contextWarningMessages = [];
-        this.availableContextWarnings = [];
         this.comparisonContextWarnings = [];
     }
 
     updateCompareWarningState(completeness) {
         this.comparisonContextWarnings = this.extractCompletenessMessages(completeness);
-        const combinedWarnings = this.combineWarnings(
-            this.availableContextWarnings,
-            this.comparisonContextWarnings
-        );
 
-        if (combinedWarnings.length > 0) {
+        if (this.comparisonContextWarnings.length > 0) {
             this.contextStatus = 'partial';
             this.contextWarningSummary = 'Some compared record context was skipped or truncated. AI responses may be incomplete.';
-            this.contextWarningMessages = combinedWarnings;
+            this.contextWarningMessages = [...this.comparisonContextWarnings];
             return;
         }
 
@@ -788,20 +781,13 @@ export default class RecordCompare extends LightningElement {
     setCompareContextFailureState(error) {
         this.contextStatus = 'failed';
         this.contextWarningSummary = 'Comparison context could not be loaded. Responses may be ungrounded until the comparison loads successfully.';
-        this.contextWarningMessages = this.combineWarnings(
-            [this.extractErrorMessage(error)],
-            this.availableContextWarnings
-        );
+        this.contextWarningMessages = [this.extractErrorMessage(error)];
     }
 
     extractCompletenessMessages(completeness) {
         return Array.isArray(completeness?.warningMessages)
             ? completeness.warningMessages.filter(Boolean)
             : [];
-    }
-
-    combineWarnings(...warningGroups) {
-        return [...new Set([].concat(...warningGroups).filter(Boolean))];
     }
 
     syncActiveStepAfterSelectionChange() {
@@ -901,10 +887,7 @@ export default class RecordCompare extends LightningElement {
             return null;
         }
 
-        const warningMessages = this.combineWarnings(
-            this.availableContextWarnings,
-            this.extractCompletenessMessages(ctx.completeness)
-        );
+        const warningMessages = this.extractCompletenessMessages(ctx.completeness);
 
         return {
             selectionSummary: {

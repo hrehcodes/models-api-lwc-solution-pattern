@@ -126,6 +126,10 @@
                 </div>
             </div>
 
+            <template lwc:if={showRelationshipCountNote}>
+                <div class="section-note">{relationshipCountNote}</div>
+            </template>
+
             <template lwc:if={relationshipsExpanded}>
                 <div class="select-all-row slds-m-top_xx-small slds-m-bottom_xx-small">
                     <label class="slds-checkbox">

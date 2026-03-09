@@ -282,4 +282,76 @@ describe('c-record-compare', () => {
         expect(element.shadowRoot.textContent).toContain('configured compare limit of 2 records');
         expect(element.shadowRoot.querySelectorAll('.result-item')).toHaveLength(0);
     });
+
+    it('keeps discovery-only count warnings local and does not mark the comparison incomplete', async () => {
+        getAvailableContextForObject.mockResolvedValue({
+            objectApiName: 'Account',
+            objectLabel: 'Account',
+            recordName: 'Account comparison settings',
+            fieldCategories: [
+                {
+                    name: 'core',
+                    label: 'Core Fields',
+                    includedByDefault: true,
+                    fieldCount: 1,
+                    fields: [{ apiName: 'Name', label: 'Account Name', fieldType: 'STRING' }]
+                }
+            ],
+            relationships: [
+                {
+                    relationshipName: 'Contacts',
+                    childObjectLabel: 'Contact',
+                    countStatus: 'unknown',
+                    includedByDefault: true
+                }
+            ],
+            completeness: {
+                isComplete: false,
+                hasWarnings: true,
+                warningMessages: ['Some related record counts could not be calculated and are shown without counts.']
+            }
+        });
+
+        const element = createElement('c-record-compare', {
+            is: RecordCompare
+        });
+        element.objectApiName = 'Account';
+        element.recordId = '001000000000001AAA';
+        document.body.appendChild(element);
+
+        await flushPromises();
+
+        const searchInput = element.shadowRoot.querySelector('lightning-input');
+        searchInput.dispatchEvent(
+            new CustomEvent('change', {
+                detail: { value: 'Second' }
+            })
+        );
+
+        jest.advanceTimersByTime(300);
+        await flushPromises();
+
+        element.shadowRoot.querySelector('.result-item').click();
+        await flushPromises();
+
+        [...element.shadowRoot.querySelectorAll('lightning-button')]
+            .find(button => button.label === 'Optional Context Settings')
+            .click();
+        await flushPromises();
+
+        const contextPanel = element.shadowRoot.querySelector('c-context-panel');
+        expect(contextPanel.contextStatus).toBe('ready');
+        expect(contextPanel.contextWarningSummary).toBeNull();
+        expect(contextPanel.availableContext.relationships[0].countStatus).toBe('unknown');
+
+        [...element.shadowRoot.querySelectorAll('lightning-button')]
+            .find(button => button.label === 'Load Comparison')
+            .click();
+        await flushPromises();
+
+        const chatPanel = element.shadowRoot.querySelector('c-chat-panel');
+        expect(chatPanel.contextStatus).toBe('ready');
+        expect(chatPanel.contextWarningSummary).toBeNull();
+        expect(chatPanel.comparisonContextJson).toContain('"contextStatus":"ready"');
+    });
 });

@@ -49,7 +49,6 @@ export default class AgentforceRecordInsights extends LightningElement {
     contextLoadStatus;
     contextWarningSummary;
     contextWarningMessages = [];
-    availableContextWarnings = [];
     recordContextWarnings = [];
 
     selectedObjectType = '';
@@ -240,7 +239,6 @@ export default class AgentforceRecordInsights extends LightningElement {
             this.availableContext = ctx;
             this.activeObjectApiName = ctx.objectApiName;
             this.activeRecordName = ctx.recordName;
-            this.availableContextWarnings = this.extractCompletenessMessages(ctx.completeness);
             this.includedCategories = this.resolveConfiguredSelections(
                 ctx.fieldCategories,
                 'name',
@@ -319,21 +317,16 @@ export default class AgentforceRecordInsights extends LightningElement {
         this.contextLoadStatus = null;
         this.contextWarningSummary = null;
         this.contextWarningMessages = [];
-        this.availableContextWarnings = [];
         this.recordContextWarnings = [];
     }
 
     updateContextWarningState(completeness) {
         this.recordContextWarnings = this.extractCompletenessMessages(completeness);
-        const combinedWarnings = this.combineWarnings(
-            this.availableContextWarnings,
-            this.recordContextWarnings
-        );
 
-        if (combinedWarnings.length) {
+        if (this.recordContextWarnings.length) {
             this.contextLoadStatus = 'partial';
             this.contextWarningSummary = 'Some record context was skipped or truncated. AI responses may be incomplete.';
-            this.contextWarningMessages = combinedWarnings;
+            this.contextWarningMessages = [...this.recordContextWarnings];
             return;
         }
 
@@ -345,10 +338,7 @@ export default class AgentforceRecordInsights extends LightningElement {
     setContextFailureState(error) {
         this.contextLoadStatus = 'failed';
         this.contextWarningSummary = 'Record context could not be loaded. Responses may be ungrounded until context loads successfully.';
-        this.contextWarningMessages = this.combineWarnings(
-            [this.extractErrorMessage(error)],
-            this.availableContextWarnings
-        );
+        this.contextWarningMessages = [this.extractErrorMessage(error)];
     }
 
     extractCompletenessMessages(completeness) {
@@ -357,19 +347,12 @@ export default class AgentforceRecordInsights extends LightningElement {
             : [];
     }
 
-    combineWarnings(...warningGroups) {
-        return [...new Set([].concat(...warningGroups).filter(Boolean))];
-    }
-
     serializeContextForChat(ctx) {
         if (!ctx) {
             return null;
         }
 
-        const warningMessages = this.combineWarnings(
-            this.availableContextWarnings,
-            this.extractCompletenessMessages(ctx.completeness)
-        );
+        const warningMessages = this.extractCompletenessMessages(ctx.completeness);
 
         return {
             selectionSummary: {
