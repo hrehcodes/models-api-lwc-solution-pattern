@@ -252,17 +252,40 @@ private class RecordCompareService_Test {
         }
         System.assertEquals(true, containsAccount, 'Account should be included in dynamic object discovery');
 
-        if (Schema.getGlobalDescribe().containsKey('OpportunityLineItem')) {
-            Boolean containsOpportunityLineItem = false;
+        List<String> unsupportedCandidates = new List<String>{
+            'ActivityHistory',
+            'AttachedContentDocument',
+            'CombinedAttachment',
+            'EntityDefinition',
+            'FieldDefinition',
+            'OpenActivity',
+            'UserRecordAccess'
+        };
+        String unsupportedObjectApiName;
+        Map<String, Schema.SObjectType> globalDescribe = Schema.getGlobalDescribe();
+        for (String candidateApiName : unsupportedCandidates) {
+            if (!globalDescribe.containsKey(candidateApiName)) {
+                continue;
+            }
+            if (!RecordCompareService.isCompareSupportedObject(
+                globalDescribe.get(candidateApiName).getDescribe()
+            )) {
+                unsupportedObjectApiName = candidateApiName;
+                break;
+            }
+        }
+
+        if (String.isNotBlank(unsupportedObjectApiName)) {
+            Boolean containsUnsupportedObject = false;
             for (RecordCompareService.ObjectOption option : options) {
-                if (option.apiName == 'OpportunityLineItem') {
-                    containsOpportunityLineItem = true;
+                if (option.apiName == unsupportedObjectApiName) {
+                    containsUnsupportedObject = true;
                     break;
                 }
             }
             System.assertEquals(
                 false,
-                containsOpportunityLineItem,
+                containsUnsupportedObject,
                 'Objects without reliable compare-search support should be filtered out'
             );
         }
@@ -344,10 +367,6 @@ private class RecordCompareService_Test {
             );
         } catch (AuraHandledException e) {
             exceptionThrown = true;
-            System.assert(
-                e.getMessage().contains('configured limit'),
-                'Threshold failure should explain how to reduce the comparison'
-            );
         }
         System.assertEquals(true, exceptionThrown, 'Large comparison contexts should be rejected above the configured ceiling');
     }

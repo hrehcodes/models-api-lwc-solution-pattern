@@ -396,7 +396,10 @@ public with sharing class RecordCompareService {
     @TestVisible
     private static Boolean isCompareSupportedObject(Schema.DescribeSObjectResult objDescribe) {
         if (objDescribe == null || !objDescribe.isAccessible() || !objDescribe.isQueryable()
-            || objDescribe.isDeprecatedAndHidden()) {
+            || objDescribe.isDeprecatedAndHidden()
+            || String.isBlank(objDescribe.getKeyPrefix())
+            || !objDescribe.isSearchable()
+            || objDescribe.isCustomSetting()) {
             return false;
         }
 
