@@ -184,7 +184,7 @@ public with sharing class RecordContextService {
         ctx.objectLabel = objDescribe.getLabel();
         ctx.fieldCategories = categorizeFields(objDescribe);
         ctx.relationships = discoverRelationships(objDescribe, recordId, ctx.completeness);
-        ctx.recordName = fetchRecordName(objDescribe, objectApiName, recordId);
+        ctx.recordName = fetchRecordName(objDescribe, recordId);
 
         return ctx;
     }
@@ -225,7 +225,7 @@ public with sharing class RecordContextService {
             }
 
             ctx.recordId = referenceRecordId;
-            ctx.recordName = fetchRecordName(objDescribe, objDescribe.getName(), referenceRecordId);
+            ctx.recordName = fetchRecordName(objDescribe, referenceRecordId);
             ctx.relationships = discoverRelationships(objDescribe, referenceRecordId, ctx.completeness);
         } else {
             ctx.recordName = objDescribe.getLabel() + ' comparison settings';
@@ -294,20 +294,19 @@ public with sharing class RecordContextService {
                 }
             }
         }
+        fieldsToQuery = RecordSchemaUtils.getCanonicalFieldNames(objDescribe, fieldsToQuery);
 
         // Query the record
-        String soql = 'SELECT ' + String.join(fieldsToQuery, ', ')
-                     + ' FROM ' + objectApiName
-                     + ' WHERE Id = :recordId LIMIT 1';
-
         List<SObject> records;
         try {
-            records = Database.query(soql);
+            records = RecordSchemaUtils.queryById(objDescribe, fieldsToQuery, recordId, 1);
         } catch (QueryException qe) {
             // Fallback to just Id + Name
-            String fallbackFields = RecordSchemaUtils.buildIdentityFieldClause(objDescribe);
-            records = Database.query(
-                'SELECT ' + fallbackFields + ' FROM ' + objectApiName + ' WHERE Id = :recordId LIMIT 1'
+            records = RecordSchemaUtils.queryById(
+                objDescribe,
+                new List<String>{ 'Id', nameField },
+                recordId,
+                1
             );
         }
         records = stripReadableRecords(records);
@@ -680,9 +679,11 @@ public with sharing class RecordContextService {
 
     private static Integer countRelationshipRecords(RelationshipCandidate candidate, String recordId) {
         try {
-            String countSoql = 'SELECT COUNT() FROM ' + candidate.childDescribe.getName()
-                + ' WHERE ' + candidate.info.fieldName + ' = :recordId';
-            return Database.countQuery(countSoql);
+            return RecordSchemaUtils.countByFieldEquals(
+                candidate.childDescribe,
+                candidate.info.fieldName,
+                recordId
+            );
         } catch (Exception e) {
             return null;
         }
@@ -744,21 +745,26 @@ public with sharing class RecordContextService {
 
         List<String> queryFields = RecordSchemaUtils.buildFieldList(childDescribe);
 
-        // Object/field names sourced from Schema Describe, not user input -- safe for dynamic SOQL
-        String soql = 'SELECT ' + String.join(queryFields, ', ')
-                     + ' FROM ' + childObjectName
-                     + ' WHERE ' + foreignKeyField + ' = :recordId'
-                     + ' ORDER BY LastModifiedDate DESC NULLS LAST'
-                     + ' LIMIT ' + maxRecords;
-
         List<SObject> records;
         try {
-            records = Database.query(soql);
+            records = RecordSchemaUtils.queryByFieldEquals(
+                childDescribe,
+                queryFields,
+                foreignKeyField,
+                recordId,
+                null,
+                maxRecords,
+                true
+            );
         } catch (QueryException qe) {
-            String fallbackFields = RecordSchemaUtils.buildIdentityFieldClause(childDescribe);
-            records = Database.query(
-                'SELECT ' + fallbackFields + ' FROM ' + childObjectName
-                + ' WHERE ' + foreignKeyField + ' = :recordId LIMIT ' + maxRecords
+            records = RecordSchemaUtils.queryByFieldEquals(
+                childDescribe,
+                new List<String>{ 'Id', RecordSchemaUtils.getNameField(childDescribe) },
+                foreignKeyField,
+                recordId,
+                null,
+                maxRecords,
+                false
             );
         }
         records = stripReadableRecords(records);
@@ -949,14 +955,13 @@ public with sharing class RecordContextService {
 
     private static String fetchRecordName(
         Schema.DescribeSObjectResult objDescribe,
-        String objectApiName,
         String recordId
     ) {
         try {
             String nameField = RecordSchemaUtils.getNameField(objDescribe);
-            // Object/field names sourced from Schema Describe, not user input -- safe for dynamic SOQL
-            String soql = 'SELECT ' + nameField + ' FROM ' + objectApiName + ' WHERE Id = :recordId LIMIT 1';
-            List<SObject> records = stripReadableRecords(Database.query(soql));
+            List<SObject> records = stripReadableRecords(
+                RecordSchemaUtils.queryById(objDescribe, new List<String>{ nameField }, recordId, 1)
+            );
             if (!records.isEmpty()) {
                 return String.valueOf(records[0].get(nameField));
             }

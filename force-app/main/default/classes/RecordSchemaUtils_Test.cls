@@ -71,6 +71,74 @@ private class RecordSchemaUtils_Test {
     }
 
     @IsTest
+    static void testGetCanonicalObjectName_UsesDescribeName() {
+        Schema.DescribeSObjectResult accountDescribe = Account.SObjectType.getDescribe();
+        System.assertEquals('Account', RecordSchemaUtils.getCanonicalObjectName(accountDescribe));
+    }
+
+    @IsTest
+    static void testGetCanonicalFieldNames_DeduplicatesAndPreservesCanonicalCase() {
+        Schema.DescribeSObjectResult opportunityDescribe = Opportunity.SObjectType.getDescribe();
+
+        List<String> canonicalFieldNames = RecordSchemaUtils.getCanonicalFieldNames(
+            opportunityDescribe,
+            new List<String>{ 'Id', 'Name', 'Name', 'StageName' }
+        );
+
+        System.assertEquals(
+            new List<String>{ 'Id', 'Name', 'StageName' },
+            canonicalFieldNames,
+            'Canonical field names should be deduplicated while preserving describe-derived casing'
+        );
+    }
+
+    @IsTest
+    static void testGetCanonicalFieldNames_RejectsUnknownField() {
+        Boolean exceptionThrown = false;
+
+        try {
+            RecordSchemaUtils.getCanonicalFieldNames(
+                Account.SObjectType.getDescribe(),
+                new List<String>{ 'DefinitelyNotAField__c' }
+            );
+        } catch (AuraHandledException e) {
+            exceptionThrown = true;
+        }
+
+        System.assertEquals(true, exceptionThrown, 'Unknown fields should be rejected before query construction');
+    }
+
+    @IsTest
+    static void testQueryHelpers_ReturnExpectedRows() {
+        Account accountRecord = new Account(Name = 'Schema Utils Query Test');
+        insert accountRecord;
+
+        List<SObject> byId = RecordSchemaUtils.queryById(
+            Account.SObjectType.getDescribe(),
+            new List<String>{ 'Id', 'Name' },
+            String.valueOf(accountRecord.Id),
+            1
+        );
+        System.assertEquals(1, byId.size(), 'queryById should return the matching record');
+
+        List<SObject> byLike = RecordSchemaUtils.queryByFieldLike(
+            Account.SObjectType.getDescribe(),
+            new List<String>{ 'Id', 'Name' },
+            'Name',
+            '%Schema Utils Query Test%',
+            5
+        );
+        System.assertEquals(true, byLike.size() >= 1, 'queryByFieldLike should find the inserted account');
+
+        Integer relatedCount = RecordSchemaUtils.countByFieldEquals(
+            Contact.SObjectType.getDescribe(),
+            'AccountId',
+            accountRecord.Id
+        );
+        System.assertEquals(0, relatedCount, 'countByFieldEquals should return zero when no related rows exist');
+    }
+
+    @IsTest
     static void testNormalizeValue_Null() {
         System.assertEquals(null, RecordSchemaUtils.normalizeValue(null));
     }

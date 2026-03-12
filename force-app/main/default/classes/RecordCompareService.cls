@@ -195,7 +195,6 @@ public with sharing class RecordCompareService {
         Id sfId = Id.valueOf(recordId);
         Schema.SObjectType objType = sfId.getSObjectType();
         Schema.DescribeSObjectResult objDescribe = objType.getDescribe();
-        String objectApiName = objDescribe.getName();
 
         if (!objDescribe.isAccessible()) {
             throw new AuraHandledException('You do not have access to this object type.');
@@ -208,19 +207,20 @@ public with sharing class RecordCompareService {
         if (maxResults > 20) maxResults = 20;
 
         String nameField = RecordSchemaUtils.getNameField(objDescribe);
-        Map<String, Schema.SObjectField> fieldMap = objDescribe.fields.getMap();
+        List<String> suggestionSelectFields = new List<String>{ 'Id', nameField };
         List<Map<String, String>> results = new List<Map<String, String>>();
         Set<String> usedIds = new Set<String>{ recordId };
 
         // Strategy 1: find siblings via lookup/master-detail fields pointing to same parent
-        List<String> parentLookups = getSuggestionLookupFields(objDescribe);
+        List<String> parentLookups = RecordSchemaUtils.getCanonicalFieldNames(
+            objDescribe,
+            getSuggestionLookupFields(objDescribe)
+        );
 
         if (!parentLookups.isEmpty()) {
-            // Object/field names sourced from Schema Describe, not user input -- safe for dynamic SOQL
             List<SObject> parentResult = new List<SObject>();
             try {
-                String parentQuery = 'SELECT ' + String.join(parentLookups, ', ') + ' FROM ' + objectApiName + ' WHERE Id = :sfId';
-                parentResult = Database.query(parentQuery);
+                parentResult = RecordSchemaUtils.queryById(objDescribe, parentLookups, String.valueOf(sfId), 1);
             } catch (Exception e) {
                 parentResult = new List<SObject>();
             }
@@ -235,15 +235,16 @@ public with sharing class RecordCompareService {
                     String parentId = String.valueOf(parentVal);
                     Integer remaining = maxResults - results.size();
 
-                    String siblingQuery = 'SELECT Id, ' + nameField
-                        + ' FROM ' + objectApiName
-                        + ' WHERE ' + lookupField + ' = :parentId'
-                        + ' AND Id != :sfId'
-                        + ' ORDER BY LastModifiedDate DESC'
-                        + ' LIMIT ' + remaining;
-
                     try {
-                        for (SObject sib : Database.query(siblingQuery)) {
+                        for (SObject sib : RecordSchemaUtils.queryByFieldEquals(
+                            objDescribe,
+                            suggestionSelectFields,
+                            lookupField,
+                            parentId,
+                            String.valueOf(sfId),
+                            remaining,
+                            false
+                        )) {
                             String sibId = sib.Id;
                             if (usedIds.contains(sibId)) continue;
                             usedIds.add(sibId);
@@ -262,14 +263,14 @@ public with sharing class RecordCompareService {
         // Strategy 2: fall back to recently modified records of the same type
         if (results.size() < maxResults) {
             Integer remaining = maxResults - results.size();
-            String recentQuery = 'SELECT Id, ' + nameField
-                + ' FROM ' + objectApiName
-                + ' WHERE Id != :sfId'
-                + ' ORDER BY LastModifiedDate DESC'
-                + ' LIMIT ' + remaining;
 
             try {
-                for (SObject rec : Database.query(recentQuery)) {
+                for (SObject rec : RecordSchemaUtils.queryRecentRecords(
+                    objDescribe,
+                    suggestionSelectFields,
+                    String.valueOf(sfId),
+                    remaining
+                )) {
                     String recId = rec.Id;
                     if (usedIds.contains(recId)) continue;
                     usedIds.add(recId);
@@ -307,16 +308,22 @@ public with sharing class RecordCompareService {
         if (!isCompareSupportedObject(objDescribe)) {
             throw new AuraHandledException('Invalid or inaccessible object type.');
         }
-        String nameField = RecordSchemaUtils.getNameField(objDescribe);
+        String nameField = RecordSchemaUtils.getCanonicalFieldName(
+            objDescribe,
+            RecordSchemaUtils.getNameField(objDescribe)
+        );
+        List<String> searchSelectFields = new List<String>{ 'Id', nameField };
 
         List<Map<String, String>> results = new List<Map<String, String>>();
 
         try {
             if (String.isBlank(searchTerm) || searchTerm.length() < 2) {
-                String soql = 'SELECT Id, ' + nameField
-                    + ' FROM ' + objectApiName
-                    + ' ORDER BY LastModifiedDate DESC LIMIT ' + maxResults;
-                for (SObject rec : Database.query(soql)) {
+                for (SObject rec : RecordSchemaUtils.queryRecentRecords(
+                    objDescribe,
+                    searchSelectFields,
+                    null,
+                    maxResults
+                )) {
                     results.add(new Map<String, String>{
                         'id' => rec.Id,
                         'name' => String.valueOf(rec.get(nameField))
@@ -324,12 +331,13 @@ public with sharing class RecordCompareService {
                 }
             } else {
                 String searchPattern = '%' + searchTerm.trim() + '%';
-                String soql = 'SELECT Id, ' + nameField
-                    + ' FROM ' + objectApiName
-                    + ' WHERE ' + nameField + ' LIKE :searchPattern'
-                    + ' ORDER BY LastModifiedDate DESC'
-                    + ' LIMIT ' + maxResults;
-                for (SObject rec : Database.query(soql)) {
+                for (SObject rec : RecordSchemaUtils.queryByFieldLike(
+                    objDescribe,
+                    searchSelectFields,
+                    nameField,
+                    searchPattern,
+                    maxResults
+                )) {
                     results.add(new Map<String, String>{
                         'id' => rec.Id,
                         'name' => String.valueOf(rec.get(nameField))

@@ -9,6 +9,9 @@ public with sharing class RecordSchemaUtils {
 
     public static final Integer MAX_FIELDS_PER_QUERY = 200;
     public static final Integer MAX_FIELD_NAME_LENGTH = 100;
+    private static final String SAFE_IDENTIFIER_PATTERN = '^[A-Za-z][A-Za-z0-9_]*$';
+    private static final String ORDER_BY_LAST_MODIFIED_DESC = 'LastModifiedDate DESC';
+    private static final String ORDER_BY_LAST_MODIFIED_DESC_NULLS_LAST = 'LastModifiedDate DESC NULLS LAST';
 
     public static final Set<Schema.DisplayType> EXCLUDED_FIELD_TYPES = new Set<Schema.DisplayType>{
         Schema.DisplayType.BASE64,
@@ -78,7 +81,7 @@ public with sharing class RecordSchemaUtils {
             normalizedFieldSet.add(normalizedFieldName);
         }
 
-        return queryFields;
+        return getCanonicalFieldNames(objDescribe, queryFields);
     }
 
     /**
@@ -91,7 +94,209 @@ public with sharing class RecordSchemaUtils {
         if (nameField != 'Id') {
             queryFields.add(nameField);
         }
-        return String.join(queryFields, ', ');
+        return buildSelectClause(objDescribe, queryFields);
+    }
+
+    /**
+     * Returns the canonical API name for an object after validating it came from
+     * an accessible, queryable Describe result.
+     */
+    public static String getCanonicalObjectName(Schema.DescribeSObjectResult objDescribe) {
+        if (objDescribe == null || !objDescribe.isAccessible() || !objDescribe.isQueryable()) {
+            throw new AuraHandledException('Invalid or inaccessible object type.');
+        }
+
+        String objectApiName = objDescribe.getName();
+        validateIdentifier(objectApiName, 'object');
+        return objectApiName;
+    }
+
+    /**
+     * Returns a canonical API name for a single accessible field.
+     */
+    public static String getCanonicalFieldName(
+        Schema.DescribeSObjectResult objDescribe,
+        String fieldApiName
+    ) {
+        return getCanonicalFieldNames(objDescribe, new List<String>{ fieldApiName })[0];
+    }
+
+    /**
+     * Canonicalizes and validates a select list so only accessible schema-derived
+     * identifiers are carried into dynamic SOQL.
+     */
+    public static List<String> getCanonicalFieldNames(
+        Schema.DescribeSObjectResult objDescribe,
+        List<String> fieldApiNames
+    ) {
+        if (objDescribe == null) {
+            throw new AuraHandledException('Object metadata is required.');
+        }
+        if (fieldApiNames == null || fieldApiNames.isEmpty()) {
+            throw new AuraHandledException('At least one field is required.');
+        }
+
+        Map<String, Schema.SObjectField> fieldMap = objDescribe.fields.getMap();
+        List<String> canonicalFieldNames = new List<String>();
+        Set<String> normalizedFieldNames = new Set<String>();
+
+        for (String fieldApiName : fieldApiNames) {
+            if (String.isBlank(fieldApiName)) {
+                throw new AuraHandledException('Field API name is required.');
+            }
+
+            Schema.SObjectField fieldToken = fieldMap.get(fieldApiName);
+            if (fieldToken == null) {
+                throw new AuraHandledException('Invalid or inaccessible field selection: ' + fieldApiName);
+            }
+
+            Schema.DescribeFieldResult dfr = fieldToken.getDescribe();
+            if (!dfr.isAccessible()) {
+                throw new AuraHandledException('Invalid or inaccessible field selection: ' + fieldApiName);
+            }
+
+            String canonicalFieldName = dfr.getName();
+            validateIdentifier(canonicalFieldName, 'field');
+
+            if (canonicalFieldName.length() > MAX_FIELD_NAME_LENGTH) {
+                throw new AuraHandledException('Field API name exceeds the supported length: ' + canonicalFieldName);
+            }
+
+            String normalizedFieldName = canonicalFieldName.toLowerCase();
+            if (normalizedFieldNames.contains(normalizedFieldName)) {
+                continue;
+            }
+
+            canonicalFieldNames.add(canonicalFieldName);
+            normalizedFieldNames.add(normalizedFieldName);
+        }
+
+        return canonicalFieldNames;
+    }
+
+    /**
+     * Builds a validated select clause from canonical field names.
+     */
+    public static String buildSelectClause(
+        Schema.DescribeSObjectResult objDescribe,
+        List<String> fieldApiNames
+    ) {
+        return String.join(getCanonicalFieldNames(objDescribe, fieldApiNames), ', ');
+    }
+
+    public static Integer normalizeQueryLimit(Integer requestedLimit, Integer defaultLimit, Integer maxLimit) {
+        Integer normalizedLimit = requestedLimit;
+        if (normalizedLimit == null || normalizedLimit <= 0) {
+            normalizedLimit = defaultLimit;
+        }
+        if (maxLimit != null && maxLimit > 0 && normalizedLimit > maxLimit) {
+            normalizedLimit = maxLimit;
+        }
+        return Math.max(normalizedLimit, 1);
+    }
+
+    /**
+     * Runs a validated single-record query by Id. Identifiers are always derived
+     * from Describe metadata before being interpolated into SOQL.
+     */
+    @SuppressWarnings('PMD.ApexSOQLInjection')
+    public static List<SObject> queryById(
+        Schema.DescribeSObjectResult objDescribe,
+        List<String> selectFields,
+        String recordId,
+        Integer limitSize
+    ) {
+        Integer normalizedLimit = normalizeQueryLimit(limitSize, 1, 1);
+        String soql = 'SELECT ' + buildSelectClause(objDescribe, selectFields)
+            + ' FROM ' + getCanonicalObjectName(objDescribe)
+            + ' WHERE Id = :recordId'
+            + ' LIMIT :normalizedLimit';
+        return Database.query(soql);
+    }
+
+    /**
+     * Runs a validated equality query ordered by recency.
+     */
+    @SuppressWarnings('PMD.ApexSOQLInjection')
+    public static List<SObject> queryByFieldEquals(
+        Schema.DescribeSObjectResult objDescribe,
+        List<String> selectFields,
+        String filterField,
+        Object filterValue,
+        String excludedRecordId,
+        Integer limitSize,
+        Boolean nullsLast
+    ) {
+        Integer normalizedLimit = normalizeQueryLimit(limitSize, 1, null);
+        String orderByClause = nullsLast == true
+            ? ORDER_BY_LAST_MODIFIED_DESC_NULLS_LAST
+            : ORDER_BY_LAST_MODIFIED_DESC;
+        String soql = 'SELECT ' + buildSelectClause(objDescribe, selectFields)
+            + ' FROM ' + getCanonicalObjectName(objDescribe)
+            + ' WHERE ' + getCanonicalFieldName(objDescribe, filterField) + ' = :filterValue';
+
+        if (String.isNotBlank(excludedRecordId)) {
+            soql += ' AND Id != :excludedRecordId';
+        }
+
+        soql += ' ORDER BY ' + orderByClause + ' LIMIT :normalizedLimit';
+        return Database.query(soql);
+    }
+
+    /**
+     * Runs a validated LIKE query ordered by recency.
+     */
+    @SuppressWarnings('PMD.ApexSOQLInjection')
+    public static List<SObject> queryByFieldLike(
+        Schema.DescribeSObjectResult objDescribe,
+        List<String> selectFields,
+        String filterField,
+        String searchPattern,
+        Integer limitSize
+    ) {
+        Integer normalizedLimit = normalizeQueryLimit(limitSize, 1, null);
+        String soql = 'SELECT ' + buildSelectClause(objDescribe, selectFields)
+            + ' FROM ' + getCanonicalObjectName(objDescribe)
+            + ' WHERE ' + getCanonicalFieldName(objDescribe, filterField) + ' LIKE :searchPattern'
+            + ' ORDER BY ' + ORDER_BY_LAST_MODIFIED_DESC
+            + ' LIMIT :normalizedLimit';
+        return Database.query(soql);
+    }
+
+    /**
+     * Runs a validated recency query, optionally excluding the current record.
+     */
+    @SuppressWarnings('PMD.ApexSOQLInjection')
+    public static List<SObject> queryRecentRecords(
+        Schema.DescribeSObjectResult objDescribe,
+        List<String> selectFields,
+        String excludedRecordId,
+        Integer limitSize
+    ) {
+        Integer normalizedLimit = normalizeQueryLimit(limitSize, 1, null);
+        String soql = 'SELECT ' + buildSelectClause(objDescribe, selectFields)
+            + ' FROM ' + getCanonicalObjectName(objDescribe);
+
+        if (String.isNotBlank(excludedRecordId)) {
+            soql += ' WHERE Id != :excludedRecordId';
+        }
+
+        soql += ' ORDER BY ' + ORDER_BY_LAST_MODIFIED_DESC + ' LIMIT :normalizedLimit';
+        return Database.query(soql);
+    }
+
+    /**
+     * Counts records for a validated equality filter.
+     */
+    @SuppressWarnings('PMD.ApexSOQLInjection')
+    public static Integer countByFieldEquals(
+        Schema.DescribeSObjectResult objDescribe,
+        String filterField,
+        Object filterValue
+    ) {
+        String soql = 'SELECT COUNT() FROM ' + getCanonicalObjectName(objDescribe)
+            + ' WHERE ' + getCanonicalFieldName(objDescribe, filterField) + ' = :filterValue';
+        return Database.countQuery(soql);
     }
 
     /**
@@ -144,5 +349,11 @@ public with sharing class RecordSchemaUtils {
             if (lower.contains(keyword)) return true;
         }
         return false;
+    }
+
+    private static void validateIdentifier(String identifier, String identifierType) {
+        if (String.isBlank(identifier) || !Pattern.matches(SAFE_IDENTIFIER_PATTERN, identifier)) {
+            throw new AuraHandledException('Invalid ' + identifierType + ' metadata.');
+        }
     }
 }

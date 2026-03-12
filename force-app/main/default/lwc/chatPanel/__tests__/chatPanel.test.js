@@ -112,9 +112,16 @@ describe('c-chat-panel', () => {
         const element = createElement('c-chat-panel', {
             is: ChatPanel
         });
+        localStorage.setItem(
+            'ari_chat_usage_footer_usage',
+            JSON.stringify({
+                sessionTokens: 1234,
+                sessionCredits: 8
+            })
+        );
+        element.storageKey = 'ari_chat_usage_footer';
+        element.persistConversation = true;
         element.showInlineUsageStatus = true;
-        element.sessionTokens = 1234;
-        element.sessionCredits = 8;
         document.body.appendChild(element);
 
         getAvailableModelsAdapter.emit([]);
@@ -125,6 +132,36 @@ describe('c-chat-panel', () => {
         expect(usageFooter.textContent).toContain('Usage');
         expect(usageFooter.textContent).toContain('1,234');
         expect(usageFooter.textContent).toContain('8');
+    });
+
+    it('escapes HTML content and strips dangerous markdown link protocols', async () => {
+        const element = createElement('c-chat-panel', {
+            is: ChatPanel
+        });
+        localStorage.setItem(
+            'ari_chat_sanitized',
+            JSON.stringify([
+                {
+                    role: 'assistant',
+                    text: '<script>alert("boom")</script>\n\n[bad](javascript:evil)\n\n[good](https://example.com)',
+                    timestamp: '2026-03-12T14:00:00.000Z'
+                }
+            ])
+        );
+        element.storageKey = 'ari_chat_sanitized';
+        element.persistConversation = true;
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        const renderedMessage = element.shadowRoot.querySelector('lightning-formatted-rich-text');
+        const html = renderedMessage.value;
+
+        expect(html).toContain('&lt;script&gt;alert(&quot;boom&quot;)&lt;/script&gt;');
+        expect(html).toContain('<p>bad</p>');
+        expect(html).not.toContain('javascript:');
+        expect(html).toContain('<a href="https://example.com" target="_blank" rel="noopener">good</a>');
     });
 
     it('renders a failed warning banner for ungrounded chat state', async () => {
