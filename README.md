@@ -169,6 +169,12 @@ If you are preparing this for packaging, use an org with Salesforce Models API a
 
 This branch is structured for a namespaced 2GP managed package built from `force-app`.
 
+### Current package state
+
+- Package alias: `Agentforce Record Insights` -> `0HoHn000000kBlRKAU`
+- Latest released version: `Agentforce Record Insights@1.1.0-1` -> `04tHn0000017lAaIAI`
+- Current package version config in `sfdx-project.json`: `versionName: ver 1.1`, `versionNumber: 1.1.0.NEXT`, `ancestorVersion: HIGHEST`
+
 ### Packaging prerequisites
 
 - Dev Hub enabled in the packaging org aliased as `partnerarchitects`
@@ -199,7 +205,7 @@ sf package create \
 
 After package creation, copy the returned `0Ho...` package ID into `sfdx-project.json` as both `packageAliases["Agentforce Record Insights"]` and `packageAliases.agentforce_record_insights_managed`.
 
-### Create the first package version
+### Create a package version
 
 Run LWC unit tests before packaging:
 
@@ -215,8 +221,8 @@ sf package version create \
   --definition-file config/project-package-def.json \
   --code-coverage \
   --installation-key-bypass \
-  --version-name "ver 1.0" \
-  --version-number 1.0.0.NEXT \
+  --version-name "ver 1.1" \
+  --version-number 1.1.0.NEXT \
   --branch feature/2gp-managed-packaging \
   --wait 120 \
   --language en_US \
@@ -224,7 +230,9 @@ sf package version create \
   --verbose
 ```
 
-After version creation, copy the returned `04t...` version ID into `sfdx-project.json` as `packageAliases["Agentforce Record Insights@1.0.0-1"]`.
+After version creation, copy the returned `04t...` version ID into `sfdx-project.json` as the next `Agentforce Record Insights@<major>.<minor>.<patch>-<build>` alias.
+
+This branch now uses `ancestorVersion: HIGHEST` so subsequent managed versions upgrade cleanly from the highest released ancestor. Because patch versioning is not enabled for this namespace, use a new major or minor line such as `1.1.0.NEXT` for future updates unless patch versioning is enabled through Salesforce Partner Support.
 
 ### Create a clean validation scratch org
 
@@ -235,10 +243,11 @@ sf org create scratch \
   --alias ari-managed-install-qa \
   --target-dev-hub partnerarchitects \
   --duration-days 7 \
-  --wait 30
+  --wait 30 \
+  --no-ancestors
 ```
 
-The definition file includes the required AI runtime settings for package validation. It intentionally omits `edition` because this Dev Hub copies org shape during package version creation; pass `--edition developer` when creating a validation scratch org explicitly.
+The definition file includes the required AI runtime settings for package validation. It intentionally omits `edition` because this Dev Hub copies org shape during package version creation; pass `--edition developer` when creating a validation scratch org explicitly. Use `--no-ancestors` for install-validation orgs so Salesforce does not preseed the released managed package ancestor into the scratch org shape.
 
 ### Install and validate the package
 
@@ -278,6 +287,7 @@ sf package version promote \
 - This branch targets a standard 2GP managed package, not unlocked packaging.
 - The current source does not include a demo flexipage.
 - Package consumers still need Salesforce Models API access, available model aliases, and permission set assignment in the subscriber org.
+- The latest promoted managed package version from this branch is `1.1.0.1` (`04tHn0000017lAaIAI`).
 
 ## Files
 
