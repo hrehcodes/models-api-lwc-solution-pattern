@@ -165,6 +165,120 @@ sf apex run test --target-org my-org --test-level RunLocalTests
 
 If you are preparing this for packaging, use an org with Salesforce Models API access and validate package-relevant Apex coverage in addition to local LWC tests.
 
+## 2GP Managed Packaging
+
+This branch is structured for a namespaced 2GP managed package built from `force-app`.
+
+### Packaging prerequisites
+
+- Dev Hub enabled in the packaging org aliased as `partnerarchitects`
+- The `sfpalabs` namespace linked to that Dev Hub
+- Second-generation managed packaging enabled in the Dev Hub
+- Einstein / Agentforce features enabled in the Dev Hub
+- Einstein Terms of Service already accepted in the Dev Hub
+- A clean scratch org created from that Dev Hub for install validation
+
+### Verify or refresh Dev Hub auth
+
+If package commands fail because the CLI can see the org but cannot resolve or use its auth, re-authenticate `partnerarchitects` and retry. All package commands below pass `--target-dev-hub partnerarchitects` explicitly so they do not depend on local CLI defaults.
+
+```bash
+sf org display --target-org partnerarchitects
+sf package list --target-dev-hub partnerarchitects
+```
+
+### Create the package
+
+```bash
+sf package create \
+  --name "Agentforce Record Insights" \
+  --package-type Managed \
+  --path force-app \
+  --target-dev-hub partnerarchitects
+```
+
+After package creation, copy the returned `0Ho...` package ID into `sfdx-project.json` as both `packageAliases["Agentforce Record Insights"]` and `packageAliases.agentforce_record_insights_managed`.
+
+### Create the first package version
+
+Run LWC unit tests before packaging:
+
+```bash
+npm run test:unit
+```
+
+Create the version:
+
+```bash
+sf package version create \
+  --package agentforce_record_insights_managed \
+  --definition-file config/project-package-def.json \
+  --code-coverage \
+  --installation-key-bypass \
+  --version-name "ver 1.0" \
+  --version-number 1.0.0.NEXT \
+  --branch feature/2gp-managed-packaging \
+  --wait 120 \
+  --language en_US \
+  --target-dev-hub partnerarchitects \
+  --verbose
+```
+
+After version creation, copy the returned `04t...` version ID into `sfdx-project.json` as `packageAliases["Agentforce Record Insights@1.0.0-1"]`.
+
+### Create a clean validation scratch org
+
+```bash
+sf org create scratch \
+  --definition-file config/project-package-def.json \
+  --edition developer \
+  --alias ari-managed-install-qa \
+  --target-dev-hub partnerarchitects \
+  --duration-days 7 \
+  --wait 30
+```
+
+The definition file includes the required AI runtime settings for package validation. It intentionally omits `edition` because this Dev Hub copies org shape during package version creation; pass `--edition developer` when creating a validation scratch org explicitly.
+
+### Install and validate the package
+
+```bash
+sf package install \
+  --package 04t... \
+  --target-org ari-managed-install-qa \
+  --security-type AdminsOnly \
+  --wait 30 \
+  --publish-wait 30 \
+  --no-prompt
+
+sf org assign permset \
+  --name Agentforce_Record_Insights_User \
+  --target-org ari-managed-install-qa
+```
+
+After install:
+
+1. Open Lightning App Builder in the scratch org.
+2. Add `agentforceRecordInsights` to a Record Page, App Page, or Home Page.
+3. Smoke test insights mode and compare mode.
+
+### Promote the validated version
+
+Promote only after the install validation and manual smoke test pass.
+
+```bash
+sf package version promote \
+  --package 04t... \
+  --target-dev-hub partnerarchitects \
+  --no-prompt
+```
+
+### Notes
+
+- This branch targets a standard 2GP managed package, not unlocked packaging.
+- The current source does not include a demo flexipage.
+- Package consumers still need Salesforce Models API access, available model aliases, and permission set assignment in the subscriber org.
+
 ## Files
 
 ```text
@@ -202,6 +316,8 @@ force-app/main/default/
 
 ## Packaging Notes
 
-- The source is structured for DX and can be packaged as a 2GP unlocked package from the `force-app` directory.
+- The source is structured for DX and this branch is intended for a 2GP managed package from the `force-app` directory.
+- The managed package namespace is `sfpalabs` and the packaging Dev Hub alias is `partnerarchitects`.
 - Package consumers still need runtime prerequisites in the subscriber org: Salesforce Models API access, available model aliases, and permission set assignment.
 - The current source no longer includes a demo flexipage. Installers should add the component to pages manually.
+- The package version scratch-org shape is defined in `config/project-package-def.json`.
