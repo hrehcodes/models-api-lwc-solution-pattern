@@ -171,13 +171,15 @@ This branch is structured for a namespaced 2GP managed package built from `force
 
 ### Current package state
 
-- Package alias: `Agentforce Record Insights` -> `0HoHn000000kBlRKAU`
-- Latest released version: `Agentforce Record Insights@1.1.0-1` -> `04tHn0000017lAaIAI`
-- Current package version config in `sfdx-project.json`: `versionName: ver 1.1`, `versionNumber: 1.1.0.NEXT`, `ancestorVersion: HIGHEST`
+- Packaging Dev Hub alias: `sflabs`
+- Namespace: `sfpalabs`
+- Package alias: `Agentforce Record Insights` -> `0Hoao0000003KBtCAM`
+- Latest created version: `Agentforce Record Insights@1.0.0-1` -> `04tao000004qWCnAAM`
+- Current package version config in `sfdx-project.json`: `versionName: ver 1.0`, `versionNumber: 1.0.0.NEXT`
 
 ### Packaging prerequisites
 
-- Dev Hub enabled in the packaging org aliased as `partnerarchitects`
+- Dev Hub enabled in the packaging org aliased as `sflabs`
 - The `sfpalabs` namespace linked to that Dev Hub
 - Second-generation managed packaging enabled in the Dev Hub
 - Einstein / Agentforce features enabled in the Dev Hub
@@ -186,11 +188,11 @@ This branch is structured for a namespaced 2GP managed package built from `force
 
 ### Verify or refresh Dev Hub auth
 
-If package commands fail because the CLI can see the org but cannot resolve or use its auth, re-authenticate `partnerarchitects` and retry. All package commands below pass `--target-dev-hub partnerarchitects` explicitly so they do not depend on local CLI defaults.
+If package commands fail because the CLI can see the org but cannot resolve or use its auth, re-authenticate `sflabs` and retry. All package commands below pass `--target-dev-hub sflabs` explicitly so they do not depend on local CLI defaults.
 
 ```bash
-sf org display --target-org partnerarchitects
-sf package list --target-dev-hub partnerarchitects
+sf org display --target-org sflabs
+sf package list --target-dev-hub sflabs
 ```
 
 ### Create the package
@@ -200,7 +202,7 @@ sf package create \
   --name "Agentforce Record Insights" \
   --package-type Managed \
   --path force-app \
-  --target-dev-hub partnerarchitects
+  --target-dev-hub sflabs
 ```
 
 After package creation, copy the returned `0Ho...` package ID into `sfdx-project.json` as both `packageAliases["Agentforce Record Insights"]` and `packageAliases.agentforce_record_insights_managed`.
@@ -221,18 +223,18 @@ sf package version create \
   --definition-file config/project-package-def.json \
   --code-coverage \
   --installation-key-bypass \
-  --version-name "ver 1.1" \
-  --version-number 1.1.0.NEXT \
+  --version-name "ver 1.0" \
+  --version-number 1.0.0.NEXT \
   --branch feature/2gp-managed-packaging \
   --wait 120 \
   --language en_US \
-  --target-dev-hub partnerarchitects \
+  --target-dev-hub sflabs \
   --verbose
 ```
 
 After version creation, copy the returned `04t...` version ID into `sfdx-project.json` as the next `Agentforce Record Insights@<major>.<minor>.<patch>-<build>` alias.
 
-This branch now uses `ancestorVersion: HIGHEST` so subsequent managed versions upgrade cleanly from the highest released ancestor. Because patch versioning is not enabled for this namespace, use a new major or minor line such as `1.1.0.NEXT` for future updates unless patch versioning is enabled through Salesforce Partner Support.
+This package starts with `1.0.0.1` in `sflabs`. After promoting and releasing the first version, add `ancestorVersion: HIGHEST` back for later managed upgrades. Because patch versioning is not enabled for this namespace, use a new major or minor line such as `1.1.0.NEXT` for future updates unless patch versioning is enabled through Salesforce Partner Support.
 
 ### Create a clean validation scratch org
 
@@ -241,7 +243,7 @@ sf org create scratch \
   --definition-file config/project-package-def.json \
   --edition developer \
   --alias ari-managed-install-qa \
-  --target-dev-hub partnerarchitects \
+  --target-dev-hub sflabs \
   --duration-days 7 \
   --wait 30 \
   --no-ancestors
@@ -278,7 +280,7 @@ Promote only after the install validation and manual smoke test pass.
 ```bash
 sf package version promote \
   --package 04t... \
-  --target-dev-hub partnerarchitects \
+  --target-dev-hub sflabs \
   --no-prompt
 ```
 
@@ -287,7 +289,7 @@ sf package version promote \
 - This branch targets a standard 2GP managed package, not unlocked packaging.
 - The current source does not include a demo flexipage.
 - Package consumers still need Salesforce Models API access, available model aliases, and permission set assignment in the subscriber org.
-- The latest promoted managed package version from this branch is `1.1.0.1` (`04tHn0000017lAaIAI`).
+- The current `sflabs` package lineage starts at `1.0.0.1` (`04tao000004qWCnAAM`).
 
 ## Files
 
@@ -327,7 +329,7 @@ force-app/main/default/
 ## Packaging Notes
 
 - The source is structured for DX and this branch is intended for a 2GP managed package from the `force-app` directory.
-- The managed package namespace is `sfpalabs` and the packaging Dev Hub alias is `partnerarchitects`.
+- The managed package namespace is `sfpalabs` and the packaging Dev Hub alias is `sflabs`.
 - Package consumers still need runtime prerequisites in the subscriber org: Salesforce Models API access, available model aliases, and permission set assignment.
 - The current source no longer includes a demo flexipage. Installers should add the component to pages manually.
 - The package version scratch-org shape is defined in `config/project-package-def.json`.
