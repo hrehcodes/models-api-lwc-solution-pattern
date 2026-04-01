@@ -6,6 +6,7 @@
       "package": "agentforce_record_insights_managed",
       "versionName": "ver 1.0",
       "versionNumber": "1.0.0.NEXT",
+      "ancestorVersion": "1.0.0",
       "definitionFile": "config/project-package-def.json"
     }
   ],
@@ -15,7 +16,9 @@
     "Agentforce Record Insights": "0Hoao0000003KBtCAM",
     "agentforce_record_insights_managed": "0Hoao0000003KBtCAM",
     "Agentforce Record Insights@1.0.0-1": "04tao000004qWCnAAM",
-    "Agentforce Record Insights@1.0.0-1-feature/2gp-managed-packaging": "04tao000004qWCnAAM"
+    "Agentforce Record Insights@1.0.0-1-feature/2gp-managed-packaging": "04tao000004qWCnAAM",
+    "Agentforce Record Insights@1.1.0-1": "04tao000004vwBRAAY",
+    "Agentforce Record Insights@1.1.0-1-feature/2gp-managed-packaging": "04tao000004vwBRAAY"
   },
   "sfdcLoginUrl": "https://login.salesforce.com",
   "sourceApiVersion": "66.0"
