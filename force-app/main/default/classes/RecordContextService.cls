@@ -405,7 +405,14 @@ public with sharing class RecordContextService {
                 if (!isSupportedRelationship(cr, relationshipName, childDescribe)) {
                     throw new AuraHandledException('This relationship is not supported for context loading.');
                 }
-                return fetchRelatedRecords(cr, recordId, childDescribe, maxRecords);
+                try {
+                    triggerRelationshipFetchFailureIfRequested();
+                    return fetchRelatedRecords(cr, recordId, childDescribe, maxRecords);
+                } catch (Exception e) {
+                    throw new AuraHandledException(
+                        'Unable to load this relationship for the current user.'
+                    );
+                }
             }
         }
 

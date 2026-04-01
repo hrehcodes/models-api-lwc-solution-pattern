@@ -12,7 +12,7 @@ public with sharing class RecordAdvisorController {
     private static final Integer MAX_HISTORY_LENGTH = 2000000;
     private static final Integer MAX_HISTORY_MESSAGES = 60;
     private static final Integer MAX_HISTORY_MESSAGE_LENGTH = 8000;
-    private static final String DEFAULT_MODEL = 'sfdc_ai__DefaultVertexAIGeminiPro30';
+    private static final String DEFAULT_MODEL = 'sfdc_ai__DefaultVertexAIGeminiPro31';
     private static final String FOLLOW_UP_MODEL = 'sfdc_ai__DefaultVertexAIGemini30Flash';
     private static final Set<String> ALLOWED_HISTORY_ROLES = new Set<String>{ 'user', 'assistant' };
 
@@ -366,7 +366,7 @@ public with sharing class RecordAdvisorController {
     @TestVisible
     private static List<ModelCatalogEntry> getModelCatalog() {
         return new List<ModelCatalogEntry>{
-            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGeminiPro30', 'Gemini 3 Pro (Beta)', 'Google', true, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGeminiPro31', 'Gemini 3.1 Pro (Beta)', 'Google', true, 'standard'),
             new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini30Flash', 'Gemini 3 Flash (Beta)', 'Google', false, 'basic'),
             new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGeminiPro25', 'Gemini 2.5 Pro', 'Google', false, 'standard'),
             new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini25Flash001', 'Gemini 2.5 Flash', 'Google', false, 'basic'),

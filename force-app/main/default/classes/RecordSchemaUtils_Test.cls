@@ -139,6 +139,41 @@ private class RecordSchemaUtils_Test {
     }
 
     @IsTest
+    static void testQueryHelpers_FilterAndRecencyVariants() {
+        Account firstAccount = new Account(Name = 'Schema Utils Recent 1');
+        Account secondAccount = new Account(Name = 'Schema Utils Recent 2');
+        insert new List<Account>{ firstAccount, secondAccount };
+
+        Contact firstContact = new Contact(LastName = 'Recent Contact 1', AccountId = firstAccount.Id);
+        Contact secondContact = new Contact(LastName = 'Recent Contact 2', AccountId = firstAccount.Id);
+        insert new List<Contact>{ firstContact, secondContact };
+
+        List<SObject> byFieldEquals = RecordSchemaUtils.queryByFieldEquals(
+            Contact.SObjectType.getDescribe(),
+            new List<String>{ 'Id', 'LastName', 'AccountId' },
+            'AccountId',
+            firstAccount.Id,
+            null,
+            10,
+            false
+        );
+        System.assertEquals(2, byFieldEquals.size(), 'queryByFieldEquals should return contacts for the matching account');
+
+        List<SObject> recentAccounts = RecordSchemaUtils.queryRecentRecords(
+            Account.SObjectType.getDescribe(),
+            new List<String>{ 'Id', 'Name' },
+            String.valueOf(firstAccount.Id),
+            10
+        );
+        System.assertEquals(1, recentAccounts.size(), 'queryRecentRecords should exclude the specified record');
+        System.assertEquals(
+            secondAccount.Id,
+            recentAccounts[0].Id,
+            'queryRecentRecords should return the remaining recent account'
+        );
+    }
+
+    @IsTest
     static void testNormalizeValue_Null() {
         System.assertEquals(null, RecordSchemaUtils.normalizeValue(null));
     }

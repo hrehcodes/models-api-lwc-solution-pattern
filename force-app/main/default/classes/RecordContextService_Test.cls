@@ -339,6 +339,24 @@ private class RecordContextService_Test {
     }
 
     @IsTest
+    static void testGetRelationshipData_QueryFailureReturnsHandledError() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        RecordContextService.resetTestHooks();
+        RecordContextService.forceRelationshipFetchFailure = true;
+
+        Boolean exceptionThrown = false;
+        try {
+            RecordContextService.getRelationshipData(acc.Id, 'Account', 'Contacts', 5);
+        } catch (AuraHandledException e) {
+            exceptionThrown = true;
+        }
+
+        RecordContextService.resetTestHooks();
+        System.assertEquals(true, exceptionThrown, 'Relationship load failures should return a handled exception');
+    }
+
+    @IsTest
     static void testGetRecordContext_FieldWarnings() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
 

@@ -211,7 +211,7 @@ public with sharing class RecordSchemaUtils {
             + ' FROM ' + getCanonicalObjectName(objDescribe)
             + ' WHERE Id = :recordId'
             + ' LIMIT :normalizedLimit';
-        return Database.query(soql);
+        return Database.query(soql, AccessLevel.USER_MODE);
     }
 
     /**
@@ -240,7 +240,7 @@ public with sharing class RecordSchemaUtils {
         }
 
         soql += ' ORDER BY ' + orderByClause + ' LIMIT :normalizedLimit';
-        return Database.query(soql);
+        return Database.query(soql, AccessLevel.USER_MODE);
     }
 
     /**
@@ -260,7 +260,7 @@ public with sharing class RecordSchemaUtils {
             + ' WHERE ' + getCanonicalFieldName(objDescribe, filterField) + ' LIKE :searchPattern'
             + ' ORDER BY ' + ORDER_BY_LAST_MODIFIED_DESC
             + ' LIMIT :normalizedLimit';
-        return Database.query(soql);
+        return Database.query(soql, AccessLevel.USER_MODE);
     }
 
     /**
@@ -282,7 +282,7 @@ public with sharing class RecordSchemaUtils {
         }
 
         soql += ' ORDER BY ' + ORDER_BY_LAST_MODIFIED_DESC + ' LIMIT :normalizedLimit';
-        return Database.query(soql);
+        return Database.query(soql, AccessLevel.USER_MODE);
     }
 
     /**
@@ -296,7 +296,7 @@ public with sharing class RecordSchemaUtils {
     ) {
         String soql = 'SELECT COUNT() FROM ' + getCanonicalObjectName(objDescribe)
             + ' WHERE ' + getCanonicalFieldName(objDescribe, filterField) + ' = :filterValue';
-        return Database.countQuery(soql);
+        return Database.countQuery(soql, AccessLevel.USER_MODE);
     }
 
     /**

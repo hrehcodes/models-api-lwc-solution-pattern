@@ -169,7 +169,7 @@ private class RecordAdvisorController_Test {
         List<String> fallbackChain = RecordAdvisorController.buildModelFallbackChain(null);
 
         System.assert(!fallbackChain.isEmpty(), 'Fallback chain should not be empty');
-        System.assertEquals('sfdc_ai__DefaultVertexAIGeminiPro30', fallbackChain[0]);
+        System.assertEquals('sfdc_ai__DefaultVertexAIGeminiPro31', fallbackChain[0]);
         System.assert(!fallbackChain.contains(null), 'Fallback chain should not include null values');
     }
 

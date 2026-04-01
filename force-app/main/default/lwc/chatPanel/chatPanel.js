@@ -106,7 +106,7 @@ export default class ChatPanel extends LightningElement {
         }
         if (error) {
             this.modelOptions = [
-                { label: 'Gemini 3.0 Pro (Google) [standard]', value: 'sfdc_ai__DefaultVertexAIGeminiPro30' },
+                { label: 'Gemini 3.1 Pro (Google) [standard]', value: 'sfdc_ai__DefaultVertexAIGeminiPro31' },
                 { label: 'GPT-4o (OpenAI) [standard]', value: 'sfdc_ai__DefaultGPT4Omni' }
             ];
             this.applyPreferredModelSelection(
