@@ -47,7 +47,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetAvailableContext_Account() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         Test.startTest();
         RecordContextService.AvailableContext ctx = RecordContextService.getAvailableContext(acc.Id);
@@ -61,7 +61,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetAvailableContext_Opportunity() {
-        Opportunity opp = [SELECT Id FROM Opportunity LIMIT 1];
+        Opportunity opp = [SELECT Id FROM Opportunity WITH SYSTEM_MODE LIMIT 1];
 
         Test.startTest();
         RecordContextService.AvailableContext ctx = RecordContextService.getAvailableContext(opp.Id);
@@ -96,7 +96,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetAvailableContext_Contact() {
-        Contact con = [SELECT Id FROM Contact LIMIT 1];
+        Contact con = [SELECT Id FROM Contact WITH SYSTEM_MODE LIMIT 1];
 
         Test.startTest();
         RecordContextService.AvailableContext ctx = RecordContextService.getAvailableContext(con.Id);
@@ -108,7 +108,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetAvailableContextForObject_WithReferenceRecord() {
-        Opportunity opp = [SELECT Id FROM Opportunity LIMIT 1];
+        Opportunity opp = [SELECT Id FROM Opportunity WITH SYSTEM_MODE LIMIT 1];
 
         Test.startTest();
         RecordContextService.AvailableContext ctx = RecordContextService.getAvailableContextForObject(
@@ -140,7 +140,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetRecordContext_WithDefaults() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
@@ -158,7 +158,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetRecordContext_WithCategories() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
@@ -172,7 +172,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetRecordContext_Depth2() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
@@ -185,7 +185,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetRecordContext_WithRelationships() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         RecordContextService.AvailableContext avail = RecordContextService.getAvailableContext(acc.Id);
         List<String> relNames = new List<String>();
@@ -204,7 +204,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetRecordContext_UnsupportedRelationshipsAreIgnored() {
-        Opportunity opp = [SELECT Id FROM Opportunity LIMIT 1];
+        Opportunity opp = [SELECT Id FROM Opportunity WITH SYSTEM_MODE LIMIT 1];
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
@@ -223,7 +223,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetRelationshipData() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         RecordContextService.AvailableContext avail = RecordContextService.getAvailableContext(acc.Id);
         String relName;
@@ -248,7 +248,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetRecordContext_RespectsMaxRelatedRecords() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
@@ -270,7 +270,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetRecordContext_RelatedRecordsIncludeExplicitNullValues() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
@@ -327,7 +327,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetRelationshipData_NotFound() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         Boolean exceptionThrown = false;
         try {
@@ -340,7 +340,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetRelationshipData_QueryFailureReturnsHandledError() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         RecordContextService.resetTestHooks();
         RecordContextService.forceRelationshipFetchFailure = true;
@@ -358,7 +358,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetRecordContext_FieldWarnings() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         RecordContextService.resetTestHooks();
         RecordContextService.forceFieldSerializationFailure = true;
@@ -376,7 +376,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetRecordContext_RelationshipWarnings() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
         String relName = 'Contacts';
 
         RecordContextService.resetTestHooks();
@@ -395,7 +395,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetRecordContext_DescendantWarnings() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         RecordContextService.resetTestHooks();
         RecordContextService.forceDescendantFetchFailure = true;
@@ -416,7 +416,7 @@ private class RecordContextService_Test {
 
     @IsTest
     static void testGetAvailableContext_TruncationWarnings() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         RecordContextService.resetTestHooks();
         RecordContextService.forceRelationshipDiscoveryTruncation = true;

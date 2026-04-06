@@ -39,7 +39,7 @@ private class RecordCompareService_Test {
 
     @IsTest
     static void testGetComparisonContext_TwoRecords() {
-        List<Account> accounts = [SELECT Id FROM Account ORDER BY Name LIMIT 2];
+        List<Account> accounts = [SELECT Id FROM Account WITH SYSTEM_MODE ORDER BY Name LIMIT 2];
         List<String> ids = new List<String>();
         for (Account a : accounts) ids.add(a.Id);
 
@@ -55,7 +55,7 @@ private class RecordCompareService_Test {
 
     @IsTest
     static void testGetComparisonContext_ThreeRecords() {
-        List<Account> accounts = [SELECT Id FROM Account ORDER BY Name LIMIT 3];
+        List<Account> accounts = [SELECT Id FROM Account WITH SYSTEM_MODE ORDER BY Name LIMIT 3];
         List<String> ids = new List<String>();
         for (Account a : accounts) ids.add(a.Id);
 
@@ -72,6 +72,7 @@ private class RecordCompareService_Test {
             SELECT Id, Name, StageName, CloseDate, Amount, Probability, NextStep
             FROM Opportunity
             WHERE Name LIKE 'Compare Opportunity %'
+            WITH SYSTEM_MODE
             ORDER BY Name
         ];
         List<String> ids = new List<String>();
@@ -111,7 +112,7 @@ private class RecordCompareService_Test {
 
     @IsTest
     static void testGetComparisonContext_AppliesSharedContextSelections() {
-        List<Account> accounts = [SELECT Id FROM Account ORDER BY Name LIMIT 2];
+        List<Account> accounts = [SELECT Id FROM Account WITH SYSTEM_MODE ORDER BY Name LIMIT 2];
         List<String> ids = new List<String>();
         for (Account accountRecord : accounts) ids.add(accountRecord.Id);
 
@@ -140,7 +141,7 @@ private class RecordCompareService_Test {
 
     @IsTest
     static void testGetComparisonContext_TooFew() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
         Boolean exceptionThrown = false;
         try {
@@ -164,7 +165,7 @@ private class RecordCompareService_Test {
 
     @IsTest
     static void testGetComparisonContext_DuplicateIdsNotEnoughUnique() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
         Boolean exceptionThrown = false;
         try {
             RecordCompareService.getComparisonContext(new List<String>{ acc.Id, acc.Id }, 1, null, null, null, null, null);
@@ -176,7 +177,7 @@ private class RecordCompareService_Test {
 
     @IsTest
     static void testGetComparisonContext_RespectsMaxCompareRecords() {
-        List<Account> accounts = [SELECT Id FROM Account ORDER BY Name LIMIT 3];
+        List<Account> accounts = [SELECT Id FROM Account WITH SYSTEM_MODE ORDER BY Name LIMIT 3];
         List<String> ids = new List<String>();
         for (Account accountRecord : accounts) ids.add(accountRecord.Id);
 
@@ -191,10 +192,10 @@ private class RecordCompareService_Test {
 
     @IsTest
     static void testGetComparisonContext_RespectsMaxRelatedRecords() {
-        Account targetAccount = [SELECT Id FROM Account WHERE Name = 'Compare Account 1' LIMIT 1];
+        Account targetAccount = [SELECT Id FROM Account WHERE Name = 'Compare Account 1' WITH SYSTEM_MODE LIMIT 1];
         insert new Contact(FirstName = 'Extra', LastName = 'Contact', AccountId = targetAccount.Id, Email = 'extra@example.com');
 
-        List<Account> accounts = [SELECT Id FROM Account ORDER BY Name LIMIT 2];
+        List<Account> accounts = [SELECT Id FROM Account WITH SYSTEM_MODE ORDER BY Name LIMIT 2];
         List<String> ids = new List<String>();
         for (Account accountRecord : accounts) ids.add(accountRecord.Id);
 
@@ -304,7 +305,7 @@ private class RecordCompareService_Test {
 
     @IsTest
     static void testGetSuggestedRecords_WithRecord() {
-        Account acc = [SELECT Id FROM Account WHERE Name = 'Compare Account 1' LIMIT 1];
+        Account acc = [SELECT Id FROM Account WHERE Name = 'Compare Account 1' WITH SYSTEM_MODE LIMIT 1];
 
         Test.startTest();
         List<Map<String, String>> results = RecordCompareService.getSuggestedRecords(acc.Id, 5);
@@ -350,7 +351,7 @@ private class RecordCompareService_Test {
 
     @IsTest
     static void testGetComparisonContext_RejectsOverThresholdComparisonContext() {
-        List<Account> accounts = [SELECT Id FROM Account ORDER BY Name LIMIT 2];
+        List<Account> accounts = [SELECT Id FROM Account WITH SYSTEM_MODE ORDER BY Name LIMIT 2];
         List<String> ids = new List<String>();
         for (Account accountRecord : accounts) ids.add(accountRecord.Id);
 
