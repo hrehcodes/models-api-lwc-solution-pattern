@@ -4,9 +4,9 @@
       "path": "force-app",
       "default": true,
       "package": "agentforce_record_insights_managed",
-      "versionName": "ver 1.0",
-      "versionNumber": "1.0.0.NEXT",
-      "ancestorVersion": "1.0.0",
+      "versionName": "ver 1.2",
+      "versionNumber": "1.2.0.NEXT",
+      "ancestorVersion": "1.1.0.2",
       "definitionFile": "config/project-package-def.json"
     }
   ],
@@ -19,7 +19,8 @@
     "Agentforce Record Insights@1.0.0-1-feature/2gp-managed-packaging": "04tao000004qWCnAAM",
     "Agentforce Record Insights@1.1.0-1": "04tao000004vwBRAAY",
     "Agentforce Record Insights@1.1.0-1-feature/2gp-managed-packaging": "04tao000004vwBRAAY",
-    "Agentforce Record Insights@1.1.0-2-feature/2gp-managed-packaging": "04tao000004vwY1AAI"
+    "Agentforce Record Insights@1.1.0-2-feature/2gp-managed-packaging": "04tao000004vwY1AAI",
+    "Agentforce Record Insights@1.2.0-1": "04tao0000057w9FAAQ"
   },
   "sfdcLoginUrl": "https://login.salesforce.com",
   "sourceApiVersion": "66.0"

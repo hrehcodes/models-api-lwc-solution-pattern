@@ -96,6 +96,8 @@ const baseRecordContext = {
     }
 };
 
+const originalResizeObserver = global.ResizeObserver;
+
 describe('c-agentforce-record-insights', () => {
     beforeEach(() => {
         global.ResizeObserver = class {
@@ -119,6 +121,8 @@ describe('c-agentforce-record-insights', () => {
         while (document.body.firstChild) {
             document.body.removeChild(document.body.firstChild);
         }
+        global.ResizeObserver = originalResizeObserver;
+        window.ResizeObserver = originalResizeObserver;
         jest.clearAllMocks();
     });
 
@@ -169,6 +173,54 @@ describe('c-agentforce-record-insights', () => {
         await flushPromises();
 
         expect(element.shadowRoot.querySelector('c-record-compare')).toBeNull();
+    });
+
+    it('renders with the default header layout when ResizeObserver is unavailable', async () => {
+        global.ResizeObserver = undefined;
+        window.ResizeObserver = undefined;
+
+        const element = createElement('c-agentforce-record-insights', {
+            is: AgentforceRecordInsights
+        });
+        element.recordId = '001000000000001AAA';
+        element.objectApiName = 'Account';
+
+        expect(() => {
+            document.body.appendChild(element);
+        }).not.toThrow();
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('lightning-button-group')).not.toBeNull();
+        expect(element.shadowRoot.querySelector('lightning-button-menu')).toBeNull();
+        expect(element.shadowRoot.textContent).toContain('Agentforce Record Insights');
+    });
+
+    it('renders with the default header layout when ResizeObserver is not constructable', async () => {
+        const nonConstructableResizeObserver = () => ({
+            observe() {},
+            disconnect() {}
+        });
+        global.ResizeObserver = nonConstructableResizeObserver;
+        window.ResizeObserver = nonConstructableResizeObserver;
+
+        const element = createElement('c-agentforce-record-insights', {
+            is: AgentforceRecordInsights
+        });
+        element.recordId = '001000000000001AAA';
+        element.objectApiName = 'Account';
+
+        expect(() => {
+            document.body.appendChild(element);
+        }).not.toThrow();
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('lightning-button-group')).not.toBeNull();
+        expect(element.shadowRoot.querySelector('lightning-button-menu')).toBeNull();
+        expect(element.shadowRoot.textContent).toContain('Agentforce Record Insights');
     });
 
     it('shows richer loading copy while insights context is being prepared', async () => {

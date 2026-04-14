@@ -73,6 +73,7 @@ export default class AgentforceRecordInsights extends LightningElement {
     _contextLoadTimeout;
     _searchTimeout;
     _resizeObserver;
+    _didAttemptResizeObserverSetup = false;
     _insightsLoadingStepIndex = 0;
     _insightsLoadingInterval;
     _insightsLoadingSignature;
@@ -93,21 +94,8 @@ export default class AgentforceRecordInsights extends LightningElement {
     }
 
     renderedCallback() {
-        if (!this._resizeObserver) {
-            const headerElement = this.refs?.header;
-            if (headerElement) {
-                this._resizeObserver = new ResizeObserver(entries => {
-                    const width = entries?.[0]?.contentRect?.width;
-                    if (!width) {
-                        return;
-                    }
-
-                    // Observe the actual header region, not the host, so compact mode follows usable space.
-                    this.headerWidth = width;
-                });
-
-                this._resizeObserver.observe(headerElement);
-            }
+        if (!this._didAttemptResizeObserverSetup) {
+            this.setupResizeObserver();
         }
 
         this.syncInsightsLoadingRotation();
@@ -121,6 +109,48 @@ export default class AgentforceRecordInsights extends LightningElement {
             this._resizeObserver = null;
         }
         this.stopInsightsLoadingRotation();
+    }
+
+    setupResizeObserver() {
+        const headerElement = this.refs?.header;
+        if (!headerElement) {
+            return;
+        }
+
+        this._didAttemptResizeObserverSetup = true;
+
+        const resizeObserverConstructor = this.getResizeObserverConstructor();
+        if (!resizeObserverConstructor) {
+            return;
+        }
+
+        try {
+            this._resizeObserver = new resizeObserverConstructor(entries => {
+                const width = entries?.[0]?.contentRect?.width;
+                if (!width) {
+                    return;
+                }
+
+                // Observe the actual header region, not the host, so compact mode follows usable space.
+                this.headerWidth = width;
+            });
+
+            this._resizeObserver.observe(headerElement);
+        } catch {
+            this._resizeObserver = null;
+        }
+    }
+
+    getResizeObserverConstructor() {
+        if (typeof window !== 'undefined' && typeof window.ResizeObserver === 'function') {
+            return window.ResizeObserver;
+        }
+
+        if (typeof globalThis !== 'undefined' && typeof globalThis.ResizeObserver === 'function') {
+            return globalThis.ResizeObserver;
+        }
+
+        return null;
     }
 
     get isInsightsMode() { return this.mode === MODE_INSIGHTS; }
