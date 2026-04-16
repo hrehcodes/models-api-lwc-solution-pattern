@@ -135,6 +135,10 @@
                                 available-context={availableContext}
                                 included-categories={includedCategories}
                                 included-relationships={includedRelationships}
+                                included-parent-reference-fields={includedParentReferenceFields}
+                                include-same-object-siblings-through-parents={includeSameObjectSiblingsThroughParents}
+                                parent-sibling-relationship-by-reference-field={parentSiblingRelationshipByReferenceField}
+                                max-parent-references-selected={normalizedMaxParentReferencesSelected}
                                 depth={currentDepth}
                                 max-depth-allowed={normalizedMaxDepth}
                                 session-tokens={_sessionTokens}
@@ -147,6 +151,7 @@
                                 context-token-estimate={compareContextTokenEstimate}
                                 token-warning-threshold={normalizedPromptWarningThreshold}
                                 oncontextchange={handleContextChange}
+                                onparentcontextchange={handleParentContextChange}
                                 ondepthchange={handleDepthChange}
                                 onfieldselect={handleOpenFieldSelector}
                             ></c-context-panel>

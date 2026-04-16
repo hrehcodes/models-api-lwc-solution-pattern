@@ -110,6 +110,9 @@
                                     available-context={availableContext}
                                     included-categories={includedCategories}
                                     included-relationships={includedRelationships}
+                                    included-parent-reference-fields={includedParentReferenceFields}
+                                    include-same-object-siblings-through-parents={includeSameObjectSiblingsThroughParents}
+                                    parent-sibling-relationship-by-reference-field={parentSiblingRelationshipByReferenceField}
                                     depth={currentDepth}
                                     max-depth-allowed={normalizedMaxDepth}
                                     session-tokens={sessionTokens}
@@ -121,6 +124,7 @@
                                     hide-context-warnings={hideContextWarningsEnabled}
                                     token-warning-threshold={normalizedPromptWarningThreshold}
                                     oncontextchange={handleContextChange}
+                                    onparentcontextchange={handleParentContextChange}
                                     ondepthchange={handleDepthChange}
                                     onfieldselect={handleOpenFieldSelector}
                                 ></c-context-panel>
@@ -199,6 +203,9 @@
                         max-depth-allowed={normalizedMaxDepth}
                         default-field-categories-csv={defaultFieldCategoriesCsv}
                         default-relationships-csv={defaultRelationshipsCsv}
+                        default-parent-references-csv={defaultParentReferencesCsv}
+                        default-same-object-siblings-enabled={defaultSameObjectSiblingsEnabled}
+                        max-parent-references-selected={maxParentReferencesSelected}
                         hide-context-warnings={hideContextWarningsEnabled}
                         prompt-warning-threshold-tokens={normalizedPromptWarningThreshold}
                         max-compare-records={normalizedMaxCompareRecords}

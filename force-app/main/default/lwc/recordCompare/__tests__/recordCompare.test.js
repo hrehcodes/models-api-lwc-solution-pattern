@@ -252,7 +252,10 @@ describe('c-record-compare', () => {
             includedRelationships: ['Contacts'],
             maxCompareRecords: 4,
             maxRelatedRecords: 7,
-            promptWarningThresholdTokens: 20000
+            promptWarningThresholdTokens: 20000,
+            includedParentReferenceFields: [],
+            includeSameObjectSiblingsThroughParents: false,
+            parentSiblingRelationshipByReferenceField: {}
         });
 
         expect(element.shadowRoot.querySelector('c-chat-panel')).not.toBeNull();

@@ -150,7 +150,10 @@ describe('c-agentforce-record-insights', () => {
             depth: 1,
             includedCategories: ['core'],
             includedRelationships: [],
-            maxRelatedRecords: 7
+            maxRelatedRecords: 7,
+            includedParentReferenceFields: [],
+            includeSameObjectSiblingsThroughParents: false,
+            parentSiblingRelationshipByReferenceField: {}
         });
         expect(chatPanel.recordContextJson).toContain('"selectionSummary"');
         expect(chatPanel.recordContextJson).toContain('"recordContext"');
@@ -404,7 +407,10 @@ describe('c-agentforce-record-insights', () => {
             depth: 1,
             includedCategories: ['core'],
             includedRelationships: [],
-            maxRelatedRecords: 10
+            maxRelatedRecords: 10,
+            includedParentReferenceFields: [],
+            includeSameObjectSiblingsThroughParents: false,
+            parentSiblingRelationshipByReferenceField: {}
         });
     });
 
@@ -440,7 +446,10 @@ describe('c-agentforce-record-insights', () => {
             depth: 1,
             includedCategories: ['core'],
             includedRelationships: [],
-            maxRelatedRecords: 10
+            maxRelatedRecords: 10,
+            includedParentReferenceFields: [],
+            includeSameObjectSiblingsThroughParents: false,
+            parentSiblingRelationshipByReferenceField: {}
         });
     });
 });

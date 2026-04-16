@@ -1,6 +1,13 @@
 import { createElement } from 'lwc';
 import ContextPanel from 'c/contextPanel';
 
+jest.mock(
+    '@salesforce/apex/RecordContextService.getParentChildRelationships',
+    () => ({ default: jest.fn() }),
+    { virtual: true }
+);
+import getParentChildRelationships from '@salesforce/apex/RecordContextService.getParentChildRelationships';
+
 const flushPromises = async (count = 2) => {
     for (let index = 0; index < count; index += 1) {
         await Promise.resolve();
@@ -24,6 +31,10 @@ const baseAvailableContext = {
 };
 
 describe('c-context-panel', () => {
+    beforeEach(() => {
+        getParentChildRelationships.mockResolvedValue([]);
+    });
+
     afterEach(() => {
         while (document.body.firstChild) {
             document.body.removeChild(document.body.firstChild);
@@ -90,5 +101,134 @@ describe('c-context-panel', () => {
         expect(element.shadowRoot.textContent).toContain(
             'Some relationship counts are unavailable and are shown without counts.'
         );
+    });
+
+    it('renders the Parent Records section when parent references are available', async () => {
+        const element = createElement('c-context-panel', {
+            is: ContextPanel
+        });
+        element.availableContext = {
+            ...baseAvailableContext,
+            objectApiName: 'Contact',
+            parentReferences: [
+                {
+                    referenceFieldApiName: 'AccountId',
+                    referenceFieldLabel: 'Account',
+                    parentObjectApiName: 'Account',
+                    parentObjectLabel: 'Account',
+                    parentRecordId: '001000000000001AAA',
+                    parentRecordName: 'Acme',
+                    includedByDefault: false
+                }
+            ]
+        };
+        element.includedParentReferenceFields = [];
+        document.body.appendChild(element);
+
+        await flushPromises();
+
+        expect(element.shadowRoot.textContent).toContain('Parent Records');
+        expect(element.shadowRoot.textContent).toContain('Account');
+    });
+
+    it('fires parentcontextchange when a parent reference toggle changes', async () => {
+        const element = createElement('c-context-panel', {
+            is: ContextPanel
+        });
+        element.availableContext = {
+            ...baseAvailableContext,
+            objectApiName: 'Contact',
+            parentReferences: [
+                {
+                    referenceFieldApiName: 'AccountId',
+                    referenceFieldLabel: 'Account',
+                    parentObjectApiName: 'Account',
+                    parentObjectLabel: 'Account',
+                    parentRecordId: '001000000000001AAA',
+                    parentRecordName: 'Acme',
+                    includedByDefault: false
+                }
+            ]
+        };
+        element.includedParentReferenceFields = [];
+        element.maxParentReferencesSelected = 5;
+        document.body.appendChild(element);
+
+        const handler = jest.fn();
+        element.addEventListener('parentcontextchange', handler);
+
+        await flushPromises();
+
+        const toggleButton = element.shadowRoot.querySelector('button.section-toggle');
+        if (toggleButton) {
+            toggleButton.click();
+            await flushPromises();
+        }
+
+        const parentToggle = element.shadowRoot.querySelector('input[data-reference="AccountId"]');
+        expect(parentToggle).not.toBeNull();
+        parentToggle.checked = true;
+        parentToggle.dispatchEvent(new CustomEvent('change'));
+        await flushPromises();
+
+        expect(handler).toHaveBeenCalled();
+        const detail = handler.mock.calls[0][0].detail;
+        expect(detail.includedParentReferenceFields).toContain('AccountId');
+    });
+
+    it('fires parentcontextchange when the same-object siblings toggle changes', async () => {
+        const element = createElement('c-context-panel', {
+            is: ContextPanel
+        });
+        element.availableContext = {
+            ...baseAvailableContext,
+            objectApiName: 'Contact',
+            parentReferences: [
+                {
+                    referenceFieldApiName: 'AccountId',
+                    referenceFieldLabel: 'Account',
+                    parentObjectApiName: 'Account',
+                    parentObjectLabel: 'Account',
+                    parentRecordId: '001000000000001AAA',
+                    parentRecordName: 'Acme',
+                    includedByDefault: true
+                }
+            ]
+        };
+        element.includedParentReferenceFields = ['AccountId'];
+        element.includeSameObjectSiblingsThroughParents = false;
+        document.body.appendChild(element);
+
+        const handler = jest.fn();
+        element.addEventListener('parentcontextchange', handler);
+
+        await flushPromises();
+
+        const toggleButton = element.shadowRoot.querySelector('button.section-toggle');
+        if (toggleButton) {
+            toggleButton.click();
+            await flushPromises();
+        }
+
+        const siblingsToggle = element.shadowRoot.querySelector(
+            'input[type="checkbox"][onchange], input[type="checkbox"]'
+        );
+        const allChecks = element.shadowRoot.querySelectorAll('input[type="checkbox"]');
+        let siblingsInput = null;
+        allChecks.forEach((cb) => {
+            const label = cb.closest('label');
+            if (label && label.textContent.includes('same-object siblings')) {
+                siblingsInput = cb;
+            }
+        });
+        expect(siblingsInput).not.toBeNull();
+
+        siblingsInput.checked = true;
+        siblingsInput.dispatchEvent(new CustomEvent('change'));
+        await flushPromises();
+
+        expect(handler).toHaveBeenCalled();
+        const lastCall = handler.mock.calls[handler.mock.calls.length - 1][0].detail;
+        expect(lastCall.includeSameObjectSiblingsThroughParents).toBe(true);
     });
 });

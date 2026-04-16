@@ -44,7 +44,9 @@ private class RecordCompareService_Test {
         for (Account a : accounts) ids.add(a.Id);
 
         Test.startTest();
-        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(ids, 1, null, null, null, null, null);
+        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(
+            ids, 1, null, null, null, null, null, null, false, null
+        );
         Test.stopTest();
 
         System.assertNotEquals(null, ctx);
@@ -60,7 +62,9 @@ private class RecordCompareService_Test {
         for (Account a : accounts) ids.add(a.Id);
 
         Test.startTest();
-        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(ids, 1, null, null, null, null, null);
+        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(
+            ids, 1, null, null, null, null, null, null, false, null
+        );
         Test.stopTest();
 
         System.assertEquals(3, ctx.records.size());
@@ -86,6 +90,9 @@ private class RecordCompareService_Test {
             null,
             null,
             null,
+            null,
+            null,
+            false,
             null
         );
         Test.stopTest();
@@ -124,6 +131,9 @@ private class RecordCompareService_Test {
             new List<String>{ 'Contacts' },
             5,
             10,
+            null,
+            null,
+            false,
             null
         );
         Test.stopTest();
@@ -145,7 +155,7 @@ private class RecordCompareService_Test {
 
         Boolean exceptionThrown = false;
         try {
-            RecordCompareService.getComparisonContext(new List<String>{ acc.Id }, 1, null, null, null, null, null);
+            RecordCompareService.getComparisonContext(new List<String>{ acc.Id }, 1, null, null, null, null, null, null, false, null);
         } catch (AuraHandledException e) {
             exceptionThrown = true;
         }
@@ -156,7 +166,7 @@ private class RecordCompareService_Test {
     static void testGetComparisonContext_InvalidId() {
         Boolean exceptionThrown = false;
         try {
-            RecordCompareService.getComparisonContext(new List<String>{ 'bad', 'ids' }, 1, null, null, null, null, null);
+            RecordCompareService.getComparisonContext(new List<String>{ 'bad', 'ids' }, 1, null, null, null, null, null, null, false, null);
         } catch (AuraHandledException e) {
             exceptionThrown = true;
         }
@@ -168,7 +178,7 @@ private class RecordCompareService_Test {
         Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
         Boolean exceptionThrown = false;
         try {
-            RecordCompareService.getComparisonContext(new List<String>{ acc.Id, acc.Id }, 1, null, null, null, null, null);
+            RecordCompareService.getComparisonContext(new List<String>{ acc.Id, acc.Id }, 1, null, null, null, null, null, null, false, null);
         } catch (AuraHandledException e) {
             exceptionThrown = true;
         }
@@ -183,7 +193,7 @@ private class RecordCompareService_Test {
 
         Boolean exceptionThrown = false;
         try {
-            RecordCompareService.getComparisonContext(ids, 1, null, null, 2, null, null);
+            RecordCompareService.getComparisonContext(ids, 1, null, null, 2, null, null, null, false, null);
         } catch (AuraHandledException e) {
             exceptionThrown = true;
         }
@@ -207,6 +217,9 @@ private class RecordCompareService_Test {
             new List<String>{ 'Contacts' },
             5,
             1,
+            null,
+            null,
+            false,
             null
         );
         Test.stopTest();
@@ -364,12 +377,51 @@ private class RecordCompareService_Test {
                 new List<String>{ 'Contacts' },
                 5,
                 10,
-                1
+                1,
+                null,
+                false,
+                null
             );
         } catch (AuraHandledException e) {
             exceptionThrown = true;
         }
         System.assertEquals(true, exceptionThrown, 'Large comparison contexts should be rejected above the configured ceiling');
+    }
+
+    @IsTest
+    static void testGetComparisonContext_MergesParentRecordContexts() {
+        List<Contact> contacts = [
+            SELECT Id FROM Contact WHERE LastName = 'Contact' WITH SYSTEM_MODE ORDER BY FirstName
+        ];
+        List<String> ids = new List<String>();
+        for (Contact c : contacts) ids.add(c.Id);
+
+        Test.startTest();
+        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(
+            ids,
+            1,
+            new List<String>{ 'core' },
+            null,
+            null,
+            null,
+            null,
+            new List<String>{ 'AccountId' },
+            false,
+            null
+        );
+        Test.stopTest();
+
+        System.assertNotEquals(null, ctx);
+        System.assertEquals('Contact', ctx.objectApiName);
+        System.assertEquals(2, ctx.records.size());
+        for (RecordCompareService.ComparisonRecord cr : ctx.records) {
+            System.assertNotEquals(null, cr.parentRecordContexts, 'Each comparison record should expose its parent record contexts');
+            System.assertEquals(1, cr.parentRecordContexts.size(), 'AccountId parent should be loaded for each comparison record');
+            RecordContextService.ParentRecordContext prc = cr.parentRecordContexts[0];
+            System.assertEquals('AccountId', prc.referenceFieldApiName);
+            System.assertEquals('Account', prc.parentObjectApiName);
+            System.assertNotEquals(null, prc.parentRecordId, 'Parent record id should be populated');
+        }
     }
 
     @IsTest

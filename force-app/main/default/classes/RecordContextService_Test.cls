@@ -144,7 +144,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, null, null, null
+            acc.Id, 1, null, null, null, null, false, null
         );
         Test.stopTest();
 
@@ -162,7 +162,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, new List<String>{'core', 'financial'}, null, null
+            acc.Id, 1, new List<String>{'core', 'financial'}, null, null, null, false, null
         );
         Test.stopTest();
 
@@ -176,7 +176,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 2, new List<String>{'core'}, new List<String>{'Opportunities'}, null
+            acc.Id, 2, new List<String>{'core'}, new List<String>{'Opportunities'}, null, null, false, null
         );
         Test.stopTest();
 
@@ -195,7 +195,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, new List<String>{'core'}, relNames, null
+            acc.Id, 1, new List<String>{'core'}, relNames, null, null, false, null
         );
         Test.stopTest();
 
@@ -212,6 +212,9 @@ private class RecordContextService_Test {
             1,
             new List<String>{ 'core' },
             new List<String>{ 'OpenActivities', 'RelatedClients' },
+            null,
+            null,
+            false,
             null
         );
         Test.stopTest();
@@ -256,7 +259,10 @@ private class RecordContextService_Test {
             1,
             new List<String>{ 'core' },
             new List<String>{ 'Contacts' },
-            1
+            1,
+            null,
+            false,
+            null
         );
         Test.stopTest();
 
@@ -278,7 +284,10 @@ private class RecordContextService_Test {
             1,
             new List<String>{ 'core' },
             new List<String>{ 'Contacts' },
-            5
+            5,
+            null,
+            false,
+            null
         );
         Test.stopTest();
 
@@ -365,7 +374,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, new List<String>{'core'}, null, null
+            acc.Id, 1, new List<String>{'core'}, null, null, null, false, null
         );
         Test.stopTest();
 
@@ -384,7 +393,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, new List<String>{'core'}, new List<String>{ relName }, null
+            acc.Id, 1, new List<String>{'core'}, new List<String>{ relName }, null, null, false, null
         );
         Test.stopTest();
 
@@ -402,7 +411,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 2, new List<String>{'core'}, new List<String>{ 'Opportunities' }, null
+            acc.Id, 2, new List<String>{'core'}, new List<String>{ 'Opportunities' }, null, null, false, null
         );
         Test.stopTest();
 
@@ -437,5 +446,202 @@ private class RecordContextService_Test {
         }
 
         System.assertEquals(true, foundUnknownCount, 'Relationships with unavailable counts should be labeled with countStatus=unknown');
+    }
+
+    @IsTest
+    static void testAvailableContext_IncludesParentReferences() {
+        Contact con = [SELECT Id FROM Contact WHERE FirstName = 'Test' WITH SYSTEM_MODE LIMIT 1];
+
+        Test.startTest();
+        RecordContextService.AvailableContext ctx = RecordContextService.getAvailableContext(con.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, ctx.parentReferences, 'parentReferences should be present on AvailableContext');
+        Boolean foundAccount = false;
+        for (RecordContextService.ParentReferenceInfo p : ctx.parentReferences) {
+            if (p.referenceFieldApiName == 'AccountId') {
+                foundAccount = true;
+                System.assertEquals('Account', p.parentObjectApiName, 'AccountId should resolve to Account parent');
+                System.assertNotEquals(null, p.parentRecordId, 'AccountId should have the active record FK populated');
+            }
+        }
+        System.assertEquals(true, foundAccount, 'Contact parent references should include AccountId');
+    }
+
+    @IsTest
+    static void testAvailableContextForObject_DescribesParentReferencesWithoutRecord() {
+        Test.startTest();
+        RecordContextService.AvailableContext ctx = RecordContextService.getAvailableContextForObject('Contact', null);
+        Test.stopTest();
+
+        System.assertNotEquals(null, ctx.parentReferences, 'describeParentReferences should return entries even without a record');
+        Boolean foundAccount = false;
+        for (RecordContextService.ParentReferenceInfo p : ctx.parentReferences) {
+            if (p.referenceFieldApiName == 'AccountId') {
+                foundAccount = true;
+                System.assertEquals(null, p.parentRecordId, 'Without a record id, parentRecordId should not be set');
+            }
+        }
+        System.assertEquals(true, foundAccount, 'AccountId should surface in object-level parent reference describe');
+    }
+
+    @IsTest
+    static void testGetParentChildRelationships_ReturnsSupportedChildren() {
+        Test.startTest();
+        List<RecordContextService.ParentChildRelationshipInfo> rels =
+            RecordContextService.getParentChildRelationships('Account');
+        Test.stopTest();
+
+        System.assertNotEquals(null, rels, 'Parent-child relationships should not be null');
+        Boolean foundContacts = false;
+        Boolean foundOpportunities = false;
+        for (RecordContextService.ParentChildRelationshipInfo info : rels) {
+            if (info.relationshipName == 'Contacts') foundContacts = true;
+            if (info.relationshipName == 'Opportunities') foundOpportunities = true;
+        }
+        System.assertEquals(true, foundContacts, 'Account should expose Contacts child relationship');
+        System.assertEquals(true, foundOpportunities, 'Account should expose Opportunities child relationship');
+    }
+
+    @IsTest
+    static void testGetParentChildRelationships_InvalidObjectThrows() {
+        Boolean threw = false;
+        try {
+            RecordContextService.getParentChildRelationships('NotARealObject__c');
+        } catch (AuraHandledException e) {
+            threw = true;
+        }
+        System.assertEquals(true, threw, 'Invalid object type should throw AuraHandledException');
+    }
+
+    @IsTest
+    static void testGetRecordContext_LoadsParentRecords() {
+        Contact con = [SELECT Id, AccountId FROM Contact WHERE FirstName = 'Test' WITH SYSTEM_MODE LIMIT 1];
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            con.Id,
+            1,
+            new List<String>{ 'core' },
+            null,
+            null,
+            new List<String>{ 'AccountId' },
+            false,
+            null
+        );
+        Test.stopTest();
+
+        System.assertNotEquals(null, ctx.parentRecordContexts, 'Parent record contexts should not be null when a parent reference is selected');
+        System.assertEquals(1, ctx.parentRecordContexts.size(), 'One parent record context should be returned for AccountId');
+        RecordContextService.ParentRecordContext prc = ctx.parentRecordContexts[0];
+        System.assertEquals('AccountId', prc.referenceFieldApiName);
+        System.assertEquals('Account', prc.parentObjectApiName);
+        System.assertEquals(con.AccountId, prc.parentRecordId);
+        System.assert(prc.fields != null && !prc.fields.isEmpty(), 'Parent record fields should be populated');
+    }
+
+    @IsTest
+    static void testGetRecordContext_LoadsSameObjectSiblingsThroughParent() {
+        Contact con = [SELECT Id, AccountId FROM Contact WHERE FirstName = 'Test' WITH SYSTEM_MODE LIMIT 1];
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            con.Id,
+            1,
+            new List<String>{ 'core' },
+            null,
+            null,
+            new List<String>{ 'AccountId' },
+            true,
+            null
+        );
+        Test.stopTest();
+
+        System.assertEquals(1, ctx.parentRecordContexts.size());
+        RecordContextService.ParentRecordContext prc = ctx.parentRecordContexts[0];
+        System.assertNotEquals(null, prc.sameObjectSiblings, 'Sibling records should be populated when siblings requested');
+        System.assert(prc.sameObjectSiblings.size() >= 1, 'At least one sibling Contact should be returned (excluding active record)');
+        for (Map<String, Object> rec : prc.sameObjectSiblings) {
+            System.assertNotEquals(con.Id, (String) rec.get('Id'), 'Active record should be excluded from sibling results');
+        }
+    }
+
+    @IsTest
+    static void testGetRecordContext_ParentChildRelationshipExpansion() {
+        Contact con = [SELECT Id, AccountId FROM Contact WHERE FirstName = 'Test' WITH SYSTEM_MODE LIMIT 1];
+
+        Map<String, String> parentChildMap = new Map<String, String>{ 'AccountId' => 'Opportunities' };
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            con.Id,
+            1,
+            new List<String>{ 'core' },
+            null,
+            null,
+            new List<String>{ 'AccountId' },
+            false,
+            parentChildMap
+        );
+        Test.stopTest();
+
+        System.assertEquals(1, ctx.parentRecordContexts.size());
+        RecordContextService.ParentRecordContext prc = ctx.parentRecordContexts[0];
+        System.assertNotEquals(null, prc.selectedChildRelationship, 'Parent child relationship expansion should be populated');
+        System.assertEquals('Opportunities', prc.selectedChildRelationship.relationshipName);
+        System.assert(!prc.selectedChildRelationship.records.isEmpty(), 'Opportunities child expansion should return records');
+    }
+
+    @IsTest
+    static void testGetRecordContext_PolymorphicLookupsAreSkippedWithWarning() {
+        Task tsk = new Task(Subject = 'Test Task', Status = 'Not Started', Priority = 'Normal');
+        insert tsk;
+
+        Test.startTest();
+        RecordContextService.AvailableContext avail = RecordContextService.getAvailableContext(tsk.Id);
+        Test.stopTest();
+
+        Boolean hasPolymorphicWhatId = false;
+        for (RecordContextService.ParentReferenceInfo p : avail.parentReferences) {
+            if (p.referenceFieldApiName == 'WhatId' || p.referenceFieldApiName == 'WhoId') {
+                hasPolymorphicWhatId = true;
+            }
+        }
+        System.assertEquals(false, hasPolymorphicWhatId, 'Polymorphic lookups (WhatId/WhoId) should be skipped from parent references');
+
+        Boolean warned = false;
+        if (avail.completeness != null && avail.completeness.warningMessages != null) {
+            for (String w : avail.completeness.warningMessages) {
+                if (w != null && w.toLowerCase().contains('polymorphic')) {
+                    warned = true;
+                    break;
+                }
+            }
+        }
+        System.assertEquals(true, warned, 'A warning should note that polymorphic lookup fields were skipped');
+    }
+
+    @IsTest
+    static void testGetRecordContext_ParentFetchFailureAddsWarning() {
+        Contact con = [SELECT Id FROM Contact WHERE FirstName = 'Test' WITH SYSTEM_MODE LIMIT 1];
+
+        RecordContextService.resetTestHooks();
+        RecordContextService.forceParentFetchFailure = true;
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            con.Id,
+            1,
+            new List<String>{ 'core' },
+            null,
+            null,
+            new List<String>{ 'AccountId' },
+            false,
+            null
+        );
+        Test.stopTest();
+        RecordContextService.resetTestHooks();
+
+        System.assertEquals(true, ctx.completeness.hasWarnings, 'Parent fetch failure should produce a warning');
     }
 }

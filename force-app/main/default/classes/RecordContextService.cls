@@ -11,6 +11,8 @@ public with sharing class RecordContextService {
     private static final Integer MAX_CONFIGURABLE_RELATED_RECORD_LIMIT = 20;
     private static final Integer MAX_RELATIONSHIP_QUERIES = 20;
     private static final Integer QUERY_SAFETY_BUFFER = 10;
+    private static final Integer MAX_PARENT_REFERENCES = 25;
+    private static final Integer MAX_PARENT_SELECTIONS = 5;
     private static final String COUNT_STATUS_KNOWN = 'known';
     private static final String COUNT_STATUS_UNKNOWN = 'unknown';
     private static final Set<String> UNSUPPORTED_RELATIONSHIP_NAMES = new Set<String>{
@@ -21,10 +23,17 @@ public with sharing class RecordContextService {
         'ActionableListMember', 'AttachedContentNote', 'FieldChangeSnapshot',
         'NoteAndAttachment', 'OpenActivity', 'RecentFieldChange'
     };
+    private static final Set<String> SYSTEM_REFERENCE_FIELDS = new Set<String>{
+        'CreatedById', 'LastModifiedById', 'MasterRecordId'
+    };
+    private static final Set<String> DEFAULT_PARENT_REFERENCE_FIELDS = new Set<String>{
+        'AccountId', 'ContactId', 'OwnerId'
+    };
     @TestVisible private static Boolean forceFieldSerializationFailure = false;
     @TestVisible private static Boolean forceRelationshipFetchFailure = false;
     @TestVisible private static Boolean forceDescendantFetchFailure = false;
     @TestVisible private static Boolean forceRelationshipDiscoveryTruncation = false;
+    @TestVisible private static Boolean forceParentFetchFailure = false;
 
     private static final Set<String> SYSTEM_RELATIONSHIP_SUFFIXES = new Set<String>{
         'Shares', 'Histories', 'Feeds', 'ChangeEvents', 'Tags',
@@ -44,11 +53,58 @@ public with sharing class RecordContextService {
         @AuraEnabled public String recordName { get; set; }
         @AuraEnabled public List<FieldCategory> fieldCategories { get; set; }
         @AuraEnabled public List<RelationshipInfo> relationships { get; set; }
+        @AuraEnabled public List<ParentReferenceInfo> parentReferences { get; set; }
         @AuraEnabled public ContextCompleteness completeness { get; set; }
 
         public AvailableContext() {
             this.fieldCategories = new List<FieldCategory>();
             this.relationships = new List<RelationshipInfo>();
+            this.parentReferences = new List<ParentReferenceInfo>();
+            this.completeness = new ContextCompleteness();
+        }
+    }
+
+    public class ParentReferenceInfo {
+        @AuraEnabled public String referenceFieldApiName { get; set; }
+        @AuraEnabled public String referenceFieldLabel { get; set; }
+        @AuraEnabled public String parentObjectApiName { get; set; }
+        @AuraEnabled public String parentObjectLabel { get; set; }
+        @AuraEnabled public String parentRecordId { get; set; }
+        @AuraEnabled public String parentRecordName { get; set; }
+        @AuraEnabled public Boolean includedByDefault { get; set; }
+    }
+
+    public class ParentChildRelationshipInfo {
+        @AuraEnabled public String relationshipName { get; set; }
+        @AuraEnabled public String childObjectApiName { get; set; }
+        @AuraEnabled public String childObjectLabel { get; set; }
+        @AuraEnabled public String fieldName { get; set; }
+
+        public ParentChildRelationshipInfo(String relationshipName, String childObjectApiName,
+                                           String childObjectLabel, String fieldName) {
+            this.relationshipName = relationshipName;
+            this.childObjectApiName = childObjectApiName;
+            this.childObjectLabel = childObjectLabel;
+            this.fieldName = fieldName;
+        }
+    }
+
+    public class ParentRecordContext {
+        @AuraEnabled public String referenceFieldApiName { get; set; }
+        @AuraEnabled public String parentObjectApiName { get; set; }
+        @AuraEnabled public String parentObjectLabel { get; set; }
+        @AuraEnabled public String parentRecordId { get; set; }
+        @AuraEnabled public String parentRecordName { get; set; }
+        @AuraEnabled public Map<String, Object> fields { get; set; }
+        @AuraEnabled public List<Map<String, Object>> sameObjectSiblings { get; set; }
+        @AuraEnabled public String sameObjectSiblingsObjectApiName { get; set; }
+        @AuraEnabled public String sameObjectSiblingsRelationshipName { get; set; }
+        @AuraEnabled public RelatedRecordSet selectedChildRelationship { get; set; }
+        @AuraEnabled public ContextCompleteness completeness { get; set; }
+
+        public ParentRecordContext() {
+            this.fields = new Map<String, Object>();
+            this.sameObjectSiblings = new List<Map<String, Object>>();
             this.completeness = new ContextCompleteness();
         }
     }
@@ -136,11 +192,13 @@ public with sharing class RecordContextService {
         @AuraEnabled public String recordName { get; set; }
         @AuraEnabled public Map<String, Object> fields { get; set; }
         @AuraEnabled public List<RelatedRecordSet> relatedRecordSets { get; set; }
+        @AuraEnabled public List<ParentRecordContext> parentRecordContexts { get; set; }
         @AuraEnabled public ContextCompleteness completeness { get; set; }
 
         public RecordContext() {
             this.fields = new Map<String, Object>();
             this.relatedRecordSets = new List<RelatedRecordSet>();
+            this.parentRecordContexts = new List<ParentRecordContext>();
             this.completeness = new ContextCompleteness();
         }
     }
@@ -184,9 +242,65 @@ public with sharing class RecordContextService {
         ctx.objectLabel = objDescribe.getLabel();
         ctx.fieldCategories = categorizeFields(objDescribe);
         ctx.relationships = discoverRelationships(objDescribe, recordId, ctx.completeness);
+        ctx.parentReferences = discoverParentReferences(objDescribe, recordId, ctx.completeness);
         ctx.recordName = fetchRecordName(objDescribe, recordId);
 
         return ctx;
+    }
+
+    /**
+     * Returns the accessible child relationships of a parent object so the user
+     * can optionally include one parent-child relationship when expanding a
+     * selected parent. Intentionally does not execute count queries to keep
+     * this call cheap; counts come from the standard relationship fetch path.
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<ParentChildRelationshipInfo> getParentChildRelationships(String parentObjectApiName) {
+        if (String.isBlank(parentObjectApiName)) {
+            throw new AuraHandledException('Parent object type is required.');
+        }
+
+        Schema.SObjectType objType = Schema.getGlobalDescribe().get(parentObjectApiName);
+        if (objType == null) {
+            throw new AuraHandledException('Invalid or inaccessible object type.');
+        }
+
+        Schema.DescribeSObjectResult objDescribe = objType.getDescribe();
+        if (!objDescribe.isAccessible()) {
+            throw new AuraHandledException('You do not have access to this object type.');
+        }
+
+        List<ParentChildRelationshipInfo> result = new List<ParentChildRelationshipInfo>();
+        for (Schema.ChildRelationship cr : objDescribe.getChildRelationships()) {
+            String relName = cr.getRelationshipName();
+            if (String.isBlank(relName) || cr.isDeprecatedAndHidden() || cr.getField() == null) {
+                continue;
+            }
+
+            Schema.DescribeSObjectResult childDescribe = cr.getChildSObject().getDescribe();
+            if (!isSupportedRelationship(cr, relName, childDescribe)) {
+                continue;
+            }
+
+            result.add(new ParentChildRelationshipInfo(
+                relName,
+                childDescribe.getName(),
+                childDescribe.getLabel(),
+                cr.getField().getDescribe().getName()
+            ));
+        }
+
+        result.sort(new ParentChildRelationshipComparator());
+        return result;
+    }
+
+    private class ParentChildRelationshipComparator implements System.Comparator<ParentChildRelationshipInfo> {
+        public Integer compare(ParentChildRelationshipInfo a, ParentChildRelationshipInfo b) {
+            String aLabel = a == null || a.childObjectLabel == null ? '' : a.childObjectLabel.toLowerCase();
+            String bLabel = b == null || b.childObjectLabel == null ? '' : b.childObjectLabel.toLowerCase();
+            if (aLabel == bLabel) return 0;
+            return aLabel < bLabel ? -1 : 1;
+        }
     }
 
     /**
@@ -227,9 +341,11 @@ public with sharing class RecordContextService {
             ctx.recordId = referenceRecordId;
             ctx.recordName = fetchRecordName(objDescribe, referenceRecordId);
             ctx.relationships = discoverRelationships(objDescribe, referenceRecordId, ctx.completeness);
+            ctx.parentReferences = discoverParentReferences(objDescribe, referenceRecordId, ctx.completeness);
         } else {
             ctx.recordName = objDescribe.getLabel() + ' comparison settings';
             ctx.relationships = describeRelationships(objDescribe);
+            ctx.parentReferences = describeParentReferences(objDescribe);
         }
 
         return ctx;
@@ -238,6 +354,17 @@ public with sharing class RecordContextService {
     /**
      * Fetches the full record context: field values and related records.
      * Parameters control which fields and relationships to include.
+     *
+     * New (v1.3) parameters support one-hop parent lookup expansion and bounded
+     * sibling records through a selected parent:
+     *   - includedParentReferenceFields: list of reference field API names on the
+     *     active record whose parent records should be loaded.
+     *   - includeSameObjectSiblingsThroughParents: when true, for each selected
+     *     parent, load same-object siblings (records of the active record's
+     *     object sharing the same parent) excluding the active record.
+     *   - parentSiblingRelationshipByReferenceField: optional map from a
+     *     reference field API name to a child-relationship name on the parent
+     *     object to expand (one level only).
      */
     @AuraEnabled
     public static RecordContext getRecordContext(
@@ -245,7 +372,10 @@ public with sharing class RecordContextService {
         Integer depth,
         List<String> includedCategories,
         List<String> includedRelationships,
-        Integer maxRelatedRecords
+        Integer maxRelatedRecords,
+        List<String> includedParentReferenceFields,
+        Boolean includeSameObjectSiblingsThroughParents,
+        Map<String, String> parentSiblingRelationshipByReferenceField
     ) {
         validateRecordId(recordId);
 
@@ -374,6 +504,19 @@ public with sharing class RecordContextService {
             }
         }
 
+        // Fetch parent records and sibling context (one-hop only).
+        if (includedParentReferenceFields != null && !includedParentReferenceFields.isEmpty()) {
+            ctx.parentRecordContexts = fetchParentContexts(
+                objDescribe,
+                recordId,
+                ctx,
+                includedParentReferenceFields,
+                includeSameObjectSiblingsThroughParents == true,
+                parentSiblingRelationshipByReferenceField,
+                maxRelatedRecords
+            );
+        }
+
         return ctx;
     }
 
@@ -425,6 +568,7 @@ public with sharing class RecordContextService {
         forceRelationshipFetchFailure = false;
         forceDescendantFetchFailure = false;
         forceRelationshipDiscoveryTruncation = false;
+        forceParentFetchFailure = false;
     }
 
     // ── Private Methods ──
@@ -639,6 +783,164 @@ public with sharing class RecordContextService {
         return sorted;
     }
 
+    /**
+     * Discovers accessible single-target reference (lookup/master-detail) fields on
+     * the active record, resolves their current value, and returns a descriptor per
+     * reference. Polymorphic references (resolving to multiple sObject types) are
+     * skipped for v1 and a warning is recorded on completeness.
+     */
+    private static List<ParentReferenceInfo> discoverParentReferences(
+        Schema.DescribeSObjectResult objDescribe,
+        String recordId,
+        ContextCompleteness completeness
+    ) {
+        List<ParentReferenceInfo> results = new List<ParentReferenceInfo>();
+        if (objDescribe == null || String.isBlank(recordId)) {
+            return results;
+        }
+
+        Map<String, Schema.SObjectField> fieldMap = objDescribe.fields.getMap();
+        List<Schema.DescribeFieldResult> candidates = new List<Schema.DescribeFieldResult>();
+        List<Schema.DescribeFieldResult> polymorphic = new List<Schema.DescribeFieldResult>();
+
+        for (String fn : fieldMap.keySet()) {
+            Schema.DescribeFieldResult dfr = fieldMap.get(fn).getDescribe();
+            if (dfr.getType() != Schema.DisplayType.REFERENCE) continue;
+            if (!dfr.isAccessible()) continue;
+            String apiName = dfr.getName();
+            if (apiName == 'Id') continue;
+            if (SYSTEM_REFERENCE_FIELDS.contains(apiName)) continue;
+
+            List<Schema.SObjectType> refs = dfr.getReferenceTo();
+            if (refs == null || refs.isEmpty()) continue;
+
+            if (refs.size() > 1) {
+                polymorphic.add(dfr);
+                continue;
+            }
+
+            Schema.DescribeSObjectResult parentDescribe = refs[0].getDescribe();
+            if (!parentDescribe.isAccessible() || !parentDescribe.isQueryable()) continue;
+
+            candidates.add(dfr);
+        }
+
+        if (!polymorphic.isEmpty()) {
+            addWarning(
+                completeness,
+                'Polymorphic lookup fields were skipped for parent record expansion (v1 supports single-target lookups only).'
+            );
+        }
+
+        if (candidates.isEmpty()) {
+            return results;
+        }
+
+        // Query foreign key values in one SOQL call.
+        List<String> fkFields = new List<String>();
+        fkFields.add('Id');
+        for (Schema.DescribeFieldResult dfr : candidates) {
+            fkFields.add(dfr.getName());
+        }
+        fkFields = RecordSchemaUtils.getCanonicalFieldNames(objDescribe, fkFields);
+
+        SObject activeRecord;
+        try {
+            List<SObject> records = RecordSchemaUtils.queryById(objDescribe, fkFields, recordId, 1);
+            records = stripReadableRecords(records);
+            if (records.isEmpty()) {
+                return results;
+            }
+            activeRecord = records[0];
+        } catch (Exception e) {
+            addWarning(
+                completeness,
+                'Parent lookup values could not be loaded for the active record.'
+            );
+            return results;
+        }
+
+        Integer added = 0;
+        for (Schema.DescribeFieldResult dfr : candidates) {
+            if (added >= MAX_PARENT_REFERENCES) {
+                addWarning(
+                    completeness,
+                    'Parent lookup list was truncated at ' + MAX_PARENT_REFERENCES
+                        + ' entries. Use the builder property defaultParentReferencesCsv to preselect the most relevant lookups.'
+                );
+                break;
+            }
+
+            String apiName = dfr.getName();
+            Object fkValue = null;
+            try {
+                fkValue = activeRecord.get(apiName);
+            } catch (Exception e) {
+                continue;
+            }
+
+            Schema.DescribeSObjectResult parentDescribe = dfr.getReferenceTo()[0].getDescribe();
+
+            ParentReferenceInfo info = new ParentReferenceInfo();
+            info.referenceFieldApiName = apiName;
+            info.referenceFieldLabel = dfr.getLabel();
+            info.parentObjectApiName = parentDescribe.getName();
+            info.parentObjectLabel = parentDescribe.getLabel();
+            info.includedByDefault = isDefaultParentReference(apiName);
+
+            if (fkValue != null) {
+                String parentId = String.valueOf(fkValue);
+                info.parentRecordId = parentId;
+                info.parentRecordName = fetchRecordName(parentDescribe, parentId);
+            }
+
+            results.add(info);
+            added++;
+        }
+
+        return results;
+    }
+
+    private static List<ParentReferenceInfo> describeParentReferences(Schema.DescribeSObjectResult objDescribe) {
+        List<ParentReferenceInfo> results = new List<ParentReferenceInfo>();
+        if (objDescribe == null) {
+            return results;
+        }
+
+        Map<String, Schema.SObjectField> fieldMap = objDescribe.fields.getMap();
+        Integer added = 0;
+        for (String fn : fieldMap.keySet()) {
+            Schema.DescribeFieldResult dfr = fieldMap.get(fn).getDescribe();
+            if (dfr.getType() != Schema.DisplayType.REFERENCE) continue;
+            if (!dfr.isAccessible()) continue;
+            String apiName = dfr.getName();
+            if (apiName == 'Id') continue;
+            if (SYSTEM_REFERENCE_FIELDS.contains(apiName)) continue;
+
+            List<Schema.SObjectType> refs = dfr.getReferenceTo();
+            if (refs == null || refs.isEmpty() || refs.size() > 1) continue;
+
+            Schema.DescribeSObjectResult parentDescribe = refs[0].getDescribe();
+            if (!parentDescribe.isAccessible() || !parentDescribe.isQueryable()) continue;
+
+            if (added >= MAX_PARENT_REFERENCES) break;
+            ParentReferenceInfo info = new ParentReferenceInfo();
+            info.referenceFieldApiName = apiName;
+            info.referenceFieldLabel = dfr.getLabel();
+            info.parentObjectApiName = parentDescribe.getName();
+            info.parentObjectLabel = parentDescribe.getLabel();
+            info.includedByDefault = isDefaultParentReference(apiName);
+            results.add(info);
+            added++;
+        }
+
+        return results;
+    }
+
+    private static Boolean isDefaultParentReference(String fieldApiName) {
+        return fieldApiName != null && DEFAULT_PARENT_REFERENCE_FIELDS.contains(fieldApiName);
+    }
+
     private static List<RelationshipInfo> describeRelationships(Schema.DescribeSObjectResult objDescribe) {
         List<RelationshipInfo> defaultIncluded = new List<RelationshipInfo>();
         List<RelationshipInfo> optional = new List<RelationshipInfo>();
@@ -784,6 +1086,339 @@ public with sharing class RecordContextService {
         }
 
         return rrs;
+    }
+
+    /**
+     * Fetches parent record context (one-hop only) for each selected parent
+     * reference field on the active record. Optionally includes same-object
+     * siblings through the parent and one user-chosen parent-child relationship.
+     * Applies a per-request cap and honors USER_MODE throughout.
+     */
+    private static List<ParentRecordContext> fetchParentContexts(
+        Schema.DescribeSObjectResult objDescribe,
+        String recordId,
+        RecordContext ctx,
+        List<String> includedParentReferenceFields,
+        Boolean includeSameObjectSiblings,
+        Map<String, String> parentSiblingRelationshipByReferenceField,
+        Integer maxRelatedRecords
+    ) {
+        List<ParentRecordContext> results = new List<ParentRecordContext>();
+
+        Map<String, String> relByRef = parentSiblingRelationshipByReferenceField == null
+            ? new Map<String, String>()
+            : parentSiblingRelationshipByReferenceField;
+
+        // Dedupe and cap selections.
+        List<String> selections = new List<String>();
+        Set<String> seen = new Set<String>();
+        for (String ref : includedParentReferenceFields) {
+            if (String.isBlank(ref)) continue;
+            String normalized = ref.trim();
+            if (seen.contains(normalized)) continue;
+            seen.add(normalized);
+            selections.add(normalized);
+            if (selections.size() >= MAX_PARENT_SELECTIONS) {
+                addWarning(
+                    ctx.completeness,
+                    'Parent record selections were capped at ' + MAX_PARENT_SELECTIONS
+                        + '. Additional selections were ignored for this request.'
+                );
+                break;
+            }
+        }
+
+        if (selections.isEmpty()) {
+            return results;
+        }
+
+        Map<String, Schema.SObjectField> fieldMap = objDescribe.fields.getMap();
+
+        // Collect FK values for all requested references in a single query.
+        List<String> fkFields = new List<String>{ 'Id' };
+        List<Schema.DescribeFieldResult> validRefs = new List<Schema.DescribeFieldResult>();
+        for (String ref : selections) {
+            Schema.SObjectField field = fieldMap.get(ref);
+            if (field == null) {
+                markIncomplete(ctx.completeness,
+                    'Parent reference "' + ref + '" was not found on ' + objDescribe.getName() + '.');
+                continue;
+            }
+            Schema.DescribeFieldResult dfr = field.getDescribe();
+            if (dfr.getType() != Schema.DisplayType.REFERENCE || !dfr.isAccessible()) {
+                markIncomplete(ctx.completeness,
+                    'Parent reference "' + ref + '" is not an accessible lookup on ' + objDescribe.getName() + '.');
+                continue;
+            }
+            List<Schema.SObjectType> refsTo = dfr.getReferenceTo();
+            if (refsTo == null || refsTo.isEmpty() || refsTo.size() > 1) {
+                addWarning(ctx.completeness,
+                    'Parent reference "' + ref + '" is polymorphic and was skipped.');
+                continue;
+            }
+            validRefs.add(dfr);
+            fkFields.add(dfr.getName());
+        }
+
+        if (validRefs.isEmpty()) {
+            return results;
+        }
+
+        fkFields = RecordSchemaUtils.getCanonicalFieldNames(objDescribe, fkFields);
+
+        SObject activeRecord;
+        try {
+            List<SObject> records = RecordSchemaUtils.queryById(objDescribe, fkFields, recordId, 1);
+            records = stripReadableRecords(records);
+            if (records.isEmpty()) {
+                markIncomplete(ctx.completeness, 'Active record could not be re-queried for parent expansion.');
+                return results;
+            }
+            activeRecord = records[0];
+        } catch (Exception e) {
+            markIncomplete(ctx.completeness, 'Parent lookup values could not be loaded for the active record.');
+            return results;
+        }
+
+        for (Schema.DescribeFieldResult dfr : validRefs) {
+            if (Limits.getQueries() >= Limits.getLimitQueries() - QUERY_SAFETY_BUFFER) {
+                markIncomplete(ctx.completeness,
+                    'Parent record expansion stopped early due to query limits.');
+                break;
+            }
+
+            String refApiName = dfr.getName();
+            Object fkValue = null;
+            try {
+                fkValue = activeRecord.get(refApiName);
+            } catch (Exception e) {
+                continue;
+            }
+            if (fkValue == null) {
+                ParentRecordContext emptyCtx = new ParentRecordContext();
+                emptyCtx.referenceFieldApiName = refApiName;
+                emptyCtx.parentObjectApiName = dfr.getReferenceTo()[0].getDescribe().getName();
+                emptyCtx.parentObjectLabel = dfr.getReferenceTo()[0].getDescribe().getLabel();
+                addWarning(emptyCtx.completeness,
+                    'The ' + dfr.getLabel() + ' field is blank on the active record; no parent context loaded.');
+                results.add(emptyCtx);
+                continue;
+            }
+
+            String parentId = String.valueOf(fkValue);
+            Schema.DescribeSObjectResult parentDescribe = dfr.getReferenceTo()[0].getDescribe();
+
+            try {
+                triggerParentFetchFailureIfRequested();
+                ParentRecordContext parentCtx = getParentRecordContext(
+                    parentId,
+                    parentDescribe,
+                    refApiName,
+                    includeSameObjectSiblings,
+                    relByRef.get(refApiName),
+                    maxRelatedRecords,
+                    recordId,
+                    objDescribe
+                );
+                if (parentCtx != null) {
+                    results.add(parentCtx);
+                    // Merge per-parent warnings into the overall completeness.
+                    if (parentCtx.completeness != null && parentCtx.completeness.hasWarnings) {
+                        ctx.completeness.hasWarnings = true;
+                        if (!parentCtx.completeness.isComplete) {
+                            ctx.completeness.isComplete = false;
+                        }
+                        for (String msg : parentCtx.completeness.warningMessages) {
+                            addWarning(ctx.completeness, msg);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                markIncomplete(ctx.completeness,
+                    'Parent record for "' + dfr.getLabel() + '" could not be loaded.');
+            }
+        }
+
+        return results;
+    }
+
+    /**
+     * Loads one parent record's fields and, optionally, same-object siblings
+     * through that parent plus one user-picked child relationship expansion.
+     */
+    @TestVisible
+    private static ParentRecordContext getParentRecordContext(
+        String parentRecordId,
+        Schema.DescribeSObjectResult parentDescribe,
+        String referenceFieldApiName,
+        Boolean includeSameObjectSiblings,
+        String siblingRelationshipName,
+        Integer maxRelatedRecords,
+        String currentRecordId,
+        Schema.DescribeSObjectResult currentDescribe
+    ) {
+        ParentRecordContext parentCtx = new ParentRecordContext();
+        parentCtx.referenceFieldApiName = referenceFieldApiName;
+        parentCtx.parentObjectApiName = parentDescribe.getName();
+        parentCtx.parentObjectLabel = parentDescribe.getLabel();
+        parentCtx.parentRecordId = parentRecordId;
+
+        // Build parent field list using its default-included categories.
+        List<FieldCategory> allCategories = categorizeFields(parentDescribe);
+        Set<String> fieldSet = new Set<String>();
+        List<String> fieldsToQuery = new List<String>{ 'Id' };
+        fieldSet.add('Id');
+
+        String nameField = RecordSchemaUtils.getNameField(parentDescribe);
+        if (!fieldSet.contains(nameField)) {
+            fieldSet.add(nameField);
+            fieldsToQuery.add(nameField);
+        }
+
+        for (FieldCategory cat : allCategories) {
+            if (!cat.includedByDefault) continue;
+            for (FieldInfo fi : cat.fields) {
+                if (!fieldSet.contains(fi.apiName) && fieldsToQuery.size() < RecordSchemaUtils.MAX_FIELDS_PER_QUERY) {
+                    fieldSet.add(fi.apiName);
+                    fieldsToQuery.add(fi.apiName);
+                }
+            }
+        }
+        fieldsToQuery = RecordSchemaUtils.getCanonicalFieldNames(parentDescribe, fieldsToQuery);
+
+        List<SObject> parentRecords;
+        try {
+            parentRecords = RecordSchemaUtils.queryById(parentDescribe, fieldsToQuery, parentRecordId, 1);
+        } catch (QueryException qe) {
+            parentRecords = RecordSchemaUtils.queryById(
+                parentDescribe,
+                new List<String>{ 'Id', nameField },
+                parentRecordId,
+                1
+            );
+        }
+        parentRecords = stripReadableRecords(parentRecords);
+
+        if (parentRecords.isEmpty()) {
+            markIncomplete(parentCtx.completeness,
+                'Parent record was not accessible or not found for ' + parentDescribe.getLabel() + '.');
+            return parentCtx;
+        }
+
+        SObject parentRec = parentRecords[0];
+        parentCtx.parentRecordName = String.valueOf(parentRec.get(nameField));
+
+        Map<String, Schema.SObjectField> parentFieldMap = parentDescribe.fields.getMap();
+        for (String fn : fieldsToQuery) {
+            if (fn == 'Id') continue;
+            try {
+                Object val = parentRec.get(fn);
+                Map<String, Object> fieldData = new Map<String, Object>();
+                fieldData.put('value', RecordSchemaUtils.normalizeValue(val));
+                if (parentFieldMap.containsKey(fn)) {
+                    Schema.DescribeFieldResult dfr = parentFieldMap.get(fn).getDescribe();
+                    fieldData.put('label', dfr.getLabel());
+                    if (String.isNotBlank(dfr.getInlineHelpText())) {
+                        fieldData.put('helpText', dfr.getInlineHelpText());
+                    }
+                }
+                parentCtx.fields.put(fn, fieldData);
+            } catch (Exception e) {
+                noteSkippedField(parentCtx.completeness);
+            }
+        }
+
+        // Same-object siblings: look for a child relationship on the parent that
+        // targets the current record's object type (i.e., the relationship we
+        // came in on), and fetch records excluding the current record.
+        if (includeSameObjectSiblings && currentDescribe != null) {
+            Schema.ChildRelationship matchCr = findChildRelationshipForObject(
+                parentDescribe, currentDescribe.getName(), referenceFieldApiName
+            );
+            if (matchCr != null) {
+                try {
+                    RelatedRecordSet rrs = fetchRelatedRecords(
+                        matchCr, parentRecordId, currentDescribe, maxRelatedRecords
+                    );
+                    if (rrs != null) {
+                        List<Map<String, Object>> filtered = new List<Map<String, Object>>();
+                        for (Map<String, Object> rec : rrs.records) {
+                            String rid = extractIdValue(rec.get('Id'));
+                            if (rid != null && rid.startsWith(currentRecordId.substring(0, 15))) {
+                                continue;
+                            }
+                            filtered.add(rec);
+                        }
+                        parentCtx.sameObjectSiblings = filtered;
+                        parentCtx.sameObjectSiblingsObjectApiName = currentDescribe.getName();
+                        parentCtx.sameObjectSiblingsRelationshipName = matchCr.getRelationshipName();
+                    }
+                } catch (Exception e) {
+                    addWarning(parentCtx.completeness,
+                        'Same-object siblings through ' + parentDescribe.getLabel() + ' could not be loaded.');
+                }
+            } else {
+                addWarning(parentCtx.completeness,
+                    'No sibling child relationship was found on ' + parentDescribe.getLabel()
+                        + ' for object ' + currentDescribe.getName() + '.');
+            }
+        }
+
+        // Optional: user-picked child relationship expansion on the parent.
+        if (String.isNotBlank(siblingRelationshipName)) {
+            Schema.ChildRelationship chosen = null;
+            for (Schema.ChildRelationship cr : parentDescribe.getChildRelationships()) {
+                if (cr.getRelationshipName() == siblingRelationshipName) {
+                    chosen = cr;
+                    break;
+                }
+            }
+            if (chosen == null) {
+                addWarning(parentCtx.completeness,
+                    'Relationship "' + siblingRelationshipName + '" was not found on '
+                        + parentDescribe.getLabel() + '.');
+            } else {
+                Schema.DescribeSObjectResult childDescribe = chosen.getChildSObject().getDescribe();
+                if (!isSupportedRelationship(chosen, siblingRelationshipName, childDescribe)) {
+                    addWarning(parentCtx.completeness,
+                        'Relationship "' + siblingRelationshipName + '" is not supported for parent-based expansion.');
+                } else {
+                    try {
+                        parentCtx.selectedChildRelationship = fetchRelatedRecords(
+                            chosen, parentRecordId, childDescribe, maxRelatedRecords
+                        );
+                    } catch (Exception e) {
+                        addWarning(parentCtx.completeness,
+                            'Related records for ' + siblingRelationshipName + ' could not be loaded.');
+                    }
+                }
+            }
+        }
+
+        return parentCtx;
+    }
+
+    private static Schema.ChildRelationship findChildRelationshipForObject(
+        Schema.DescribeSObjectResult parentDescribe,
+        String targetObjectApiName,
+        String preferredForeignKeyField
+    ) {
+        Schema.ChildRelationship fallback = null;
+        for (Schema.ChildRelationship cr : parentDescribe.getChildRelationships()) {
+            String relName = cr.getRelationshipName();
+            if (String.isBlank(relName) || cr.isDeprecatedAndHidden() || cr.getField() == null) continue;
+
+            Schema.DescribeSObjectResult childDescribe = cr.getChildSObject().getDescribe();
+            if (childDescribe.getName() != targetObjectApiName) continue;
+            if (!isSupportedRelationship(cr, relName, childDescribe)) continue;
+
+            String fkName = cr.getField().getDescribe().getName();
+            if (String.isNotBlank(preferredForeignKeyField) && fkName == preferredForeignKeyField) {
+                return cr;
+            }
+            if (fallback == null) fallback = cr;
+        }
+        return fallback;
     }
 
     /**
@@ -996,6 +1631,13 @@ public with sharing class RecordContextService {
     private static void triggerDescendantFetchFailureIfRequested() {
         if (Test.isRunningTest() && forceDescendantFetchFailure) {
             forceDescendantFetchFailure = false;
+            triggerTestFailure();
+        }
+    }
+
+    private static void triggerParentFetchFailureIfRequested() {
+        if (Test.isRunningTest() && forceParentFetchFailure) {
+            forceParentFetchFailure = false;
             triggerTestFailure();
         }
     }

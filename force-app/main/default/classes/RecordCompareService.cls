@@ -35,11 +35,13 @@ public with sharing class RecordCompareService {
         @AuraEnabled public String recordName { get; set; }
         @AuraEnabled public Map<String, Object> fields { get; set; }
         @AuraEnabled public List<RecordContextService.RelatedRecordSet> relatedRecordSets { get; set; }
+        @AuraEnabled public List<RecordContextService.ParentRecordContext> parentRecordContexts { get; set; }
         @AuraEnabled public RecordContextService.ContextCompleteness completeness { get; set; }
 
         public ComparisonRecord() {
             this.fields = new Map<String, Object>();
             this.relatedRecordSets = new List<RecordContextService.RelatedRecordSet>();
+            this.parentRecordContexts = new List<RecordContextService.ParentRecordContext>();
             this.completeness = new RecordContextService.ContextCompleteness();
         }
     }
@@ -68,7 +70,10 @@ public with sharing class RecordCompareService {
         List<String> includedRelationships,
         Integer maxCompareRecords,
         Integer maxRelatedRecords,
-        Integer promptWarningThresholdTokens
+        Integer promptWarningThresholdTokens,
+        List<String> includedParentReferenceFields,
+        Boolean includeSameObjectSiblingsThroughParents,
+        Map<String, String> parentSiblingRelationshipByReferenceField
     ) {
         maxCompareRecords = normalizeMaxCompareRecords(maxCompareRecords);
         if (recordIds == null || recordIds.size() < MIN_RECORDS) {
@@ -125,7 +130,10 @@ public with sharing class RecordCompareService {
                 depth,
                 includedCategories,
                 includedRelationships,
-                maxRelatedRecords
+                maxRelatedRecords,
+                includedParentReferenceFields,
+                includeSameObjectSiblingsThroughParents,
+                parentSiblingRelationshipByReferenceField
             );
 
             ComparisonRecord cr = new ComparisonRecord();
@@ -135,6 +143,9 @@ public with sharing class RecordCompareService {
             cr.relatedRecordSets = recordCtx.relatedRecordSets == null
                 ? new List<RecordContextService.RelatedRecordSet>()
                 : recordCtx.relatedRecordSets;
+            cr.parentRecordContexts = recordCtx.parentRecordContexts == null
+                ? new List<RecordContextService.ParentRecordContext>()
+                : recordCtx.parentRecordContexts;
             cr.completeness = recordCtx.completeness == null
                 ? new RecordContextService.ContextCompleteness()
                 : recordCtx.completeness;

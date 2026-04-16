@@ -38,6 +38,9 @@ export default class AgentforceRecordInsights extends LightningElement {
     @api promptWarningThresholdTokens = 20000;
     @api maxCompareRecords = 5;
     @api relatedRecordsPerRelationship = 10;
+    @api defaultParentReferencesCsv;
+    @api defaultSameObjectSiblingsEnabled;
+    @api maxParentReferencesSelected = 5;
 
     mode = MODE_INSIGHTS;
     contextPanelOpen = true;
@@ -45,6 +48,9 @@ export default class AgentforceRecordInsights extends LightningElement {
     recordContextJson;
     includedCategories = [];
     includedRelationships = [];
+    includedParentReferenceFields = [];
+    includeSameObjectSiblingsThroughParents = false;
+    parentSiblingRelationshipByReferenceField = {};
     currentDepth = 1;
     isLoadingContext = false;
     contextError;
@@ -210,6 +216,13 @@ export default class AgentforceRecordInsights extends LightningElement {
             return 10;
         }
         return Math.min(Math.max(parsedValue, 1), 20);
+    }
+    get normalizedMaxParentReferencesSelected() {
+        const parsedValue = parseInt(this.maxParentReferencesSelected, 10);
+        if (Number.isNaN(parsedValue)) {
+            return 5;
+        }
+        return Math.min(Math.max(parsedValue, 1), 10);
     }
 
     get showSettingsButton() {
@@ -432,6 +445,20 @@ export default class AgentforceRecordInsights extends LightningElement {
                 this.defaultRelationshipsCsv,
                 item => item.includedByDefault
             );
+            const parentDefaults = this.resolveConfiguredSelections(
+                ctx.parentReferences || [],
+                'referenceFieldApiName',
+                this.defaultParentReferencesCsv,
+                item => item.includedByDefault
+            );
+            this.includedParentReferenceFields = parentDefaults.slice(0, this.normalizedMaxParentReferencesSelected);
+            this.includeSameObjectSiblingsThroughParents = this.isBooleanEnabled(
+                this.defaultSameObjectSiblingsEnabled
+            ) === true && this.defaultSameObjectSiblingsEnabled !== undefined
+                ? this.defaultSameObjectSiblingsEnabled === true
+                    || this.defaultSameObjectSiblingsEnabled === 'true'
+                : false;
+            this.parentSiblingRelationshipByReferenceField = {};
             this.currentDepth = this.normalizeDepth(this.currentDepth);
 
             this.contextLoadingPhase = 'mapping';
@@ -454,7 +481,10 @@ export default class AgentforceRecordInsights extends LightningElement {
                 depth: this.currentDepth,
                 includedCategories: this.includedCategories,
                 includedRelationships: this.includedRelationships,
-                maxRelatedRecords: this.normalizedRelatedRecordsPerRelationship
+                maxRelatedRecords: this.normalizedRelatedRecordsPerRelationship,
+                includedParentReferenceFields: this.includedParentReferenceFields,
+                includeSameObjectSiblingsThroughParents: this.includeSameObjectSiblingsThroughParents,
+                parentSiblingRelationshipByReferenceField: this.parentSiblingRelationshipByReferenceField
             });
             this.recordContextJson = JSON.stringify(this.serializeContextForChat(ctx));
             this.updateContextWarningState(ctx.completeness);
@@ -511,6 +541,34 @@ export default class AgentforceRecordInsights extends LightningElement {
         const { includedCategories, includedRelationships } = event.detail;
         if (includedCategories) this.includedCategories = includedCategories;
         if (includedRelationships) this.includedRelationships = includedRelationships;
+        this.debouncedLoadRecordContext();
+    }
+
+    handleParentContextChange(event) {
+        const {
+            includedParentReferenceFields,
+            includeSameObjectSiblingsThroughParents,
+            parentSiblingRelationshipByReferenceField
+        } = event.detail || {};
+
+        if (Array.isArray(includedParentReferenceFields)) {
+            this.includedParentReferenceFields = includedParentReferenceFields
+                .slice(0, this.normalizedMaxParentReferencesSelected);
+            // Drop sibling selections whose parent is no longer selected.
+            const allowed = new Set(this.includedParentReferenceFields);
+            const currentMap = { ...(this.parentSiblingRelationshipByReferenceField || {}) };
+            for (const key of Object.keys(currentMap)) {
+                if (!allowed.has(key)) delete currentMap[key];
+            }
+            this.parentSiblingRelationshipByReferenceField = currentMap;
+        }
+        if (typeof includeSameObjectSiblingsThroughParents === 'boolean') {
+            this.includeSameObjectSiblingsThroughParents = includeSameObjectSiblingsThroughParents;
+        }
+        if (parentSiblingRelationshipByReferenceField
+            && typeof parentSiblingRelationshipByReferenceField === 'object') {
+            this.parentSiblingRelationshipByReferenceField = { ...parentSiblingRelationshipByReferenceField };
+        }
         this.debouncedLoadRecordContext();
     }
 
@@ -574,6 +632,15 @@ export default class AgentforceRecordInsights extends LightningElement {
 
         const warningMessages = this.extractCompletenessMessages(ctx.completeness);
 
+        const parentChildSelections = Object.entries(
+            this.parentSiblingRelationshipByReferenceField || {}
+        )
+            .filter(([, value]) => Boolean(value))
+            .map(([referenceFieldApiName, relationshipName]) => ({
+                referenceFieldApiName,
+                relationshipName
+            }));
+
         return {
             selectionSummary: {
                 mode: MODE_INSIGHTS,
@@ -583,6 +650,9 @@ export default class AgentforceRecordInsights extends LightningElement {
                 depth: this.currentDepth,
                 selectedCategories: [...this.includedCategories],
                 selectedRelationships: [...this.includedRelationships],
+                selectedParentReferenceFields: [...(this.includedParentReferenceFields || [])],
+                sameObjectSiblingsEnabled: Boolean(this.includeSameObjectSiblingsThroughParents),
+                parentChildRelationshipsSelected: parentChildSelections,
                 contextStatus: warningMessages.length ? 'partial' : 'ready',
                 warningSummary: warningMessages.length
                     ? 'Some record context was skipped or truncated. AI responses may be incomplete.'

@@ -1,4 +1,5 @@
 import { LightningElement, api } from 'lwc';
+import getParentChildRelationships from '@salesforce/apex/RecordContextService.getParentChildRelationships';
 
 const OBJECT_ICON_MAP = {
     Account: 'standard:account',
@@ -22,6 +23,9 @@ export default class ContextPanel extends LightningElement {
     @api availableContext;
     @api includedCategories = [];
     @api includedRelationships = [];
+    @api includedParentReferenceFields = [];
+    @api includeSameObjectSiblingsThroughParents = false;
+    @api parentSiblingRelationshipByReferenceField = {};
     @api depth = 1;
     @api maxDepthAllowed = 3;
     @api sessionTokens = 0;
@@ -36,6 +40,9 @@ export default class ContextPanel extends LightningElement {
 
     fieldsExpanded = false;
     relationshipsExpanded = false;
+    parentsExpanded = false;
+    parentChildRelationshipsCache = {};
+    loadingParentChildFor = new Set();
 
     renderedCallback() {
         const fieldsCb = this.template.querySelector('input[data-select-all="fields"]');
@@ -113,6 +120,66 @@ export default class ContextPanel extends LightningElement {
 
     get relsExpandIcon() {
         return this.relationshipsExpanded ? 'utility:chevrondown' : 'utility:chevronright';
+    }
+
+    get parentsExpandIcon() {
+        return this.parentsExpanded ? 'utility:chevrondown' : 'utility:chevronright';
+    }
+
+    get hasParentReferences() {
+        return Array.isArray(this.availableContext?.parentReferences)
+            && this.availableContext.parentReferences.length > 0;
+    }
+
+    get includedParentRefCount() {
+        return this.includedParentReferenceFields?.length || 0;
+    }
+
+    get parentReferencesWithState() {
+        if (!this.availableContext?.parentReferences) return [];
+        const includedRefs = new Set(this.includedParentReferenceFields);
+        const siblingRelMap = this.parentSiblingRelationshipByReferenceField || {};
+
+        return this.availableContext.parentReferences.map(ref => {
+            const isIncluded = includedRefs.has(ref.referenceFieldApiName);
+            const hasParentValue = Boolean(ref.parentRecordId);
+            const childOptions = this.buildParentChildOptions(
+                ref.parentObjectApiName,
+                siblingRelMap[ref.referenceFieldApiName]
+            );
+            const displayLabel = `${ref.parentObjectLabel || ref.parentObjectApiName} (${ref.referenceFieldLabel || ref.referenceFieldApiName})`;
+            const selectedChildRelationship = siblingRelMap[ref.referenceFieldApiName] || '';
+            const parentSummary = hasParentValue
+                ? (ref.parentRecordName || ref.parentRecordId)
+                : 'Blank on this record';
+            return {
+                ...ref,
+                isIncluded,
+                hasParentValue,
+                displayLabel,
+                parentSummary,
+                childOptions,
+                selectedChildRelationship,
+                showControls: isIncluded && hasParentValue
+            };
+        });
+    }
+
+    buildParentChildOptions(parentObjectApiName, selectedValue) {
+        const options = [{ label: '(none)', value: '' }];
+        const cached = this.parentChildRelationshipsCache[parentObjectApiName];
+        if (Array.isArray(cached)) {
+            for (const rel of cached) {
+                options.push({
+                    label: rel.childObjectLabel || rel.relationshipName,
+                    value: rel.relationshipName
+                });
+            }
+        } else if (selectedValue) {
+            // Ensure the selected value still shows up even before options load.
+            options.push({ label: selectedValue, value: selectedValue });
+        }
+        return options;
     }
 
     get fieldCategoriesWithState() {
@@ -214,6 +281,23 @@ export default class ContextPanel extends LightningElement {
                 }
             }
         }
+
+        // Parent records: ~200 tokens per selected parent for field data.
+        const parentRefIncluded = new Set(this.includedParentReferenceFields);
+        const siblingsEnabled = this.isBooleanEnabled(this.includeSameObjectSiblingsThroughParents);
+        const siblingRelMap = this.parentSiblingRelationshipByReferenceField || {};
+        if (this.availableContext?.parentReferences) {
+            for (const ref of this.availableContext.parentReferences) {
+                if (!parentRefIncluded.has(ref.referenceFieldApiName)) continue;
+                tokens += 200;
+                if (siblingsEnabled) {
+                    tokens += 500; // estimated cost for up to ~5 sibling records
+                }
+                if (siblingRelMap[ref.referenceFieldApiName]) {
+                    tokens += 600; // estimated cost for child-relationship expansion under the parent
+                }
+            }
+        }
         return tokens > 0 ? tokens : null;
     }
 
@@ -271,6 +355,87 @@ export default class ContextPanel extends LightningElement {
 
     toggleFieldsSection() { this.fieldsExpanded = !this.fieldsExpanded; }
     toggleRelationshipsSection() { this.relationshipsExpanded = !this.relationshipsExpanded; }
+    toggleParentsSection() {
+        this.parentsExpanded = !this.parentsExpanded;
+        if (this.parentsExpanded) {
+            this.prefetchParentChildRelationshipsForSelected();
+        }
+    }
+
+    handleParentReferenceToggle(event) {
+        const refApiName = event.target.dataset.reference;
+        const isChecked = event.target.checked;
+        let updated = [...(this.includedParentReferenceFields || [])];
+
+        if (isChecked && !updated.includes(refApiName)) {
+            updated.push(refApiName);
+            this.loadParentChildRelationshipsFor(refApiName);
+        } else if (!isChecked) {
+            updated = updated.filter(r => r !== refApiName);
+        }
+
+        this.dispatchParentChange({ includedParentReferenceFields: updated });
+    }
+
+    handleSameObjectSiblingsToggle(event) {
+        const isChecked = event.target.checked;
+        this.dispatchParentChange({ includeSameObjectSiblingsThroughParents: isChecked });
+    }
+
+    handleParentChildRelationshipChange(event) {
+        const refApiName = event.target.dataset.reference;
+        const value = event.target.value || '';
+        const current = { ...(this.parentSiblingRelationshipByReferenceField || {}) };
+        if (value) {
+            current[refApiName] = value;
+        } else {
+            delete current[refApiName];
+        }
+        this.dispatchParentChange({ parentSiblingRelationshipByReferenceField: current });
+    }
+
+    dispatchParentChange(partialDetail) {
+        this.dispatchEvent(new CustomEvent('parentcontextchange', {
+            detail: {
+                includedParentReferenceFields: this.includedParentReferenceFields,
+                includeSameObjectSiblingsThroughParents: this.includeSameObjectSiblingsThroughParents,
+                parentSiblingRelationshipByReferenceField: this.parentSiblingRelationshipByReferenceField,
+                ...partialDetail
+            }
+        }));
+    }
+
+    prefetchParentChildRelationshipsForSelected() {
+        const refs = this.includedParentReferenceFields || [];
+        for (const ref of refs) {
+            this.loadParentChildRelationshipsFor(ref);
+        }
+    }
+
+    async loadParentChildRelationshipsFor(referenceFieldApiName) {
+        const parentRef = (this.availableContext?.parentReferences || [])
+            .find(r => r.referenceFieldApiName === referenceFieldApiName);
+        if (!parentRef || !parentRef.parentObjectApiName) return;
+        const parentObjectApiName = parentRef.parentObjectApiName;
+        if (this.parentChildRelationshipsCache[parentObjectApiName]) return;
+        if (this.loadingParentChildFor.has(parentObjectApiName)) return;
+
+        this.loadingParentChildFor.add(parentObjectApiName);
+        try {
+            const result = await getParentChildRelationships({ parentObjectApiName });
+            this.parentChildRelationshipsCache = {
+                ...this.parentChildRelationshipsCache,
+                [parentObjectApiName]: Array.isArray(result) ? result : []
+            };
+        } catch (error) {
+            this.parentChildRelationshipsCache = {
+                ...this.parentChildRelationshipsCache,
+                [parentObjectApiName]: []
+            };
+        } finally {
+            this.loadingParentChildFor.delete(parentObjectApiName);
+        }
+    }
 
     handleSelectAllFields(event) {
         event.stopPropagation();

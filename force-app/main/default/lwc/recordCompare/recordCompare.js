@@ -34,6 +34,9 @@ export default class RecordCompare extends LightningElement {
     @api promptWarningThresholdTokens = 20000;
     @api maxCompareRecords = 5;
     @api relatedRecordsPerRelationship = 10;
+    @api defaultParentReferencesCsv;
+    @api defaultSameObjectSiblingsEnabled;
+    @api maxParentReferencesSelected = 5;
 
     selectedObjectType = '';
     @track selectedRecords = [];
@@ -56,6 +59,9 @@ export default class RecordCompare extends LightningElement {
     availableContext;
     includedCategories = [];
     includedRelationships = [];
+    includedParentReferenceFields = [];
+    includeSameObjectSiblingsThroughParents = false;
+    parentSiblingRelationshipByReferenceField = {};
     currentDepth = 1;
     isLoadingCompareContext = false;
     showFieldSelector = false;
@@ -283,6 +289,14 @@ export default class RecordCompare extends LightningElement {
             return 10;
         }
         return Math.min(Math.max(parsedValue, 1), 20);
+    }
+
+    get normalizedMaxParentReferencesSelected() {
+        const parsedValue = parseInt(this.maxParentReferencesSelected, 10);
+        if (Number.isNaN(parsedValue)) {
+            return 5;
+        }
+        return Math.min(Math.max(parsedValue, 1), 10);
     }
 
     get hasReachedMaxCompareRecords() {
@@ -664,6 +678,24 @@ export default class RecordCompare extends LightningElement {
                 );
             }
 
+            if (resetSelections || this.includedParentReferenceFields.length === 0) {
+                const parentDefaults = this.resolveConfiguredSelections(
+                    ctx.parentReferences || [],
+                    'referenceFieldApiName',
+                    this.defaultParentReferencesCsv,
+                    item => item.includedByDefault
+                );
+                this.includedParentReferenceFields = parentDefaults.slice(
+                    0,
+                    this.normalizedMaxParentReferencesSelected
+                );
+            }
+            if (resetSelections) {
+                this.includeSameObjectSiblingsThroughParents = this.defaultSameObjectSiblingsEnabled === true
+                    || this.defaultSameObjectSiblingsEnabled === 'true';
+                this.parentSiblingRelationshipByReferenceField = {};
+            }
+
             this.currentDepth = resetSelections
                 ? this.normalizeDepth(this.defaultDepth)
                 : this.normalizeDepth(this.currentDepth);
@@ -728,6 +760,9 @@ export default class RecordCompare extends LightningElement {
         this.suggestionsLoaded = false;
         this.includedCategories = [];
         this.includedRelationships = [];
+        this.includedParentReferenceFields = [];
+        this.includeSameObjectSiblingsThroughParents = false;
+        this.parentSiblingRelationshipByReferenceField = {};
         this.searchError = null;
         this.objectTypeError = null;
         this.activeStep = 'records';
@@ -868,7 +903,10 @@ export default class RecordCompare extends LightningElement {
                 includedRelationships: this.includedRelationships,
                 maxCompareRecords: this.normalizedMaxCompareRecords,
                 maxRelatedRecords: this.normalizedRelatedRecordsPerRelationship,
-                promptWarningThresholdTokens: this.normalizedPromptWarningThreshold
+                promptWarningThresholdTokens: this.normalizedPromptWarningThreshold,
+                includedParentReferenceFields: this.includedParentReferenceFields,
+                includeSameObjectSiblingsThroughParents: this.includeSameObjectSiblingsThroughParents,
+                parentSiblingRelationshipByReferenceField: this.parentSiblingRelationshipByReferenceField
             });
 
             this.comparisonContextJson = JSON.stringify(this.serializeComparisonForChat(ctx));
@@ -901,6 +939,35 @@ export default class RecordCompare extends LightningElement {
         }
         if (includedRelationships) {
             this.includedRelationships = includedRelationships;
+        }
+        this.invalidateComparison();
+        this.updateCompareWarningState();
+        this.activeStep = 'settings';
+    }
+
+    handleParentContextChange(event) {
+        const {
+            includedParentReferenceFields,
+            includeSameObjectSiblingsThroughParents,
+            parentSiblingRelationshipByReferenceField
+        } = event.detail || {};
+
+        if (Array.isArray(includedParentReferenceFields)) {
+            this.includedParentReferenceFields = includedParentReferenceFields
+                .slice(0, this.normalizedMaxParentReferencesSelected);
+            const allowed = new Set(this.includedParentReferenceFields);
+            const currentMap = { ...(this.parentSiblingRelationshipByReferenceField || {}) };
+            for (const key of Object.keys(currentMap)) {
+                if (!allowed.has(key)) delete currentMap[key];
+            }
+            this.parentSiblingRelationshipByReferenceField = currentMap;
+        }
+        if (typeof includeSameObjectSiblingsThroughParents === 'boolean') {
+            this.includeSameObjectSiblingsThroughParents = includeSameObjectSiblingsThroughParents;
+        }
+        if (parentSiblingRelationshipByReferenceField
+            && typeof parentSiblingRelationshipByReferenceField === 'object') {
+            this.parentSiblingRelationshipByReferenceField = { ...parentSiblingRelationshipByReferenceField };
         }
         this.invalidateComparison();
         this.updateCompareWarningState();
@@ -1105,6 +1172,9 @@ export default class RecordCompare extends LightningElement {
                 depth: this.currentDepth,
                 selectedCategories: [...this.includedCategories],
                 selectedRelationships: [...this.includedRelationships],
+                selectedParentReferences: [...(this.includedParentReferenceFields || [])],
+                includeSameObjectSiblingsThroughParents: !!this.includeSameObjectSiblingsThroughParents,
+                parentSiblingRelationshipByReferenceField: { ...(this.parentSiblingRelationshipByReferenceField || {}) },
                 contextStatus: warningMessages.length ? 'partial' : 'ready',
                 warningSummary: warningMessages.length
                     ? 'Some compared record context was skipped or truncated. AI responses may be incomplete.'

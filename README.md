@@ -10,6 +10,7 @@ AI-powered conversational insights grounded in live Salesforce record data. Uses
 - **Zero-config context discovery** — Insights mode works broadly across standard and custom objects using Schema Describe APIs
 - **Dynamic relationship traversal** — Uses `getChildRelationships()` to discover related records automatically
 - **User-controlled context** — Toggle field categories, related objects, and traversal depth (1, 2, or 3 levels)
+- **Parent and sibling context (one hop)** — Optionally include selected parent lookup records, their same-object siblings through those parents, and one user-picked child relationship per parent. Scope is strictly one hop; the AI never chains further
 - **Cross-record comparison** — Compare 2-5 records of the same supported type with AI-powered analysis
 - **Multi-turn conversation** — Persistent chat with localStorage, markdown rendering, suggested prompts
 - **Permission-aware** — Enforces FLS, CRUD, and sharing rules at every layer
@@ -144,8 +145,21 @@ If someone only wants to deploy metadata without using a DX project, they can co
 - `Large Prompt Warning Threshold (Tokens)`: Defaults to `20000`. Warns before large prompts and limits compare payload size unless set to `0`.
 - `Maximum Compare Records`: Caps compare selection between `2` and `5` records.
 - `Related Records Per Relationship`: Controls how many child records are loaded per selected relationship and directly affects prompt size, response latency, and flex-credit use.
+- `Default Parent Records (CSV)`: Optional comma-separated lookup field API names to preselect as parent records in insights and compare mode. One hop only. Example for a custom Order: `AccountId,ContactId,TreatmentSite__c`.
+- `Preload Same-Object Siblings Through Parents`: When a parent record is included, also loads other records of the same object type under that parent (excluding the active record). Increases prompt size; keep off unless sibling comparisons are core to the use case.
+- `Maximum Parent Records Selected`: Caps how many parent lookup records a user can include at once (1–10). Lower this to keep prompts small and focused.
 - `Enable Suggested Follow-Ups`: Adds an extra AI call after each response.
 - `Persist Conversation`: Stores chat history and usage metrics in browser `localStorage` only.
+
+### Parent and Sibling Context Scope
+
+Parent and sibling expansions are strictly **one hop**:
+
+- Parent records are the direct single-target lookups on the active record. Polymorphic lookups (for example, Task `WhatId`/`WhoId`) are skipped and surfaced as a warning.
+- Same-object siblings are other records of the active record's type that share the selected parent, excluding the active record itself.
+- For each selected parent, users can optionally include **one** child relationship of that parent to expand additional context.
+
+The AI is instructed to reason only over the provided data and to avoid inventing relationships or values. Multi-hop traversal, workflow inference, and chained lookups are intentionally out of scope.
 
 ## Local Development and Testing
 

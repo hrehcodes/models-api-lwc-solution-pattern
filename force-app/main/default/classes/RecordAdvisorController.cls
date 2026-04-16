@@ -302,8 +302,10 @@ public with sharing class RecordAdvisorController {
         String prompt = 'You are Agentforce Record Insights, an AI advisor that helps Salesforce users '
             + 'understand their CRM data.\n\n';
         prompt += 'You have been given a JSON payload with `selectionSummary` and `recordContext`. '
-            + '`selectionSummary` describes which categories, relationships, and depth were included. '
-            + '`recordContext` contains the actual grounded field values, related records, and completeness metadata. '
+            + '`selectionSummary` describes which categories, relationships, parent references, '
+            + 'and depth were included. '
+            + '`recordContext` contains the actual grounded field values, related records, parent records, '
+            + 'sibling records, and completeness metadata. '
             + 'Field API names map to objects containing a human-readable `label` and `value`. '
             + 'Use field labels (not API names) when referring to data in your responses.\n\n';
 
@@ -314,6 +316,16 @@ public with sharing class RecordAdvisorController {
             prompt += 'No record data provided.\n\n';
         }
 
+        prompt += '=== PARENT RECORDS ===\n';
+        prompt += '- `recordContext.parentRecordContexts` (if present) lists parent lookup records selected by the user.\n';
+        prompt += '- Each entry contains the parent\'s own fields plus optional `sameObjectSiblings` and `selectedChildRelationship` collections.\n';
+        prompt += '- Treat parent data as supplementary context. Do not traverse further lookups beyond what the payload provides.\n\n';
+
+        prompt += '=== SIBLING RECORDS (THROUGH PARENT) ===\n';
+        prompt += '- `parentRecordContexts[].sameObjectSiblings` (if present) lists other records of the same object type that share the selected parent. These exclude the active record itself.\n';
+        prompt += '- `parentRecordContexts[].selectedChildRelationship` (if present) contains one user-picked child-relationship expansion on the parent.\n';
+        prompt += '- Sibling data is provided for comparison and benchmarking only. It is one hop deep; do not infer further relationships, automation, or workflow rules from it.\n\n';
+
         prompt += buildCoreGuidelines() + '\n';
 
         prompt += '=== INSIGHTS-SPECIFIC GUIDELINES ===\n';
@@ -322,8 +334,11 @@ public with sharing class RecordAdvisorController {
         prompt += '- Prioritize actionable insights — surface risks, opportunities, overdue items, and anomalies.\n';
         prompt += '- When related records are available, draw connections across them '
             + '(e.g., open cases on an account, recent activities on an opportunity).\n';
+        prompt += '- When parent records or sibling records are available, use them to enrich the summary '
+            + '(e.g., "the parent Account is in the Healthcare industry" or "2 sibling Orders share this Account and are both Closed").\n';
         prompt += '- If completeness metadata indicates warnings, state that some context may have been skipped or truncated.\n';
-        prompt += '- If the user asks for something not covered by the selected context, say which additional context would help.\n';
+        prompt += '- If the user asks for something not covered by the selected context, say which additional context would help '
+            + '(including whether enabling specific parent records or siblings would resolve the gap).\n';
 
         return prompt;
     }
@@ -333,10 +348,11 @@ public with sharing class RecordAdvisorController {
         String prompt = 'You are Agentforce Record Insights in comparison mode. '
             + 'You help users compare multiple Salesforce records of the same type.\n\n';
         prompt += 'The JSON payload includes `selectionSummary` and `comparisonContext`. '
-            + '`selectionSummary` describes which categories, relationships, and depth were included. '
+            + '`selectionSummary` describes which categories, relationships, parent references, '
+            + 'and depth were included. '
             + '`comparisonContext` contains the comparison-level metadata and the list of records. '
             + 'Each record contains `fields` with field API names mapped to objects with a human-readable `label` and `value`. '
-            + 'Records may also contain `relatedRecordSets` and `completeness` metadata. '
+            + 'Records may also contain `relatedRecordSets`, `parentRecordContexts`, and `completeness` metadata. '
             + 'Always refer to each record by its name, not its ID.\n\n';
 
         prompt += '=== RECORDS TO COMPARE ===\n';
@@ -345,6 +361,15 @@ public with sharing class RecordAdvisorController {
         } else {
             prompt += 'No comparison data provided.\n\n';
         }
+
+        prompt += '=== PARENT RECORDS ===\n';
+        prompt += '- Each compared record may include `parentRecordContexts` with parent lookup data the user elected to load.\n';
+        prompt += '- Treat parent data as supplementary context for differentiating the compared records. Do not traverse further relationships beyond what is provided.\n\n';
+
+        prompt += '=== SIBLING RECORDS (THROUGH PARENT) ===\n';
+        prompt += '- `parentRecordContexts[].sameObjectSiblings` shows other records of the same object sharing a parent (excluding the compared record itself).\n';
+        prompt += '- `parentRecordContexts[].selectedChildRelationship` shows one optional user-picked child-relationship expansion under the parent.\n';
+        prompt += '- Use these only to enrich comparison takeaways (e.g., "both records share the same Account and that Account has 4 other open Orders"). Do not infer workflow rules or aggregate metrics beyond what the data contains.\n\n';
 
         prompt += buildCoreGuidelines() + '\n';
 

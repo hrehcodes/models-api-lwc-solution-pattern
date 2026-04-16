@@ -155,6 +155,65 @@
             </template>
         </div>
 
+        <!-- Parent Records -->
+        <template lwc:if={hasParentReferences}>
+            <div class="divider slds-m-bottom_small slds-m-top_small"></div>
+            <div>
+                <div class="section-header">
+                    <div class="section-main">
+                        <button class="section-toggle" onclick={toggleParentsSection} type="button">
+                            <lightning-icon icon-name={parentsExpandIcon} size="xx-small" class="slds-m-right_xx-small"></lightning-icon>
+                            <span class="slds-text-title_bold">Parent Records</span>
+                            <span class="slds-text-color_weak slds-m-left_xx-small count-badge">{includedParentRefCount}</span>
+                        </button>
+                        <lightning-helptext
+                            content="Parent records are the records this one looks up to (for example, the Account for a contact, or the Contact for an order). Selecting a parent sends its field data to the AI. Optional controls let you include same-object siblings through the parent (e.g., other orders for the same account) and one child relationship of the parent. These are one hop only and do not chain further."
+                            class="info-helptext"
+                        ></lightning-helptext>
+                    </div>
+                </div>
+
+                <template lwc:if={parentsExpanded}>
+                    <div class="slds-m-top_xx-small slds-m-bottom_xx-small">
+                        <label class="slds-checkbox">
+                            <input type="checkbox" checked={includeSameObjectSiblingsThroughParents} onchange={handleSameObjectSiblingsToggle} />
+                            <span class="slds-checkbox_faux"></span>
+                            <span class="slds-form-element__label category-label">
+                                Include same-object siblings through selected parents
+                            </span>
+                        </label>
+                    </div>
+                    <ul class="category-list">
+                        <template for:each={parentReferencesWithState} for:item="ref">
+                            <li key={ref.referenceFieldApiName} class="category-item">
+                                <label class="slds-checkbox">
+                                    <input type="checkbox" checked={ref.isIncluded} data-reference={ref.referenceFieldApiName} onchange={handleParentReferenceToggle} />
+                                    <span class="slds-checkbox_faux"></span>
+                                    <span class="slds-form-element__label category-label">
+                                        {ref.displayLabel}
+                                        <span class="slds-text-color_weak slds-m-left_xx-small">– {ref.parentSummary}</span>
+                                    </span>
+                                </label>
+                                <template lwc:if={ref.showControls}>
+                                    <div class="slds-m-left_large slds-m-top_xx-small">
+                                        <lightning-combobox
+                                            name={ref.referenceFieldApiName}
+                                            data-reference={ref.referenceFieldApiName}
+                                            label="Also include related records from this parent"
+                                            value={ref.selectedChildRelationship}
+                                            options={ref.childOptions}
+                                            onchange={handleParentChildRelationshipChange}
+                                            variant="label-stacked"
+                                        ></lightning-combobox>
+                                    </div>
+                                </template>
+                            </li>
+                        </template>
+                    </ul>
+                </template>
+            </div>
+        </template>
+
         <!-- Usage Metrics -->
         <template lwc:if={showUsageMetricsEnabled}>
             <div class="divider slds-m-vertical_small"></div>
