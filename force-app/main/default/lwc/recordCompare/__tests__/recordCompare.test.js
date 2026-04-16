@@ -255,7 +255,8 @@ describe('c-record-compare', () => {
             promptWarningThresholdTokens: 20000,
             includedParentReferenceFields: [],
             includeSameObjectSiblingsThroughParents: false,
-            parentSiblingRelationshipByReferenceField: {}
+            parentSiblingRelationshipByReferenceField: {},
+            includedFields: null
         });
 
         expect(element.shadowRoot.querySelector('c-chat-panel')).not.toBeNull();

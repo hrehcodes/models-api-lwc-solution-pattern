@@ -352,6 +352,43 @@ public with sharing class RecordContextService {
     }
 
     /**
+     * Returns the flat, describe-validated list of accessible FieldInfo entries for an
+     * object, exactly as produced by categorizeFields() (which already enforces
+     * isAccessible + EXCLUDED_FIELD_TYPES). This is the single hardened entry point
+     * the UI uses to render the per-field override picker. The server never trusts
+     * the UI field list; it intersects at query time again via buildQueryFieldList().
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<FieldInfo> getAccessibleFieldsForObject(String objectApiName) {
+        if (String.isBlank(objectApiName)) {
+            throw new AuraHandledException('Object API name is required.');
+        }
+
+        Schema.SObjectType objType = Schema.getGlobalDescribe().get(objectApiName);
+        if (objType == null) {
+            throw new AuraHandledException('Invalid or inaccessible object type.');
+        }
+
+        Schema.DescribeSObjectResult objDescribe = objType.getDescribe();
+        if (!objDescribe.isAccessible()) {
+            throw new AuraHandledException('You do not have access to this object type.');
+        }
+
+        List<FieldInfo> result = new List<FieldInfo>();
+        Set<String> seen = new Set<String>();
+        for (FieldCategory cat : categorizeFields(objDescribe)) {
+            for (FieldInfo fi : cat.fields) {
+                if (fi == null || String.isBlank(fi.apiName)) continue;
+                String key = fi.apiName.toLowerCase();
+                if (seen.contains(key)) continue;
+                seen.add(key);
+                result.add(fi);
+            }
+        }
+        return result;
+    }
+
+    /**
      * Fetches the full record context: field values and related records.
      * Parameters control which fields and relationships to include.
      *
@@ -375,7 +412,8 @@ public with sharing class RecordContextService {
         Integer maxRelatedRecords,
         List<String> includedParentReferenceFields,
         Boolean includeSameObjectSiblingsThroughParents,
-        Map<String, String> parentSiblingRelationshipByReferenceField
+        Map<String, String> parentSiblingRelationshipByReferenceField,
+        List<String> includedFields
     ) {
         validateRecordId(recordId);
 
@@ -403,28 +441,14 @@ public with sharing class RecordContextService {
         }
 
         List<FieldCategory> allCategories = categorizeFields(objDescribe);
-        List<String> fieldsToQuery = new List<String>();
-        Set<String> fieldSet = new Set<String>();
-        fieldSet.add('Id');
-        fieldsToQuery.add('Id');
-
+        List<String> fieldsToQuery = buildQueryFieldList(
+            objDescribe,
+            allCategories,
+            categorySet,
+            includedFields,
+            ctx.completeness
+        );
         String nameField = RecordSchemaUtils.getNameField(objDescribe);
-        if (!fieldSet.contains(nameField)) {
-            fieldSet.add(nameField);
-            fieldsToQuery.add(nameField);
-        }
-
-        for (FieldCategory cat : allCategories) {
-            Boolean included = categorySet.isEmpty() ? cat.includedByDefault : categorySet.contains(cat.name);
-            if (!included) continue;
-            for (FieldInfo fi : cat.fields) {
-                if (!fieldSet.contains(fi.apiName) && fieldsToQuery.size() < RecordSchemaUtils.MAX_FIELDS_PER_QUERY) {
-                    fieldSet.add(fi.apiName);
-                    fieldsToQuery.add(fi.apiName);
-                }
-            }
-        }
-        fieldsToQuery = RecordSchemaUtils.getCanonicalFieldNames(objDescribe, fieldsToQuery);
 
         // Query the record
         List<SObject> records;
@@ -1593,6 +1617,121 @@ public with sharing class RecordContextService {
         if (!completeness.warningMessages.contains(warningMessage)) {
             completeness.warningMessages.add(warningMessage);
         }
+    }
+
+    /**
+     * Builds the SOQL field list for the active record, honoring every security boundary:
+     * - Only fields present in categorizeFields() are considered (isAccessible + EXCLUDED_FIELD_TYPES pre-filtered).
+     * - Only fields in the currently included categories are eligible.
+     * - If a client-supplied includedFields override is provided, it is intersected with the above.
+     * - Id and the object's name field are always present.
+     * - MAX_FIELDS_PER_QUERY is always enforced; excess fields are dropped deterministically with a warning.
+     * Rejected fields are counted but never echoed back.
+     */
+    private static List<String> buildQueryFieldList(
+        Schema.DescribeSObjectResult objDescribe,
+        List<FieldCategory> allCategories,
+        Set<String> categorySet,
+        List<String> includedFields,
+        ContextCompleteness completeness
+    ) {
+        List<String> result = new List<String>();
+        Set<String> added = new Set<String>();
+
+        result.add('Id');
+        added.add('Id');
+
+        String nameField = RecordSchemaUtils.getNameField(objDescribe);
+        if (String.isNotBlank(nameField) && !added.contains(nameField)) {
+            result.add(nameField);
+            added.add(nameField);
+        }
+
+        Set<String> categoryFieldUnion = new Set<String>();
+        for (FieldCategory cat : allCategories) {
+            Boolean included = categorySet.isEmpty() ? cat.includedByDefault : categorySet.contains(cat.name);
+            if (!included) continue;
+            for (FieldInfo fi : cat.fields) {
+                if (String.isNotBlank(fi.apiName)) {
+                    categoryFieldUnion.add(fi.apiName);
+                }
+            }
+        }
+
+        Boolean hasOverride = includedFields != null && !includedFields.isEmpty();
+        Set<String> overrideNormalized = new Set<String>();
+        Integer droppedOutsideCategories = 0;
+        Integer droppedInaccessible = 0;
+        if (hasOverride) {
+            Set<String> seen = new Set<String>();
+            for (String raw : includedFields) {
+                if (String.isBlank(raw)) continue;
+                String canonical = raw.trim();
+                if (String.isBlank(canonical)) continue;
+                String key = canonical.toLowerCase();
+                if (seen.contains(key)) continue;
+                seen.add(key);
+                overrideNormalized.add(canonical);
+            }
+        }
+
+        if (hasOverride) {
+            Map<String, String> categoryFieldByLower = new Map<String, String>();
+            for (String apiName : categoryFieldUnion) {
+                categoryFieldByLower.put(apiName.toLowerCase(), apiName);
+            }
+
+            Integer droppedOversize = 0;
+            for (String requested : overrideNormalized) {
+                String resolved = categoryFieldByLower.get(requested.toLowerCase());
+                if (resolved == null) {
+                    if (categorySet.isEmpty()) {
+                        droppedInaccessible++;
+                    } else {
+                        droppedOutsideCategories++;
+                    }
+                    continue;
+                }
+                if (added.contains(resolved)) continue;
+                if (result.size() >= RecordSchemaUtils.MAX_FIELDS_PER_QUERY) {
+                    droppedOversize++;
+                    continue;
+                }
+                result.add(resolved);
+                added.add(resolved);
+            }
+
+            if (droppedOutsideCategories > 0) {
+                addWarning(
+                    completeness,
+                    droppedOutsideCategories
+                        + ' requested field(s) were outside the selected field categories and were skipped.'
+                );
+            }
+            if (droppedInaccessible > 0) {
+                addWarning(
+                    completeness,
+                    droppedInaccessible
+                        + ' requested field(s) were not accessible and were skipped.'
+                );
+            }
+            if (droppedOversize > 0) {
+                addWarning(
+                    completeness,
+                    droppedOversize
+                        + ' requested field(s) exceeded the per-query field limit and were skipped.'
+                );
+            }
+        } else {
+            for (String apiName : categoryFieldUnion) {
+                if (added.contains(apiName)) continue;
+                if (result.size() >= RecordSchemaUtils.MAX_FIELDS_PER_QUERY) break;
+                result.add(apiName);
+                added.add(apiName);
+            }
+        }
+
+        return RecordSchemaUtils.getCanonicalFieldNames(objDescribe, result);
     }
 
     private static String fetchRecordName(

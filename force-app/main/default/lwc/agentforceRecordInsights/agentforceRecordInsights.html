@@ -110,6 +110,8 @@
                                     available-context={availableContext}
                                     included-categories={includedCategories}
                                     included-relationships={includedRelationships}
+                                    included-fields={includedFields}
+                                    field-selection-mode={activeFieldSelectionMode}
                                     included-parent-reference-fields={includedParentReferenceFields}
                                     include-same-object-siblings-through-parents={includeSameObjectSiblingsThroughParents}
                                     parent-sibling-relationship-by-reference-field={parentSiblingRelationshipByReferenceField}
@@ -202,6 +204,8 @@
                         default-depth={defaultDepth}
                         max-depth-allowed={normalizedMaxDepth}
                         default-field-categories-csv={defaultFieldCategoriesCsv}
+                        default-included-fields-csv={defaultIncludedFieldsCsv}
+                        field-selection-mode={fieldSelectionMode}
                         default-relationships-csv={defaultRelationshipsCsv}
                         default-parent-references-csv={defaultParentReferencesCsv}
                         default-same-object-siblings-enabled={defaultSameObjectSiblingsEnabled}
@@ -222,7 +226,10 @@
         <c-insights-field-selector
             field-categories={availableContext.fieldCategories}
             included-categories={includedCategories}
+            included-fields={includedFields}
+            selection-mode={activeFieldSelectionMode}
             oncategorieschange={handleCategoriesChange}
+            onfieldselectionchange={handleFieldSelectionChange}
             onclose={handleCloseFieldSelector}
         ></c-insights-field-selector>
     </template>

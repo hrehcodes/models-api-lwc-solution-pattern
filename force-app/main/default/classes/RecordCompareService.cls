@@ -73,7 +73,8 @@ public with sharing class RecordCompareService {
         Integer promptWarningThresholdTokens,
         List<String> includedParentReferenceFields,
         Boolean includeSameObjectSiblingsThroughParents,
-        Map<String, String> parentSiblingRelationshipByReferenceField
+        Map<String, String> parentSiblingRelationshipByReferenceField,
+        List<String> includedFields
     ) {
         maxCompareRecords = normalizeMaxCompareRecords(maxCompareRecords);
         if (recordIds == null || recordIds.size() < MIN_RECORDS) {
@@ -133,7 +134,8 @@ public with sharing class RecordCompareService {
                 maxRelatedRecords,
                 includedParentReferenceFields,
                 includeSameObjectSiblingsThroughParents,
-                parentSiblingRelationshipByReferenceField
+                parentSiblingRelationshipByReferenceField,
+                includedFields
             );
 
             ComparisonRecord cr = new ComparisonRecord();

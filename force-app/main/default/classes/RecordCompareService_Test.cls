@@ -45,7 +45,7 @@ private class RecordCompareService_Test {
 
         Test.startTest();
         RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(
-            ids, 1, null, null, null, null, null, null, false, null
+            ids, 1, null, null, null, null, null, null, false, null, null
         );
         Test.stopTest();
 
@@ -63,7 +63,7 @@ private class RecordCompareService_Test {
 
         Test.startTest();
         RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(
-            ids, 1, null, null, null, null, null, null, false, null
+            ids, 1, null, null, null, null, null, null, false, null, null
         );
         Test.stopTest();
 
@@ -93,6 +93,7 @@ private class RecordCompareService_Test {
             null,
             null,
             false,
+            null,
             null
         );
         Test.stopTest();
@@ -134,6 +135,7 @@ private class RecordCompareService_Test {
             null,
             null,
             false,
+            null,
             null
         );
         Test.stopTest();
@@ -155,7 +157,7 @@ private class RecordCompareService_Test {
 
         Boolean exceptionThrown = false;
         try {
-            RecordCompareService.getComparisonContext(new List<String>{ acc.Id }, 1, null, null, null, null, null, null, false, null);
+            RecordCompareService.getComparisonContext(new List<String>{ acc.Id }, 1, null, null, null, null, null, null, false, null, null);
         } catch (AuraHandledException e) {
             exceptionThrown = true;
         }
@@ -166,7 +168,7 @@ private class RecordCompareService_Test {
     static void testGetComparisonContext_InvalidId() {
         Boolean exceptionThrown = false;
         try {
-            RecordCompareService.getComparisonContext(new List<String>{ 'bad', 'ids' }, 1, null, null, null, null, null, null, false, null);
+            RecordCompareService.getComparisonContext(new List<String>{ 'bad', 'ids' }, 1, null, null, null, null, null, null, false, null, null);
         } catch (AuraHandledException e) {
             exceptionThrown = true;
         }
@@ -178,7 +180,7 @@ private class RecordCompareService_Test {
         Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
         Boolean exceptionThrown = false;
         try {
-            RecordCompareService.getComparisonContext(new List<String>{ acc.Id, acc.Id }, 1, null, null, null, null, null, null, false, null);
+            RecordCompareService.getComparisonContext(new List<String>{ acc.Id, acc.Id }, 1, null, null, null, null, null, null, false, null, null);
         } catch (AuraHandledException e) {
             exceptionThrown = true;
         }
@@ -193,7 +195,7 @@ private class RecordCompareService_Test {
 
         Boolean exceptionThrown = false;
         try {
-            RecordCompareService.getComparisonContext(ids, 1, null, null, 2, null, null, null, false, null);
+            RecordCompareService.getComparisonContext(ids, 1, null, null, 2, null, null, null, false, null, null);
         } catch (AuraHandledException e) {
             exceptionThrown = true;
         }
@@ -220,6 +222,7 @@ private class RecordCompareService_Test {
             null,
             null,
             false,
+            null,
             null
         );
         Test.stopTest();
@@ -380,6 +383,7 @@ private class RecordCompareService_Test {
                 1,
                 null,
                 false,
+                null,
                 null
             );
         } catch (AuraHandledException e) {
@@ -407,6 +411,7 @@ private class RecordCompareService_Test {
             null,
             new List<String>{ 'AccountId' },
             false,
+            null,
             null
         );
         Test.stopTest();
@@ -422,6 +427,39 @@ private class RecordCompareService_Test {
             System.assertEquals('Account', prc.parentObjectApiName);
             System.assertNotEquals(null, prc.parentRecordId, 'Parent record id should be populated');
         }
+    }
+
+    @IsTest
+    static void testGetComparisonContext_IncludedFieldsIntersectsAllRecords() {
+        List<Account> accounts = [SELECT Id FROM Account WITH SYSTEM_MODE ORDER BY Name LIMIT 2];
+        List<String> ids = new List<String>();
+        for (Account accountRecord : accounts) ids.add(accountRecord.Id);
+
+        Test.startTest();
+        RecordCompareService.ComparisonContext ctx = RecordCompareService.getComparisonContext(
+            ids,
+            1,
+            new List<String>{ 'core' },
+            null,
+            null,
+            null,
+            null,
+            null,
+            false,
+            null,
+            new List<String>{ 'Name' }
+        );
+        Test.stopTest();
+
+        System.assertEquals(2, ctx.records.size(), 'All requested records should appear in the comparison');
+        for (RecordCompareService.ComparisonRecord cr : ctx.records) {
+            System.assert(cr.fields.containsKey('Id'), 'Id should be preserved under per-field override');
+            System.assert(cr.fields.containsKey('Name'), 'Explicitly requested Name field should be present');
+        }
+        System.assert(
+            ctx.commonFields.contains('Name'),
+            'commonFields should include the intersected per-field override'
+        );
     }
 
     @IsTest

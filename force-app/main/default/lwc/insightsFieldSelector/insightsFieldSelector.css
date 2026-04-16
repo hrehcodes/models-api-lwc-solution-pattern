@@ -37,3 +37,26 @@
 .expand-btn {
     --sds-c-button-text-font-size: 0.75rem;
 }
+
+.field-grid {
+    max-height: 360px;
+    overflow-y: auto;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    padding: 0.25rem 0.5rem;
+    background-color: #ffffff;
+}
+
+.field-row {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #f3f3f3;
+}
+
+.field-row:last-child {
+    border-bottom: none;
+}
+
+.field-selected {
+    background-color: #f0f8ff;
+}

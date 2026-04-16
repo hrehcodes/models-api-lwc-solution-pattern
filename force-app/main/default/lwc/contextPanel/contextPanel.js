@@ -23,6 +23,8 @@ export default class ContextPanel extends LightningElement {
     @api availableContext;
     @api includedCategories = [];
     @api includedRelationships = [];
+    @api includedFields = [];
+    @api fieldSelectionMode = 'categories';
     @api includedParentReferenceFields = [];
     @api includeSameObjectSiblingsThroughParents = false;
     @api parentSiblingRelationshipByReferenceField = {};
@@ -247,6 +249,13 @@ export default class ContextPanel extends LightningElement {
     }
 
     get totalFieldCount() {
+        if (
+            this.fieldSelectionMode === 'fields'
+            && Array.isArray(this.includedFields)
+            && this.includedFields.length > 0
+        ) {
+            return this.includedFields.length;
+        }
         if (!this.availableContext?.fieldCategories) return 0;
         const included = new Set(this.includedCategories);
         return this.availableContext.fieldCategories
@@ -265,11 +274,20 @@ export default class ContextPanel extends LightningElement {
         }
 
         let tokens = 0;
-        const included = new Set(this.includedCategories);
-        if (this.availableContext?.fieldCategories) {
-            for (const cat of this.availableContext.fieldCategories) {
-                if (included.has(cat.name)) {
-                    tokens += cat.fieldCount * 15;
+        const overrideFieldCount = Array.isArray(this.includedFields)
+            ? this.includedFields.length
+            : 0;
+        const hasFieldOverride =
+            this.fieldSelectionMode === 'fields' && overrideFieldCount > 0;
+        if (hasFieldOverride) {
+            tokens += overrideFieldCount * 15;
+        } else {
+            const included = new Set(this.includedCategories);
+            if (this.availableContext?.fieldCategories) {
+                for (const cat of this.availableContext.fieldCategories) {
+                    if (included.has(cat.name)) {
+                        tokens += cat.fieldCount * 15;
+                    }
                 }
             }
         }

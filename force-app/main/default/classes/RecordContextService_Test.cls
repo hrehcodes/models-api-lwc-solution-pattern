@@ -144,7 +144,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, null, null, null, null, false, null
+            acc.Id, 1, null, null, null, null, false, null, null
         );
         Test.stopTest();
 
@@ -162,7 +162,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, new List<String>{'core', 'financial'}, null, null, null, false, null
+            acc.Id, 1, new List<String>{'core', 'financial'}, null, null, null, false, null, null
         );
         Test.stopTest();
 
@@ -176,7 +176,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 2, new List<String>{'core'}, new List<String>{'Opportunities'}, null, null, false, null
+            acc.Id, 2, new List<String>{'core'}, new List<String>{'Opportunities'}, null, null, false, null, null
         );
         Test.stopTest();
 
@@ -195,7 +195,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, new List<String>{'core'}, relNames, null, null, false, null
+            acc.Id, 1, new List<String>{'core'}, relNames, null, null, false, null, null
         );
         Test.stopTest();
 
@@ -215,6 +215,7 @@ private class RecordContextService_Test {
             null,
             null,
             false,
+            null,
             null
         );
         Test.stopTest();
@@ -262,6 +263,7 @@ private class RecordContextService_Test {
             1,
             null,
             false,
+            null,
             null
         );
         Test.stopTest();
@@ -287,6 +289,7 @@ private class RecordContextService_Test {
             5,
             null,
             false,
+            null,
             null
         );
         Test.stopTest();
@@ -374,7 +377,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, new List<String>{'core'}, null, null, null, false, null
+            acc.Id, 1, new List<String>{'core'}, null, null, null, false, null, null
         );
         Test.stopTest();
 
@@ -393,7 +396,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 1, new List<String>{'core'}, new List<String>{ relName }, null, null, false, null
+            acc.Id, 1, new List<String>{'core'}, new List<String>{ relName }, null, null, false, null, null
         );
         Test.stopTest();
 
@@ -411,7 +414,7 @@ private class RecordContextService_Test {
 
         Test.startTest();
         RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
-            acc.Id, 2, new List<String>{'core'}, new List<String>{ 'Opportunities' }, null, null, false, null
+            acc.Id, 2, new List<String>{'core'}, new List<String>{ 'Opportunities' }, null, null, false, null, null
         );
         Test.stopTest();
 
@@ -527,6 +530,7 @@ private class RecordContextService_Test {
             null,
             new List<String>{ 'AccountId' },
             false,
+            null,
             null
         );
         Test.stopTest();
@@ -553,6 +557,7 @@ private class RecordContextService_Test {
             null,
             new List<String>{ 'AccountId' },
             true,
+            null,
             null
         );
         Test.stopTest();
@@ -581,7 +586,8 @@ private class RecordContextService_Test {
             null,
             new List<String>{ 'AccountId' },
             false,
-            parentChildMap
+            parentChildMap,
+            null
         );
         Test.stopTest();
 
@@ -637,11 +643,192 @@ private class RecordContextService_Test {
             null,
             new List<String>{ 'AccountId' },
             false,
+            null,
             null
         );
         Test.stopTest();
         RecordContextService.resetTestHooks();
 
         System.assertEquals(true, ctx.completeness.hasWarnings, 'Parent fetch failure should produce a warning');
+    }
+
+    // ------------------------------------------------------------------
+    // Per-field override (includedFields)
+    // ------------------------------------------------------------------
+
+    @IsTest
+    static void testGetAccessibleFieldsForObject_ReturnsAccessibleFieldsOnly() {
+        Test.startTest();
+        List<RecordContextService.FieldInfo> fields = RecordContextService.getAccessibleFieldsForObject('Account');
+        Test.stopTest();
+
+        System.assertNotEquals(null, fields, 'Accessible field list should not be null');
+        System.assert(!fields.isEmpty(), 'Account should have accessible fields');
+
+        Set<String> apiNames = new Set<String>();
+        for (RecordContextService.FieldInfo fi : fields) {
+            System.assertNotEquals(null, fi.apiName, 'FieldInfo should have apiName');
+            System.assertNotEquals(null, fi.label, 'FieldInfo should have label');
+            apiNames.add(fi.apiName.toLowerCase());
+        }
+        System.assert(apiNames.contains('name'), 'Account Name should be exposed as an accessible field');
+    }
+
+    @IsTest
+    static void testGetAccessibleFieldsForObject_InvalidObjectThrows() {
+        Boolean threw = false;
+        try {
+            RecordContextService.getAccessibleFieldsForObject('TotallyNotAnObject__c');
+        } catch (AuraHandledException e) {
+            threw = true;
+        }
+        System.assertEquals(true, threw, 'Unknown object type should throw an AuraHandledException');
+    }
+
+    @IsTest
+    static void testGetAccessibleFieldsForObject_BlankThrows() {
+        Boolean threw = false;
+        try {
+            RecordContextService.getAccessibleFieldsForObject('');
+        } catch (AuraHandledException e) {
+            threw = true;
+        }
+        System.assertEquals(true, threw, 'Blank object name should throw');
+    }
+
+    @IsTest
+    static void testGetRecordContext_IncludedFields_HappyPath() {
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            acc.Id,
+            1,
+            new List<String>{ 'core' },
+            null,
+            null,
+            null,
+            false,
+            null,
+            new List<String>{ 'Name' }
+        );
+        Test.stopTest();
+
+        System.assert(ctx.fields.containsKey('Id'), 'Id is always queried');
+        System.assert(
+            ctx.fields.containsKey('Name'),
+            'Explicitly requested Name field should be present'
+        );
+    }
+
+    @IsTest
+    static void testGetRecordContext_IncludedFields_EmptyFallsBackToCategoryBehavior() {
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            acc.Id,
+            1,
+            new List<String>{ 'core' },
+            null,
+            null,
+            null,
+            false,
+            null,
+            new List<String>()
+        );
+        Test.stopTest();
+
+        System.assert(
+            ctx.fields.size() > 1,
+            'Empty includedFields list should fall back to full category behavior'
+        );
+    }
+
+    @IsTest
+    static void testGetRecordContext_IncludedFields_OutsideCategoryDroppedWithWarning() {
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            acc.Id,
+            1,
+            new List<String>{ 'dates' },
+            null,
+            null,
+            null,
+            false,
+            null,
+            new List<String>{ 'Industry' }
+        );
+        Test.stopTest();
+
+        System.assertEquals(
+            false,
+            ctx.fields.containsKey('Industry'),
+            'Industry is not in the dates category and must be dropped'
+        );
+        System.assertEquals(true, ctx.completeness.hasWarnings, 'Dropped override fields should warn');
+    }
+
+    @IsTest
+    static void testGetRecordContext_IncludedFields_NonexistentDroppedWithWarning() {
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            acc.Id,
+            1,
+            null,
+            null,
+            null,
+            null,
+            false,
+            null,
+            new List<String>{ 'NotARealField__c', 'Name' }
+        );
+        Test.stopTest();
+
+        System.assertEquals(
+            false,
+            ctx.fields.containsKey('NotARealField__c'),
+            'Nonexistent field must never appear in the serialized payload'
+        );
+        System.assertEquals(
+            true,
+            ctx.fields.containsKey('Name'),
+            'Valid override fields continue to resolve alongside skipped ones'
+        );
+        System.assertEquals(
+            true,
+            ctx.completeness.hasWarnings,
+            'Dropped nonexistent override fields should warn'
+        );
+    }
+
+    @IsTest
+    static void testGetRecordContext_IncludedFields_IdAndNamePreserved() {
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            acc.Id,
+            1,
+            new List<String>{ 'core' },
+            null,
+            null,
+            null,
+            false,
+            null,
+            new List<String>{ 'Industry' }
+        );
+        Test.stopTest();
+
+        System.assert(ctx.fields.containsKey('Id'), 'Id should always be preserved in the payload');
+        System.assertNotEquals(
+            null,
+            ctx.recordName,
+            'Record name should be resolved even when override excludes Name explicitly'
+        );
     }
 }

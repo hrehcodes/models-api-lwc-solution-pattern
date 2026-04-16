@@ -278,6 +278,7 @@ public with sharing class RecordAdvisorController {
         guidelines += '- NEVER fabricate or infer field values that are not present in the provided data.\n';
         guidelines += '- If a field or related record set is absent from the payload, treat it as not provided in the current context selection unless completeness metadata indicates truncation or skipped data.\n';
         guidelines += '- If a field is present with a null, blank, or empty value, state that it is blank on the record rather than guessing.\n';
+        guidelines += '- Only the fields listed in the provided record payload are available; do not assume other fields exist, are missing, or contain any particular value.\n';
         guidelines += '- If a question cannot be answered from the available data, say so clearly and explain what data would be needed.\n\n';
 
         guidelines += '--- Scope ---\n';

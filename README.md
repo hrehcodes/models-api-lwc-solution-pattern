@@ -148,8 +148,16 @@ If someone only wants to deploy metadata without using a DX project, they can co
 - `Default Parent Records (CSV)`: Optional comma-separated lookup field API names to preselect as parent records in insights and compare mode. One hop only. Example for a custom Order: `AccountId,ContactId,TreatmentSite__c`.
 - `Preload Same-Object Siblings Through Parents`: When a parent record is included, also loads other records of the same object type under that parent (excluding the active record). Increases prompt size; keep off unless sibling comparisons are core to the use case.
 - `Maximum Parent Records Selected`: Caps how many parent lookup records a user can include at once (1–10). Lower this to keep prompts small and focused.
+- `Field Selection Mode`: `categories` (default) includes whole field categories. `fields` switches to a curated per-field override. In `fields` mode only the explicitly selected fields are queried, which typically cuts prompt tokens for wide objects.
+- `Default Included Fields (CSV)`: Only honored when `Field Selection Mode` is `fields`. Comma-separated field API names to preselect. The server intersects the list with the user's field-level security and the currently included categories, and drops any field that is unknown or not accessible. Example: `Name,StageName,Amount,CloseDate`.
 - `Enable Suggested Follow-Ups`: Adds an extra AI call after each response.
 - `Persist Conversation`: Stores chat history and usage metrics in browser `localStorage` only.
+
+### Per-Field Override and Security
+
+The per-field override is an opt-in token-saving mode, not a security bypass. Every request is re-validated server-side against the same categorized, describe-filtered field list (which already enforces `isAccessible` and excludes unsafe field types). Unknown, out-of-category, or inaccessible fields are silently dropped and surfaced as completeness warnings instead of being echoed back in the payload. `Id` and the object's name field are always preserved, and the global `MAX_FIELDS_PER_QUERY` limit continues to apply.
+
+Typical token savings: on a 120-field custom object, narrowing to the 5 fields a prompt actually needs reduces the record payload from roughly 1,800 tokens to around 75 tokens per record, before related-record and parent expansions.
 
 ### Parent and Sibling Context Scope
 

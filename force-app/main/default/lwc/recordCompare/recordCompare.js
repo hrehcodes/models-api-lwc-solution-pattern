@@ -29,6 +29,8 @@ export default class RecordCompare extends LightningElement {
     @api defaultDepth = 1;
     @api maxDepthAllowed = 3;
     @api defaultFieldCategoriesCsv;
+    @api defaultIncludedFieldsCsv;
+    @api fieldSelectionMode = 'categories';
     @api defaultRelationshipsCsv;
     @api hideContextWarnings;
     @api promptWarningThresholdTokens = 20000;
@@ -59,6 +61,8 @@ export default class RecordCompare extends LightningElement {
     availableContext;
     includedCategories = [];
     includedRelationships = [];
+    includedFields = [];
+    activeFieldSelectionMode = 'categories';
     includedParentReferenceFields = [];
     includeSameObjectSiblingsThroughParents = false;
     parentSiblingRelationshipByReferenceField = {};
@@ -690,6 +694,15 @@ export default class RecordCompare extends LightningElement {
                     this.normalizedMaxParentReferencesSelected
                 );
             }
+
+            if (resetSelections) {
+                this.activeFieldSelectionMode =
+                    this.fieldSelectionMode === 'fields' ? 'fields' : 'categories';
+                this.includedFields = this.resolveInitialIncludedFields(
+                    ctx.fieldCategories,
+                    this.includedCategories
+                );
+            }
             if (resetSelections) {
                 this.includeSameObjectSiblingsThroughParents = this.defaultSameObjectSiblingsEnabled === true
                     || this.defaultSameObjectSiblingsEnabled === 'true';
@@ -760,6 +773,9 @@ export default class RecordCompare extends LightningElement {
         this.suggestionsLoaded = false;
         this.includedCategories = [];
         this.includedRelationships = [];
+        this.includedFields = [];
+        this.activeFieldSelectionMode =
+            this.fieldSelectionMode === 'fields' ? 'fields' : 'categories';
         this.includedParentReferenceFields = [];
         this.includeSameObjectSiblingsThroughParents = false;
         this.parentSiblingRelationshipByReferenceField = {};
@@ -906,7 +922,11 @@ export default class RecordCompare extends LightningElement {
                 promptWarningThresholdTokens: this.normalizedPromptWarningThreshold,
                 includedParentReferenceFields: this.includedParentReferenceFields,
                 includeSameObjectSiblingsThroughParents: this.includeSameObjectSiblingsThroughParents,
-                parentSiblingRelationshipByReferenceField: this.parentSiblingRelationshipByReferenceField
+                parentSiblingRelationshipByReferenceField: this.parentSiblingRelationshipByReferenceField,
+                includedFields:
+                    this.activeFieldSelectionMode === 'fields'
+                        ? this.includedFields
+                        : null
             });
 
             this.comparisonContextJson = JSON.stringify(this.serializeComparisonForChat(ctx));
@@ -991,6 +1011,26 @@ export default class RecordCompare extends LightningElement {
 
     handleCategoriesChange(event) {
         this.includedCategories = event.detail.includedCategories;
+        this.showFieldSelector = false;
+        this.invalidateComparison();
+        this.updateCompareWarningState();
+        this.activeStep = 'settings';
+    }
+
+    handleFieldSelectionChange(event) {
+        const detail = event.detail || {};
+        if (Array.isArray(detail.includedCategories)) {
+            this.includedCategories = detail.includedCategories;
+        }
+        if (detail.fieldSelectionMode === 'fields') {
+            this.activeFieldSelectionMode = 'fields';
+            this.includedFields = Array.isArray(detail.includedFields)
+                ? detail.includedFields
+                : [];
+        } else {
+            this.activeFieldSelectionMode = 'categories';
+            this.includedFields = [];
+        }
         this.showFieldSelector = false;
         this.invalidateComparison();
         this.updateCompareWarningState();
@@ -1104,6 +1144,36 @@ export default class RecordCompare extends LightningElement {
             .filter(Boolean);
     }
 
+    resolveInitialIncludedFields(fieldCategories, includedCategoryNames) {
+        if (this.fieldSelectionMode !== 'fields') {
+            return [];
+        }
+        const configured = this.parseCsv(this.defaultIncludedFieldsCsv);
+        if (!configured.length) {
+            return [];
+        }
+
+        const includedCategorySet = new Set(includedCategoryNames || []);
+        const applyFilter = includedCategorySet.size > 0;
+        const eligible = new Set();
+        (fieldCategories || []).forEach(cat => {
+            if (applyFilter && !includedCategorySet.has(cat.name)) return;
+            (cat.fields || []).forEach(fi => {
+                if (fi && fi.apiName) eligible.add(fi.apiName.toLowerCase());
+            });
+        });
+
+        const seen = new Set();
+        const result = [];
+        configured.forEach(token => {
+            const key = token.toLowerCase();
+            if (seen.has(key) || !eligible.has(key)) return;
+            seen.add(key);
+            result.push(token);
+        });
+        return result;
+    }
+
     normalizeDepth(value) {
         const parsedDepth = parseInt(value, 10);
         const safeDepth = Number.isNaN(parsedDepth) ? 1 : parsedDepth;
@@ -1172,6 +1242,11 @@ export default class RecordCompare extends LightningElement {
                 depth: this.currentDepth,
                 selectedCategories: [...this.includedCategories],
                 selectedRelationships: [...this.includedRelationships],
+                selectedFields:
+                    this.activeFieldSelectionMode === 'fields'
+                        ? [...(this.includedFields || [])]
+                        : [],
+                fieldSelectionMode: this.activeFieldSelectionMode,
                 selectedParentReferences: [...(this.includedParentReferenceFields || [])],
                 includeSameObjectSiblingsThroughParents: !!this.includeSameObjectSiblingsThroughParents,
                 parentSiblingRelationshipByReferenceField: { ...(this.parentSiblingRelationshipByReferenceField || {}) },

@@ -153,7 +153,8 @@ describe('c-agentforce-record-insights', () => {
             maxRelatedRecords: 7,
             includedParentReferenceFields: [],
             includeSameObjectSiblingsThroughParents: false,
-            parentSiblingRelationshipByReferenceField: {}
+            parentSiblingRelationshipByReferenceField: {},
+            includedFields: null
         });
         expect(chatPanel.recordContextJson).toContain('"selectionSummary"');
         expect(chatPanel.recordContextJson).toContain('"recordContext"');
@@ -449,7 +450,30 @@ describe('c-agentforce-record-insights', () => {
             maxRelatedRecords: 10,
             includedParentReferenceFields: [],
             includeSameObjectSiblingsThroughParents: false,
-            parentSiblingRelationshipByReferenceField: {}
+            parentSiblingRelationshipByReferenceField: {},
+            includedFields: null
         });
+    });
+
+    it('passes the resolved per-field override to Apex when Field Selection Mode is fields', async () => {
+        const element = createElement('c-agentforce-record-insights', {
+            is: AgentforceRecordInsights
+        });
+        element.recordId = '001000000000001AAA';
+        element.objectApiName = 'Account';
+        element.startWithContextPanelOpen = true;
+        element.fieldSelectionMode = 'fields';
+        element.defaultIncludedFieldsCsv = 'Name,BogusField__c';
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        const lastCall =
+            getRecordContext.mock.calls[getRecordContext.mock.calls.length - 1][0];
+        expect(lastCall.includedFields).toEqual(['Name']);
+        const chatPanel = element.shadowRoot.querySelector('c-chat-panel');
+        expect(chatPanel.recordContextJson).toContain('"fieldSelectionMode":"fields"');
+        expect(chatPanel.recordContextJson).toContain('"selectedFields":["Name"]');
     });
 });

@@ -135,6 +135,8 @@
                                 available-context={availableContext}
                                 included-categories={includedCategories}
                                 included-relationships={includedRelationships}
+                                included-fields={includedFields}
+                                field-selection-mode={activeFieldSelectionMode}
                                 included-parent-reference-fields={includedParentReferenceFields}
                                 include-same-object-siblings-through-parents={includeSameObjectSiblingsThroughParents}
                                 parent-sibling-relationship-by-reference-field={parentSiblingRelationshipByReferenceField}
@@ -237,7 +239,10 @@
         <c-insights-field-selector
             field-categories={availableContext.fieldCategories}
             included-categories={includedCategories}
+            included-fields={includedFields}
+            selection-mode={activeFieldSelectionMode}
             oncategorieschange={handleCategoriesChange}
+            onfieldselectionchange={handleFieldSelectionChange}
             onclose={handleCloseFieldSelector}
         ></c-insights-field-selector>
     </template>

@@ -231,4 +231,33 @@ describe('c-context-panel', () => {
         const lastCall = handler.mock.calls[handler.mock.calls.length - 1][0].detail;
         expect(lastCall.includeSameObjectSiblingsThroughParents).toBe(true);
     });
+
+    it('narrows the token estimate to the per-field override count when in field selection mode', async () => {
+        const element = createElement('c-context-panel', {
+            is: ContextPanel
+        });
+        element.availableContext = {
+            ...baseAvailableContext,
+            fieldCategories: [
+                {
+                    name: 'core',
+                    label: 'Core Fields',
+                    includedByDefault: true,
+                    fieldCount: 20,
+                    fields: []
+                }
+            ]
+        };
+        element.includedCategories = ['core'];
+        element.showUsageMetrics = true;
+        element.fieldSelectionMode = 'fields';
+        element.includedFields = ['Name', 'Industry'];
+        document.body.appendChild(element);
+
+        await flushPromises();
+
+        // 2 fields * 15 tokens = 30 tokens (overrides the 20-field category default).
+        expect(element.shadowRoot.textContent).toContain('30 tokens');
+        expect(element.shadowRoot.textContent).not.toContain('300 tokens');
+    });
 });
