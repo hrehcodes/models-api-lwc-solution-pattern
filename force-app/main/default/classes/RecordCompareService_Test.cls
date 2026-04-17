@@ -460,6 +460,11 @@ private class RecordCompareService_Test {
             ctx.commonFields.contains('Name'),
             'commonFields should include the intersected per-field override'
         );
+        System.assertEquals(
+            false,
+            ctx.commonFields.contains('Id'),
+            'Technical record identifiers should not be advertised as business comparison fields'
+        );
     }
 
     @IsTest

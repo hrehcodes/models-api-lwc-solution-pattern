@@ -251,6 +251,60 @@ private class RecordContextService_Test {
     }
 
     @IsTest
+    static void testGetAvailableContext_DeletedRecordThrows() {
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
+        delete acc;
+
+        Boolean threw = false;
+        try {
+            Test.startTest();
+            RecordContextService.getAvailableContext(acc.Id);
+            Test.stopTest();
+        } catch (AuraHandledException e) {
+            threw = true;
+            Test.stopTest();
+        }
+
+        System.assertEquals(true, threw, 'Unavailable anchor records should fail closed.');
+    }
+
+    @IsTest
+    static void testGetAvailableContextForObject_DeletedReferenceRecordThrows() {
+        Opportunity opp = [SELECT Id FROM Opportunity WITH SYSTEM_MODE LIMIT 1];
+        delete opp;
+
+        Boolean threw = false;
+        try {
+            Test.startTest();
+            RecordContextService.getAvailableContextForObject('Opportunity', opp.Id);
+            Test.stopTest();
+        } catch (AuraHandledException e) {
+            threw = true;
+            Test.stopTest();
+        }
+
+        System.assertEquals(true, threw, 'Reference-record metadata discovery should fail closed.');
+    }
+
+    @IsTest
+    static void testGetRelationshipData_DeletedAnchorThrows() {
+        Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
+        delete acc;
+
+        Boolean threw = false;
+        try {
+            Test.startTest();
+            RecordContextService.getRelationshipData(acc.Id, 'Account', 'Contacts', 5);
+            Test.stopTest();
+        } catch (AuraHandledException e) {
+            threw = true;
+            Test.stopTest();
+        }
+
+        System.assertEquals(true, threw, 'Relationship fetch should require a readable anchor record.');
+    }
+
+    @IsTest
     static void testGetRecordContext_RespectsMaxRelatedRecords() {
         Account acc = [SELECT Id FROM Account WITH SYSTEM_MODE LIMIT 1];
 
@@ -567,7 +621,13 @@ private class RecordContextService_Test {
         System.assertNotEquals(null, prc.sameObjectSiblings, 'Sibling records should be populated when siblings requested');
         System.assert(prc.sameObjectSiblings.size() >= 1, 'At least one sibling Contact should be returned (excluding active record)');
         for (Map<String, Object> rec : prc.sameObjectSiblings) {
-            System.assertNotEquals(con.Id, (String) rec.get('Id'), 'Active record should be excluded from sibling results');
+            Map<String, Object> idField = (Map<String, Object>) rec.get('Id');
+            System.assertNotEquals(null, idField, 'Sibling payloads should include wrapped Id metadata');
+            System.assertNotEquals(
+                con.Id,
+                String.valueOf(idField.get('value')),
+                'Active record should be excluded from sibling results'
+            );
         }
     }
 

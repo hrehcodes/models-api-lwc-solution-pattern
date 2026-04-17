@@ -122,9 +122,6 @@ export default class InsightsFieldSelector extends LightningElement {
     handleModeChange(event) {
         const value = event.detail.value;
         this.localMode = value === MODE_FIELDS ? MODE_FIELDS : MODE_CATEGORIES;
-        if (this.localMode === MODE_CATEGORIES) {
-            this.localFields = [];
-        }
     }
 
     handleToggleCategory(event) {
@@ -200,9 +197,7 @@ export default class InsightsFieldSelector extends LightningElement {
             new CustomEvent('fieldselectionchange', {
                 detail: {
                     includedCategories: [...this.localIncluded],
-                    includedFields: this.isFieldMode
-                        ? [...this.localFields]
-                        : [],
+                    includedFields: [...this.localFields],
                     fieldSelectionMode: this.localMode
                 }
             })

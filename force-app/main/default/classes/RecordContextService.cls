@@ -236,6 +236,9 @@ public with sharing class RecordContextService {
             throw new AuraHandledException('You do not have access to this object type.');
         }
 
+        SObject anchorRecord = requireReadableAnchorRecord(objDescribe, recordId);
+        String nameField = RecordSchemaUtils.getNameField(objDescribe);
+
         AvailableContext ctx = new AvailableContext();
         ctx.recordId = recordId;
         ctx.objectApiName = objectApiName;
@@ -243,7 +246,7 @@ public with sharing class RecordContextService {
         ctx.fieldCategories = categorizeFields(objDescribe);
         ctx.relationships = discoverRelationships(objDescribe, recordId, ctx.completeness);
         ctx.parentReferences = discoverParentReferences(objDescribe, recordId, ctx.completeness);
-        ctx.recordName = fetchRecordName(objDescribe, recordId);
+        ctx.recordName = resolveRecordDisplayName(anchorRecord, nameField, recordId);
 
         return ctx;
     }
@@ -338,8 +341,10 @@ public with sharing class RecordContextService {
                 throw new AuraHandledException('Reference record must match the selected object type.');
             }
 
+            SObject anchorRecord = requireReadableAnchorRecord(objDescribe, referenceRecordId);
+            String nameField = RecordSchemaUtils.getNameField(objDescribe);
             ctx.recordId = referenceRecordId;
-            ctx.recordName = fetchRecordName(objDescribe, referenceRecordId);
+            ctx.recordName = resolveRecordDisplayName(anchorRecord, nameField, referenceRecordId);
             ctx.relationships = discoverRelationships(objDescribe, referenceRecordId, ctx.completeness);
             ctx.parentReferences = discoverParentReferences(objDescribe, referenceRecordId, ctx.completeness);
         } else {
@@ -476,7 +481,6 @@ public with sharing class RecordContextService {
         Map<String, Schema.SObjectField> fieldMap = objDescribe.fields.getMap();
 
         for (String fn : fieldsToQuery) {
-            if (fn == 'Id') continue;
             try {
                 triggerFieldSerializationFailureIfRequested();
                 Object val = record.get(fn);
@@ -564,6 +568,7 @@ public with sharing class RecordContextService {
             throw new AuraHandledException('You do not have access to this object type.');
         }
 
+        requireReadableAnchorRecord(objDescribe, recordId);
         maxRecords = normalizeRelatedRecordLimit(maxRecords);
 
         for (Schema.ChildRelationship cr : objDescribe.getChildRelationships()) {
@@ -596,6 +601,46 @@ public with sharing class RecordContextService {
     }
 
     // ── Private Methods ──
+
+    private static SObject requireReadableAnchorRecord(
+        Schema.DescribeSObjectResult objDescribe,
+        String recordId
+    ) {
+        String nameField = RecordSchemaUtils.getNameField(objDescribe);
+        List<String> identityFields = nameField == 'Id'
+            ? new List<String>{ 'Id' }
+            : new List<String>{ 'Id', nameField };
+
+        try {
+            List<SObject> records = stripReadableRecords(
+                RecordSchemaUtils.queryById(objDescribe, identityFields, recordId, 1)
+            );
+            if (!records.isEmpty()) {
+                return records[0];
+            }
+        } catch (Exception e) {
+            // Fall through to a handled error below.
+        }
+
+        throw new AuraHandledException('Record not found or you do not have access.');
+    }
+
+    private static String resolveRecordDisplayName(
+        SObject record,
+        String nameField,
+        String recordId
+    ) {
+        if (record == null) {
+            return String.isNotBlank(recordId) ? recordId : null;
+        }
+
+        if (String.isBlank(nameField) || nameField == 'Id') {
+            return String.isNotBlank(recordId) ? recordId : String.valueOf(record.get('Id'));
+        }
+
+        Object nameValue = record.get(nameField);
+        return nameValue == null ? recordId : String.valueOf(nameValue);
+    }
 
     private static void validateRecordId(String recordId) {
         if (String.isBlank(recordId)) {
@@ -1614,6 +1659,7 @@ public with sharing class RecordContextService {
 
     private static void addWarning(ContextCompleteness completeness, String warningMessage) {
         if (completeness == null || String.isBlank(warningMessage)) return;
+        completeness.hasWarnings = true;
         if (!completeness.warningMessages.contains(warningMessage)) {
             completeness.warningMessages.add(warningMessage);
         }
@@ -1676,6 +1722,15 @@ public with sharing class RecordContextService {
         }
 
         if (hasOverride) {
+            Map<String, String> accessibleFieldByLower = new Map<String, String>();
+            for (FieldCategory cat : allCategories) {
+                for (FieldInfo fi : cat.fields) {
+                    if (fi != null && String.isNotBlank(fi.apiName)) {
+                        accessibleFieldByLower.put(fi.apiName.toLowerCase(), fi.apiName);
+                    }
+                }
+            }
+
             Map<String, String> categoryFieldByLower = new Map<String, String>();
             for (String apiName : categoryFieldUnion) {
                 categoryFieldByLower.put(apiName.toLowerCase(), apiName);
@@ -1685,10 +1740,10 @@ public with sharing class RecordContextService {
             for (String requested : overrideNormalized) {
                 String resolved = categoryFieldByLower.get(requested.toLowerCase());
                 if (resolved == null) {
-                    if (categorySet.isEmpty()) {
-                        droppedInaccessible++;
-                    } else {
+                    if (accessibleFieldByLower.containsKey(requested.toLowerCase())) {
                         droppedOutsideCategories++;
+                    } else {
+                        droppedInaccessible++;
                     }
                     continue;
                 }
@@ -1712,7 +1767,7 @@ public with sharing class RecordContextService {
                 addWarning(
                     completeness,
                     droppedInaccessible
-                        + ' requested field(s) were not accessible and were skipped.'
+                        + ' requested field(s) were not available for this object and user and were skipped.'
                 );
             }
             if (droppedOversize > 0) {

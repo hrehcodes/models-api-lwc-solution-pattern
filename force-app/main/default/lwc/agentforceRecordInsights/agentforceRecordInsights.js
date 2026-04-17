@@ -245,7 +245,11 @@ export default class AgentforceRecordInsights extends LightningElement {
     }
 
     get hasRecordContext() {
-        return this.activeRecordId && this.availableContext && !this.isLoadingContext && !this.contextError;
+        return this.activeRecordId
+            && this.availableContext
+            && this.recordContextJson
+            && !this.isLoadingContext
+            && !this.contextError;
     }
 
     get showFieldSelectorSafe() {
@@ -472,7 +476,7 @@ export default class AgentforceRecordInsights extends LightningElement {
             this.currentDepth = this.normalizeDepth(this.currentDepth);
 
             this.contextLoadingPhase = 'mapping';
-            await this.loadRecordContext();
+            await this.loadRecordContext({ manageLoadingState: false });
         } catch (error) {
             this.contextError = this.extractErrorMessage(error);
         } finally {
@@ -481,8 +485,18 @@ export default class AgentforceRecordInsights extends LightningElement {
         }
     }
 
-    async loadRecordContext() {
-        if (this.isLoadingContext) {
+    async loadRecordContext({ manageLoadingState = true } = {}) {
+        if (!this.activeRecordId) {
+            return;
+        }
+
+        if (manageLoadingState) {
+            this.isLoadingContext = true;
+            this.contextLoadingPhase = 'mapping';
+            this.contextError = null;
+            this.recordContextJson = null;
+            this.resetContextWarningState();
+        } else if (this.isLoadingContext) {
             this.contextLoadingPhase = 'mapping';
         }
         try {
@@ -505,7 +519,13 @@ export default class AgentforceRecordInsights extends LightningElement {
         } catch (error) {
             console.error('Error loading record context:', error);
             this.recordContextJson = null;
+            this.contextError = this.extractErrorMessage(error);
             this.setContextFailureState(error);
+        } finally {
+            if (manageLoadingState) {
+                this.isLoadingContext = false;
+                this.contextLoadingPhase = null;
+            }
         }
     }
 
@@ -545,9 +565,17 @@ export default class AgentforceRecordInsights extends LightningElement {
 
     debouncedLoadRecordContext() {
         clearTimeout(this._contextLoadTimeout);
+        if (!this.activeRecordId || !this.availableContext) {
+            return;
+        }
+        this.isLoadingContext = true;
+        this.contextLoadingPhase = 'mapping';
+        this.contextError = null;
+        this.recordContextJson = null;
+        this.resetContextWarningState();
         // eslint-disable-next-line @lwc/lwc/no-async-operation
         this._contextLoadTimeout = setTimeout(() => {
-            this.loadRecordContext();
+            this.loadRecordContext({ manageLoadingState: true });
         }, 300);
     }
 
@@ -612,7 +640,9 @@ export default class AgentforceRecordInsights extends LightningElement {
                 : [];
         } else {
             this.activeFieldSelectionMode = 'categories';
-            this.includedFields = [];
+            this.includedFields = Array.isArray(detail.includedFields)
+                ? detail.includedFields
+                : this.includedFields;
         }
         this.showFieldSelector = false;
         this.debouncedLoadRecordContext();

@@ -123,7 +123,7 @@ public with sharing class RecordCompareService {
         ctx.objectLabel = objDescribe.getLabel();
         ctx.recordCount = validIds.size();
 
-        Set<String> commonFieldSet = new Set<String>();
+        Set<String> commonFieldSet;
 
         for (Id validId : validIds) {
             RecordContextService.RecordContext recordCtx = RecordContextService.getRecordContext(
@@ -152,11 +152,20 @@ public with sharing class RecordCompareService {
                 ? new RecordContextService.ContextCompleteness()
                 : recordCtx.completeness;
 
-            commonFieldSet.addAll(cr.fields.keySet());
+            Set<String> recordFieldSet = new Set<String>(cr.fields.keySet());
+            recordFieldSet.remove('Id');
+            if (commonFieldSet == null) {
+                commonFieldSet = new Set<String>(recordFieldSet);
+            } else {
+                commonFieldSet.retainAll(recordFieldSet);
+            }
             mergeCompleteness(ctx.completeness, cr.completeness, cr.recordName);
             ctx.records.add(cr);
         }
 
+        if (commonFieldSet == null) {
+            commonFieldSet = new Set<String>();
+        }
         ctx.commonFields = new List<String>(commonFieldSet);
         ctx.commonFields.sort();
 

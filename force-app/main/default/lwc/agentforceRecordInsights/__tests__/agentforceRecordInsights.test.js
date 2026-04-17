@@ -315,7 +315,7 @@ describe('c-agentforce-record-insights', () => {
         expect(chatPanel.recordContextJson).toContain('"contextStatus":"ready"');
     });
 
-    it('keeps chat available and marks it ungrounded when record context load fails', async () => {
+    it('fails closed and surfaces an error when record context load fails', async () => {
         getRecordContext.mockRejectedValue({
             body: {
                 message: 'Context query failed'
@@ -333,13 +333,11 @@ describe('c-agentforce-record-insights', () => {
         getAvailableModelsAdapter.emit([]);
         await flushPromises();
 
-        const contextPanel = element.shadowRoot.querySelector('c-context-panel');
-        const chatPanel = element.shadowRoot.querySelector('c-chat-panel');
-
-        expect(contextPanel.contextStatus).toBe('failed');
-        expect(chatPanel.contextStatus).toBe('failed');
-        expect(chatPanel.recordContextJson).toBeNull();
-        expect(chatPanel.contextWarningMessages).toContain('Context query failed');
+        expect(element.recordContextJson).toBeNull();
+        expect(element.contextError).toBe('Context query failed');
+        expect(element.shadowRoot.querySelector('c-context-panel')).toBeNull();
+        expect(element.shadowRoot.querySelector('c-chat-panel')).toBeNull();
+        expect(element.shadowRoot.textContent).toContain('Context query failed');
     });
 
     it('passes the hide warnings builder setting to child panels', async () => {
@@ -411,7 +409,8 @@ describe('c-agentforce-record-insights', () => {
             maxRelatedRecords: 10,
             includedParentReferenceFields: [],
             includeSameObjectSiblingsThroughParents: false,
-            parentSiblingRelationshipByReferenceField: {}
+            parentSiblingRelationshipByReferenceField: {},
+            includedFields: null
         });
     });
 
@@ -475,5 +474,46 @@ describe('c-agentforce-record-insights', () => {
         const chatPanel = element.shadowRoot.querySelector('c-chat-panel');
         expect(chatPanel.recordContextJson).toContain('"fieldSelectionMode":"fields"');
         expect(chatPanel.recordContextJson).toContain('"selectedFields":["Name"]');
+    });
+
+    it('drops stale record context immediately while a refreshed payload is loading', async () => {
+        jest.useFakeTimers();
+
+        const element = createElement('c-agentforce-record-insights', {
+            is: AgentforceRecordInsights
+        });
+        element.recordId = '001000000000001AAA';
+        element.objectApiName = 'Account';
+        element.startWithContextPanelOpen = true;
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        const refreshDeferred = createDeferred();
+        getRecordContext.mockImplementationOnce(() => refreshDeferred.promise);
+
+        const contextPanel = element.shadowRoot.querySelector('c-context-panel');
+        contextPanel.dispatchEvent(
+            new CustomEvent('contextchange', {
+                detail: {
+                    includedCategories: ['core'],
+                    includedRelationships: []
+                }
+            })
+        );
+
+        await flushPromises();
+        expect(element.recordContextJson).toBeNull();
+        expect(element.shadowRoot.querySelector('c-chat-panel')).toBeNull();
+
+        jest.advanceTimersByTime(300);
+        await flushPromises();
+
+        refreshDeferred.resolve(baseRecordContext);
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('c-chat-panel')).not.toBeNull();
+        expect(element.recordContextJson).toContain('"recordContext"');
     });
 });

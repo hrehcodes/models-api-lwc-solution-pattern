@@ -26,60 +26,65 @@
                     class="slds-m-bottom_small"
                 ></lightning-radio-group>
 
-                <template lwc:if={isCategoryMode}>
-                    <div class="slds-grid slds-wrap slds-gutters_small">
-                        <template for:each={categoriesWithState} for:item="cat">
-                            <div key={cat.name} class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-m-bottom_small">
-                                <div class={cat.cardClass}>
-                                    <div class="category-header slds-p-around_small">
-                                        <label class="slds-checkbox slds-checkbox_standalone">
-                                            <input
-                                                type="checkbox"
-                                                checked={cat.isIncluded}
-                                                data-category={cat.name}
-                                                onchange={handleToggleCategory}
-                                            />
-                                            <span class="slds-checkbox_faux"></span>
-                                        </label>
-                                        <div class="slds-m-left_x-small">
-                                            <span class="slds-text-title_bold">{cat.label}</span>
-                                            <span class="slds-text-color_weak slds-m-left_xx-small">({cat.fieldCount} fields)</span>
-                                        </div>
-                                    </div>
+                <template lwc:if={isFieldMode}>
+                    <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small">
+                        Use categories to narrow the field picker below. Existing field selections are preserved
+                        while you refine the eligible pool.
+                    </p>
+                </template>
 
-                                    <template lwc:if={cat.isExpanded}>
-                                        <div class="field-list slds-p-horizontal_small slds-p-bottom_small">
-                                            <template for:each={cat.fields} for:item="field">
-                                                <div key={field.apiName} class="field-item slds-p-vertical_xx-small">
-                                                    <span class="slds-text-body_small">{field.label}</span>
-                                                    <span class="slds-text-color_weak slds-text-body_small slds-m-left_xx-small">({field.fieldType})</span>
-                                                    <template lwc:if={field.helpText}>
-                                                        <lightning-helptext content={field.helpText} class="slds-m-left_xx-small"></lightning-helptext>
-                                                    </template>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </template>
-
-                                    <div class="slds-p-horizontal_small slds-p-bottom_x-small">
-                                        <lightning-button
-                                            label={cat.expandLabel}
-                                            variant="base"
-                                            onclick={handleToggleExpand}
+                <div class="slds-grid slds-wrap slds-gutters_small">
+                    <template for:each={categoriesWithState} for:item="cat">
+                        <div key={cat.name} class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-m-bottom_small">
+                            <div class={cat.cardClass}>
+                                <div class="category-header slds-p-around_small">
+                                    <label class="slds-checkbox slds-checkbox_standalone">
+                                        <input
+                                            type="checkbox"
+                                            checked={cat.isIncluded}
                                             data-category={cat.name}
-                                            class="expand-btn"
-                                        ></lightning-button>
+                                            onchange={handleToggleCategory}
+                                        />
+                                        <span class="slds-checkbox_faux"></span>
+                                    </label>
+                                    <div class="slds-m-left_x-small">
+                                        <span class="slds-text-title_bold">{cat.label}</span>
+                                        <span class="slds-text-color_weak slds-m-left_xx-small">({cat.fieldCount} fields)</span>
                                     </div>
                                 </div>
+
+                                <template lwc:if={cat.isExpanded}>
+                                    <div class="field-list slds-p-horizontal_small slds-p-bottom_small">
+                                        <template for:each={cat.fields} for:item="field">
+                                            <div key={field.apiName} class="field-item slds-p-vertical_xx-small">
+                                                <span class="slds-text-body_small">{field.label}</span>
+                                                <span class="slds-text-color_weak slds-text-body_small slds-m-left_xx-small">({field.fieldType})</span>
+                                                <template lwc:if={field.helpText}>
+                                                    <lightning-helptext content={field.helpText} class="slds-m-left_xx-small"></lightning-helptext>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+
+                                <div class="slds-p-horizontal_small slds-p-bottom_x-small">
+                                    <lightning-button
+                                        label={cat.expandLabel}
+                                        variant="base"
+                                        onclick={handleToggleExpand}
+                                        data-category={cat.name}
+                                        class="expand-btn"
+                                    ></lightning-button>
+                                </div>
                             </div>
-                        </template>
-                    </div>
-                </template>
+                        </div>
+                    </template>
+                </div>
 
                 <template lwc:if={isFieldMode}>
                     <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small">
-                        Fields are drawn from the currently selected categories. Adjust categories above
-                        to broaden the pool. Only accessible fields are shown; the server re-validates every
+                        Fields are drawn from the currently selected categories. Only accessible fields are shown;
+                        the server re-validates every
                         request, so unauthorized fields are always dropped.
                     </p>
                     <lightning-input

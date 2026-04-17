@@ -103,4 +103,36 @@ describe('c-insights-field-selector', () => {
         expect(textContent).toContain('Industry');
         expect(textContent).not.toContain('Created Date');
     });
+
+    it('preserves curated field selections when switching back to category mode', async () => {
+        const element = createElement('c-insights-field-selector', {
+            is: InsightsFieldSelector
+        });
+        element.fieldCategories = baseCategories;
+        element.includedCategories = ['core'];
+        element.includedFields = ['Name'];
+        element.selectionMode = 'fields';
+        document.body.appendChild(element);
+        await flushPromises();
+
+        const handler = jest.fn();
+        element.addEventListener('fieldselectionchange', handler);
+
+        element.shadowRoot.querySelector('lightning-radio-group').dispatchEvent(
+            new CustomEvent('change', {
+                detail: { value: 'categories' }
+            })
+        );
+        await flushPromises();
+
+        const applyBtn = Array.from(
+            element.shadowRoot.querySelectorAll('lightning-button')
+        ).find((b) => b.label === 'Apply');
+        applyBtn.click();
+        await flushPromises();
+
+        const detail = handler.mock.calls[0][0].detail;
+        expect(detail.fieldSelectionMode).toBe('categories');
+        expect(detail.includedFields).toEqual(['Name']);
+    });
 });
