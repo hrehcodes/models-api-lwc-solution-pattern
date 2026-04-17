@@ -21,13 +21,20 @@ public with sharing class RecordContextService {
     };
     private static final Set<String> UNSUPPORTED_CHILD_OBJECTS = new Set<String>{
         'ActionableListMember', 'AttachedContentNote', 'FieldChangeSnapshot',
-        'NoteAndAttachment', 'OpenActivity', 'RecentFieldChange'
+        'NoteAndAttachment', 'OpenActivity', 'RecentFieldChange',
+        'NetworkUserHistoryRecent'
     };
     private static final Set<String> SYSTEM_REFERENCE_FIELDS = new Set<String>{
         'CreatedById', 'LastModifiedById', 'MasterRecordId'
     };
     private static final Set<String> DEFAULT_PARENT_REFERENCE_FIELDS = new Set<String>{
         'AccountId', 'ContactId', 'OwnerId'
+    };
+    private static final Set<String> RUNTIME_RESOLVABLE_POLYMORPHIC_REFERENCE_FIELDS = new Set<String>{
+        'OwnerId'
+    };
+    private static final Set<String> WARNING_POLYMORPHIC_REFERENCE_FIELDS = new Set<String>{
+        'WhatId', 'WhoId'
     };
     @TestVisible private static Boolean forceFieldSerializationFailure = false;
     @TestVisible private static Boolean forceRelationshipFetchFailure = false;
@@ -870,6 +877,7 @@ public with sharing class RecordContextService {
 
         Map<String, Schema.SObjectField> fieldMap = objDescribe.fields.getMap();
         List<Schema.DescribeFieldResult> candidates = new List<Schema.DescribeFieldResult>();
+        List<Schema.DescribeFieldResult> runtimeResolvedPolymorphic = new List<Schema.DescribeFieldResult>();
         List<Schema.DescribeFieldResult> polymorphic = new List<Schema.DescribeFieldResult>();
 
         for (String fn : fieldMap.keySet()) {
@@ -884,7 +892,13 @@ public with sharing class RecordContextService {
             if (refs == null || refs.isEmpty()) continue;
 
             if (refs.size() > 1) {
-                polymorphic.add(dfr);
+                if (isRuntimeResolvablePolymorphicReference(apiName)) {
+                    runtimeResolvedPolymorphic.add(dfr);
+                    continue;
+                }
+                if (shouldWarnForSkippedPolymorphicReference(apiName)) {
+                    polymorphic.add(dfr);
+                }
                 continue;
             }
 
@@ -901,7 +915,7 @@ public with sharing class RecordContextService {
             );
         }
 
-        if (candidates.isEmpty()) {
+        if (candidates.isEmpty() && runtimeResolvedPolymorphic.isEmpty()) {
             return results;
         }
 
@@ -909,6 +923,9 @@ public with sharing class RecordContextService {
         List<String> fkFields = new List<String>();
         fkFields.add('Id');
         for (Schema.DescribeFieldResult dfr : candidates) {
+            fkFields.add(dfr.getName());
+        }
+        for (Schema.DescribeFieldResult dfr : runtimeResolvedPolymorphic) {
             fkFields.add(dfr.getName());
         }
         fkFields = RecordSchemaUtils.getCanonicalFieldNames(objDescribe, fkFields);
@@ -932,11 +949,6 @@ public with sharing class RecordContextService {
         Integer added = 0;
         for (Schema.DescribeFieldResult dfr : candidates) {
             if (added >= MAX_PARENT_REFERENCES) {
-                addWarning(
-                    completeness,
-                    'Parent lookup list was truncated at ' + MAX_PARENT_REFERENCES
-                        + ' entries. Use the builder property defaultParentReferencesCsv to preselect the most relevant lookups.'
-                );
                 break;
             }
 
@@ -967,6 +979,38 @@ public with sharing class RecordContextService {
             added++;
         }
 
+        for (Schema.DescribeFieldResult dfr : runtimeResolvedPolymorphic) {
+            if (added >= MAX_PARENT_REFERENCES) {
+                break;
+            }
+
+            Object fkValue = null;
+            try {
+                fkValue = activeRecord.get(dfr.getName());
+            } catch (Exception e) {
+                continue;
+            }
+            if (fkValue == null) {
+                continue;
+            }
+
+            Schema.DescribeSObjectResult parentDescribe = resolveRuntimeReferencedObjectDescribe(fkValue);
+            if (parentDescribe == null || !parentDescribe.isAccessible() || !parentDescribe.isQueryable()) {
+                continue;
+            }
+
+            ParentReferenceInfo info = new ParentReferenceInfo();
+            info.referenceFieldApiName = dfr.getName();
+            info.referenceFieldLabel = dfr.getLabel();
+            info.parentObjectApiName = parentDescribe.getName();
+            info.parentObjectLabel = parentDescribe.getLabel();
+            info.includedByDefault = isDefaultParentReference(dfr.getName());
+            info.parentRecordId = String.valueOf(fkValue);
+            info.parentRecordName = fetchRecordName(parentDescribe, info.parentRecordId);
+            results.add(info);
+            added++;
+        }
+
         return results;
     }
 
@@ -987,7 +1031,11 @@ public with sharing class RecordContextService {
             if (SYSTEM_REFERENCE_FIELDS.contains(apiName)) continue;
 
             List<Schema.SObjectType> refs = dfr.getReferenceTo();
-            if (refs == null || refs.isEmpty() || refs.size() > 1) continue;
+            if (refs == null || refs.isEmpty()) continue;
+            if (refs.size() > 1) {
+                // Runtime-resolved polymorphic references require a concrete record id.
+                continue;
+            }
 
             Schema.DescribeSObjectResult parentDescribe = refs[0].getDescribe();
             if (!parentDescribe.isAccessible() || !parentDescribe.isQueryable()) continue;
@@ -1008,6 +1056,51 @@ public with sharing class RecordContextService {
 
     private static Boolean isDefaultParentReference(String fieldApiName) {
         return fieldApiName != null && DEFAULT_PARENT_REFERENCE_FIELDS.contains(fieldApiName);
+    }
+
+    private static Boolean isRuntimeResolvablePolymorphicReference(String fieldApiName) {
+        return fieldApiName != null
+            && RUNTIME_RESOLVABLE_POLYMORPHIC_REFERENCE_FIELDS.contains(fieldApiName);
+    }
+
+    private static Boolean shouldWarnForSkippedPolymorphicReference(String fieldApiName) {
+        return fieldApiName != null
+            && WARNING_POLYMORPHIC_REFERENCE_FIELDS.contains(fieldApiName);
+    }
+
+    private static Schema.DescribeSObjectResult resolveRuntimeReferencedObjectDescribe(Object fkValue) {
+        if (fkValue == null) {
+            return null;
+        }
+
+        try {
+            Id referenceId = fkValue instanceof Id ? (Id) fkValue : Id.valueOf(String.valueOf(fkValue));
+            Schema.SObjectType resolvedType = referenceId.getSObjectType();
+            return resolvedType == null ? null : resolvedType.getDescribe();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static Schema.DescribeSObjectResult resolveParentDescribeForSelection(
+        Schema.DescribeFieldResult dfr,
+        Object fkValue
+    ) {
+        if (dfr == null) {
+            return null;
+        }
+
+        List<Schema.SObjectType> refsTo = dfr.getReferenceTo();
+        if (refsTo == null || refsTo.isEmpty()) {
+            return null;
+        }
+        if (refsTo.size() == 1) {
+            return refsTo[0].getDescribe();
+        }
+        if (!isRuntimeResolvablePolymorphicReference(dfr.getName())) {
+            return null;
+        }
+        return resolveRuntimeReferencedObjectDescribe(fkValue);
     }
 
     private static List<RelationshipInfo> describeRelationships(Schema.DescribeSObjectResult objDescribe) {
@@ -1220,7 +1313,12 @@ public with sharing class RecordContextService {
                 continue;
             }
             List<Schema.SObjectType> refsTo = dfr.getReferenceTo();
-            if (refsTo == null || refsTo.isEmpty() || refsTo.size() > 1) {
+            if (refsTo == null || refsTo.isEmpty()) {
+                addWarning(ctx.completeness,
+                    'Parent reference "' + ref + '" has no resolvable target and was skipped.');
+                continue;
+            }
+            if (refsTo.size() > 1 && !isRuntimeResolvablePolymorphicReference(ref)) {
                 addWarning(ctx.completeness,
                     'Parent reference "' + ref + '" is polymorphic and was skipped.');
                 continue;
@@ -1266,8 +1364,11 @@ public with sharing class RecordContextService {
             if (fkValue == null) {
                 ParentRecordContext emptyCtx = new ParentRecordContext();
                 emptyCtx.referenceFieldApiName = refApiName;
-                emptyCtx.parentObjectApiName = dfr.getReferenceTo()[0].getDescribe().getName();
-                emptyCtx.parentObjectLabel = dfr.getReferenceTo()[0].getDescribe().getLabel();
+                Schema.DescribeSObjectResult blankParentDescribe = resolveParentDescribeForSelection(dfr, null);
+                if (blankParentDescribe != null) {
+                    emptyCtx.parentObjectApiName = blankParentDescribe.getName();
+                    emptyCtx.parentObjectLabel = blankParentDescribe.getLabel();
+                }
                 addWarning(emptyCtx.completeness,
                     'The ' + dfr.getLabel() + ' field is blank on the active record; no parent context loaded.');
                 results.add(emptyCtx);
@@ -1275,7 +1376,12 @@ public with sharing class RecordContextService {
             }
 
             String parentId = String.valueOf(fkValue);
-            Schema.DescribeSObjectResult parentDescribe = dfr.getReferenceTo()[0].getDescribe();
+            Schema.DescribeSObjectResult parentDescribe = resolveParentDescribeForSelection(dfr, fkValue);
+            if (parentDescribe == null || !parentDescribe.isAccessible() || !parentDescribe.isQueryable()) {
+                addWarning(ctx.completeness,
+                    'Parent record target for "' + dfr.getLabel() + '" could not be resolved.');
+                continue;
+            }
 
             try {
                 triggerParentFetchFailureIfRequested();
