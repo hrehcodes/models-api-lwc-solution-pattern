@@ -15,7 +15,7 @@ AI-powered conversational insights grounded in live Salesforce record data. Uses
 - **Multi-turn conversation** — Persistent chat with localStorage, markdown rendering, suggested prompts
 - **Permission-aware** — Enforces FLS, CRUD, and sharing rules at every layer
 - **Permission-scoped record picking** — App/Home insights and compare mode use searchable record selection instead of raw-ID-first entry
-- **Model selection** — Uses Salesforce model API names with a hard-coded fallback chain
+- **Admin-configurable model catalog** — Uses subscriber-controlled custom metadata to decide which Models API aliases appear in the end-user picker, with App Builder controlling the page default
 
 ## How It Differs from Einstein Summary
 
@@ -91,10 +91,13 @@ sf project deploy start --source-dir force-app --target-org my-org --test-level 
 ### Post-deployment
 
 1. Assign the `Agentforce Record Insights User` permission set to users who need access to the component's Apex services.
-2. Add the `agentforceRecordInsights` component to a Record Page, App Page, or Home Page in Lightning App Builder.
-3. Confirm that the target org has Salesforce Models API access and at least one of the configured model aliases available.
+2. Assign the `Agentforce Record Insights Admin` permission set to admins who will maintain the model catalog custom metadata.
+3. Review or update the `Record Insights Model Alias` custom metadata records so at least one enabled model alias is available for the intended model set.
+4. Add the `agentforceRecordInsights` component to a Record Page, App Page, or Home Page in Lightning App Builder.
+5. Configure `Model Set` and `Default Model API Name` in Lightning App Builder when the page should expose a specific model set or preselect a specific model.
+6. Confirm that the target org has Salesforce Models API access and at least one of the configured model aliases available.
 
-The permission set grants Apex class access only. Object access, field-level security, and sharing remain controlled by the user's existing Salesforce permissions.
+The user permission set grants Apex class access only. Object access, field-level security, and sharing remain controlled by the user's existing Salesforce permissions. The admin permission set grants access to the model catalog metadata and the dynamic App Builder model-set picklist provider.
 
 ### Recommended deploy flow
 
@@ -102,10 +105,13 @@ The permission set grants Apex class access only. Object access, field-level sec
 # 1. Deploy the metadata
 sf project deploy start --source-dir force-app --target-org my-org
 
-# 2. Assign the packaged permission set to the default org user
+# 2. Assign the packaged user permission set to the default org user
 sf org assign permset --name Agentforce_Record_Insights_User --target-org my-org
 
-# 3. Optionally run Apex tests after deployment
+# 3. Assign the admin permission set to catalog maintainers
+sf org assign permset --name Agentforce_Record_Insights_Admin --target-org my-org
+
+# 4. Optionally run Apex tests after deployment
 sf apex run test --target-org my-org --test-level RunLocalTests
 ```
 
@@ -116,7 +122,7 @@ After deployment:
 1. Open Lightning App Builder.
 2. Edit the target Record Page, App Page, or Home Page.
 3. Drag **Agentforce Record Insights** onto the page.
-4. Configure the builder properties you want, such as default mode, preload compare mode, and usage visibility.
+4. Configure the builder properties you want, such as default mode, model set, default model API name, preload compare mode, and usage visibility.
 5. Save and activate the page.
 
 ### Do `package.json` or `sfdx-project.json` need to stay in the repo?
@@ -137,11 +143,32 @@ If someone only wants to deploy metadata without using a DX project, they can co
 - **Insights mode** is designed to work broadly across standard and custom objects that the current user can access.
 - **Compare mode** intentionally exposes a safe supported-object subset. Objects that cannot support reliable name-based search, recent-record discovery, or compare suggestions are excluded instead of failing at runtime.
 - **Prompt size control** is configurable through the `Large Prompt Warning Threshold (Tokens)` builder property. In compare mode, that threshold also acts as the server-enforced comparison context ceiling. Set it to `0` to disable the ceiling.
-- **Model availability** is curated through hard-coded Salesforce model API names in Apex. If the selected or default aliases are unavailable in the org, the component falls back through the configured list and returns a clear error if none are usable.
+- **Model availability** is curated through the `Record Insights Model Alias` custom metadata type. Enabled records in the selected `Model Set` appear in the end-user picker. If no enabled records exist for the selected set, the component falls back to the packaged Apex catalog.
+- **Default model selection** is controlled by the Lightning App Builder `Default Model API Name` property. Custom metadata controls availability only; it does not mark a default model. If the configured default is blank or not available in the selected model set, the picker selects the first available model.
+
+### Admin-Configurable Model Catalog
+
+Admins maintain available models with `Record Insights Model Alias` custom metadata records. The packaged seed records cover the supported Models API aliases, and subscribers can enable, disable, relabel, reorder, or add records without changing Apex.
+
+Key fields:
+
+- `Model API Name`: The Salesforce Models API alias sent to the Models API, such as `sfdc_ai__DefaultVertexAIGeminiPro31`.
+- `Display Label`: The label shown in the end-user picker.
+- `Provider`: Optional provider text shown beside the label.
+- `Credit Type`: `basic`, `standard`, or `advanced`; used for client-side flex-credit estimates.
+- `Enabled`: Controls whether the model appears in the picker.
+- `Model Set`: Groups records for page-specific catalogs. Blank values are treated as `Default`.
+- `Sort Order`: Controls picker ordering before label ordering.
+
+Model sets let admins maintain different catalogs for different pages. For example, a sales page can use the `Default` set while an executive page uses an `Executive` set with fewer enabled models. Lightning App Builder reads available model set names through `RecordInsightsModelSetPicklist`.
+
+Default behavior is intentionally split from availability. To change the preselected model, edit the page in Lightning App Builder and set `Default Model API Name` to an enabled model in the selected model set. To remove a model from the picker, disable its custom metadata record or move it to another model set.
 
 ## Builder Settings to Know
 
 - `Preload Compare Mode`: Defaults to `true` on record pages. Starts compare setup in the background so support checks and search are ready sooner when the user opens Compare.
+- `Model Set`: Selects which `Record Insights Model Alias` records populate the model picker. Defaults to `Default`.
+- `Default Model API Name`: Preselects a model when that API name is enabled in the selected model set. Defaults to Gemini 3.1 Pro. Leave blank to select the first available model.
 - `Large Prompt Warning Threshold (Tokens)`: Defaults to `20000`. Warns before large prompts and limits compare payload size unless set to `0`.
 - `Maximum Compare Records`: Caps compare selection between `2` and `5` records.
 - `Related Records Per Relationship`: Controls how many child records are loaded per selected relationship and directly affects prompt size, response latency, and flex-credit use.
@@ -189,15 +216,15 @@ If you are preparing this for packaging, use an org with Salesforce Models API a
 
 ## 2GP Managed Packaging
 
-This branch is structured for a namespaced 2GP managed package built from `force-app`.
+This source is structured for a namespaced 2GP managed package built from `force-app`.
 
 ### Current package state
 
 - Packaging Dev Hub alias: `sflabs`
 - Namespace: `sfpalabs`
 - Package alias: `Agentforce Record Insights` -> `0Hoao0000003KBtCAM`
-- Latest created version: `Agentforce Record Insights@1.0.0-1` -> `04tao000004qWCnAAM`
-- Current package version config in `sfdx-project.json`: `versionName: ver 1.0`, `versionNumber: 1.0.0.NEXT`
+- Latest created version: `Agentforce Record Insights@1.3.0-2` -> `04tao000005CUXJAA4`
+- Current package version config in `sfdx-project.json`: `versionName: ver 1.3`, `versionNumber: 1.3.0.NEXT`, `ancestorVersion: 1.2.0.1`
 
 ### Packaging prerequisites
 
@@ -245,9 +272,9 @@ sf package version create \
   --definition-file config/project-package-def.json \
   --code-coverage \
   --installation-key-bypass \
-  --version-name "ver 1.0" \
-  --version-number 1.0.0.NEXT \
-  --branch feature/2gp-managed-packaging \
+  --version-name "ver 1.3" \
+  --version-number 1.3.0.NEXT \
+  --branch main \
   --wait 120 \
   --language en_US \
   --target-dev-hub sflabs \
@@ -256,7 +283,7 @@ sf package version create \
 
 After version creation, copy the returned `04t...` version ID into `sfdx-project.json` as the next `Agentforce Record Insights@<major>.<minor>.<patch>-<build>` alias.
 
-This package starts with `1.0.0.1` in `sflabs`. After promoting and releasing the first version, add `ancestorVersion: HIGHEST` back for later managed upgrades. Because patch versioning is not enabled for this namespace, use a new major or minor line such as `1.1.0.NEXT` for future updates unless patch versioning is enabled through Salesforce Partner Support.
+This package starts with `1.0.0.1` in `sflabs`. Because patch versioning is not enabled for this namespace, use a new major or minor line such as `1.4.0.NEXT` for future updates unless patch versioning is enabled through Salesforce Partner Support.
 
 ### Create a clean validation scratch org
 
@@ -287,13 +314,18 @@ sf package install \
 sf org assign permset \
   --name Agentforce_Record_Insights_User \
   --target-org ari-managed-install-qa
+
+sf org assign permset \
+  --name Agentforce_Record_Insights_Admin \
+  --target-org ari-managed-install-qa
 ```
 
 After install:
 
 1. Open Lightning App Builder in the scratch org.
 2. Add `agentforceRecordInsights` to a Record Page, App Page, or Home Page.
-3. Smoke test insights mode and compare mode.
+3. Confirm `Model Set` and `Default Model API Name` are configurable.
+4. Smoke test insights mode and compare mode.
 
 ### Promote the validated version
 
@@ -308,7 +340,7 @@ sf package version promote \
 
 ### Notes
 
-- This branch targets a standard 2GP managed package, not unlocked packaging.
+- This source targets a standard 2GP managed package, not unlocked packaging.
 - The current source does not include a demo flexipage.
 - Package consumers still need Salesforce Models API access, available model aliases, and permission set assignment in the subscriber org.
 - The current `sflabs` package lineage starts at `1.0.0.1` (`04tao000004qWCnAAM`).
@@ -318,15 +350,18 @@ sf package version promote \
 ```text
 force-app/main/default/
 ├── classes/
-│   ├── RecordContextService.cls          — Context engine
-│   ├── RecordAdvisorController.cls       — Chat controller
-│   ├── RecordCompareService.cls          — Comparison service
-│   ├── RecordSchemaUtils.cls             — Schema utilities
-│   ├── RecordContextService_Test.cls     — Tests
-│   ├── RecordAdvisorController_Test.cls  — Tests
-│   ├── RecordCompareService_Test.cls     — Tests
-│   ├── RecordContextService_Case_Test.cls — Tests
-│   └── RecordSchemaUtils_Test.cls        — Tests
+│   ├── RecordContextService.cls             — Context engine
+│   ├── RecordAdvisorController.cls          — Chat controller and model catalog loader
+│   ├── RecordCompareService.cls             — Comparison service
+│   ├── RecordSchemaUtils.cls                — Schema utilities
+│   ├── RecordInsightsModelSetPicklist.cls   — Dynamic App Builder model-set picklist
+│   ├── RecordContextService_Test.cls        — Tests
+│   ├── RecordAdvisorController_Test.cls     — Tests
+│   ├── RecordCompareService_Test.cls        — Tests
+│   ├── RecordContextService_Case_Test.cls   — Tests
+│   └── RecordSchemaUtils_Test.cls           — Tests
+├── customMetadata/
+│   └── Record_Insights_Model_Alias.*        — Packaged seed model catalog records
 ├── lwc/
 │   ├── agentforceRecordInsights/         — Main component
 │   ├── contextPanel/                     — Context sidebar
@@ -335,7 +370,10 @@ force-app/main/default/
 │   ├── recordCompare/                    — Comparison mode
 │   └── recordPicker/                     — Shared object/record picker
 ├── permissionsets/
-│   └── Agentforce_Record_Insights_User.permissionset-meta.xml
+│   ├── Agentforce_Record_Insights_User.permissionset-meta.xml
+│   └── Agentforce_Record_Insights_Admin.permissionset-meta.xml
+├── objects/
+│   └── Record_Insights_Model_Alias__mdt/    — Subscriber-configurable model catalog type
 └── staticresources/
     └── Agentforce_Icon.svg
 ```
@@ -343,15 +381,16 @@ force-app/main/default/
 ## Runtime Requirements
 
 - Salesforce org with Salesforce Models API enabled (Einstein AI / Agentforce capability)
-- At least one configured Salesforce model alias available in the org
+- At least one enabled `Record Insights Model Alias` record whose `Model API Name` is available in the org
 - Users assigned the `Agentforce Record Insights User` permission set
+- Admins who maintain model aliases assigned the `Agentforce Record Insights Admin` permission set
 - User-level access to the objects, fields, and records they want to analyze
 - API version `66.0+`
 
 ## Packaging Notes
 
-- The source is structured for DX and this branch is intended for a 2GP managed package from the `force-app` directory.
+- The source is structured for DX and is intended for a 2GP managed package from the `force-app` directory.
 - The managed package namespace is `sfpalabs` and the packaging Dev Hub alias is `sflabs`.
-- Package consumers still need runtime prerequisites in the subscriber org: Salesforce Models API access, available model aliases, and permission set assignment.
+- Package consumers still need runtime prerequisites in the subscriber org: Salesforce Models API access, enabled model catalog aliases, and permission set assignment.
 - The current source no longer includes a demo flexipage. Installers should add the component to pages manually.
 - The package version scratch-org shape is defined in `config/project-package-def.json`.
