@@ -13,8 +13,10 @@ public with sharing class RecordAdvisorController {
     private static final Integer MAX_HISTORY_MESSAGES = 60;
     private static final Integer MAX_HISTORY_MESSAGE_LENGTH = 8000;
     private static final String DEFAULT_MODEL = 'sfdc_ai__DefaultVertexAIGeminiPro31';
+    private static final String DEFAULT_MODEL_SET = 'Default';
     private static final String FOLLOW_UP_MODEL = 'sfdc_ai__DefaultVertexAIGemini30Flash';
     private static final Set<String> ALLOWED_HISTORY_ROLES = new Set<String>{ 'user', 'assistant' };
+    private static final Set<String> SUPPORTED_CREDIT_TYPES = new Set<String>{ 'basic', 'standard', 'advanced' };
 
     // ── Wrapper Classes ──
 
@@ -252,10 +254,15 @@ public with sharing class RecordAdvisorController {
     /**
      * Returns the list of available AI models for the model picker.
      */
-    @AuraEnabled(cacheable=true)
-    public static List<ModelInfo> getAvailableModels() {
+    @AuraEnabled
+    public static List<ModelInfo> getAvailableModels(String modelSetName) {
         List<ModelInfo> models = new List<ModelInfo>();
-        for (ModelCatalogEntry entry : getModelCatalog()) {
+        List<ModelCatalogEntry> catalog = getConfiguredModelCatalog(modelSetName);
+        if (catalog.isEmpty()) {
+            catalog = getModelCatalog();
+        }
+
+        for (ModelCatalogEntry entry : catalog) {
             models.add(entry.toModelInfo());
         }
         return models;
@@ -421,6 +428,156 @@ public with sharing class RecordAdvisorController {
             new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini30Flash', 'Gemini 3 Flash', 'Vertex AI (Google)', false, 'basic'),
             new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini31FlashLite', 'Gemini 3.1 Flash Lite (Beta)', 'Vertex AI (Google)', false, 'basic')
         };
+    }
+
+    @TestVisible
+    private static List<ModelCatalogEntry> getConfiguredModelCatalog(String modelSetName) {
+        return buildConfiguredModelCatalog([
+            SELECT DeveloperName,
+                MasterLabel,
+                Model_API_Name__c,
+                Display_Label__c,
+                Provider__c,
+                Credit_Type__c,
+                Enabled__c,
+                Is_Default__c,
+                Sort_Order__c,
+                Model_Set__c
+            FROM Record_Insights_Model_Alias__mdt
+            WHERE Enabled__c = true
+            ORDER BY Sort_Order__c ASC NULLS LAST, MasterLabel ASC
+        ], modelSetName);
+    }
+
+    @TestVisible
+    private static List<ModelCatalogEntry> buildConfiguredModelCatalog(
+        List<Record_Insights_Model_Alias__mdt> configuredRows,
+        String modelSetName
+    ) {
+        String normalizedModelSet = normalizeModelSetName(modelSetName);
+        Set<String> seenApiNames = new Set<String>();
+        List<ModelCatalogEntry> catalog = new List<ModelCatalogEntry>();
+
+        for (Record_Insights_Model_Alias__mdt row : configuredRows) {
+            if (row == null || row.Enabled__c == false) {
+                continue;
+            }
+            if (normalizeModelSetName(row.Model_Set__c) != normalizedModelSet) {
+                continue;
+            }
+
+            String apiName = normalizeText(row.Model_API_Name__c);
+            if (String.isBlank(apiName) || !seenApiNames.add(apiName)) {
+                continue;
+            }
+
+            String label = normalizeText(row.Display_Label__c);
+            if (String.isBlank(label)) {
+                label = normalizeText(row.MasterLabel);
+            }
+            String provider = normalizeText(row.Provider__c);
+
+            catalog.add(new ModelCatalogEntry(
+                apiName,
+                String.isNotBlank(label) ? label : apiName,
+                String.isNotBlank(provider) ? provider : 'Configured',
+                row.Is_Default__c == true,
+                normalizeCreditType(row.Credit_Type__c)
+            ));
+        }
+
+        return enforceSingleDefault(catalog);
+    }
+
+    @TestVisible
+    private static List<ModelInfo> buildConfiguredModelInfos(
+        List<Record_Insights_Model_Alias__mdt> configuredRows,
+        String modelSetName
+    ) {
+        List<ModelInfo> models = new List<ModelInfo>();
+        for (ModelCatalogEntry entry : buildConfiguredModelCatalog(configuredRows, modelSetName)) {
+            models.add(entry.toModelInfo());
+        }
+        return models;
+    }
+
+    public static List<String> getAvailableModelSetNames() {
+        Set<String> seenModelSets = new Set<String>();
+        List<String> modelSets = new List<String>();
+
+        for (Record_Insights_Model_Alias__mdt row : [
+            SELECT Model_Set__c
+            FROM Record_Insights_Model_Alias__mdt
+            WHERE Enabled__c = true
+            ORDER BY Model_Set__c ASC NULLS FIRST
+        ]) {
+            String modelSet = normalizeModelSetName(row.Model_Set__c);
+            if (seenModelSets.add(modelSet)) {
+                modelSets.add(modelSet);
+            }
+        }
+
+        if (modelSets.isEmpty()) {
+            modelSets.add(DEFAULT_MODEL_SET);
+        }
+        return modelSets;
+    }
+
+    @TestVisible
+    private static String normalizeModelSetName(String modelSetName) {
+        String normalized = normalizeText(modelSetName);
+        return String.isBlank(normalized) ? DEFAULT_MODEL_SET : normalized;
+    }
+
+    private static String normalizeCreditType(String creditType) {
+        String normalized = normalizeText(creditType);
+        if (String.isBlank(normalized)) {
+            return 'standard';
+        }
+
+        normalized = normalized.toLowerCase();
+        return SUPPORTED_CREDIT_TYPES.contains(normalized) ? normalized : 'standard';
+    }
+
+    private static String normalizeText(String value) {
+        return value == null ? null : value.trim();
+    }
+
+    private static List<ModelCatalogEntry> enforceSingleDefault(List<ModelCatalogEntry> catalog) {
+        if (catalog.isEmpty()) {
+            return catalog;
+        }
+
+        String defaultApiName;
+        for (ModelCatalogEntry entry : catalog) {
+            if (entry.isDefault) {
+                defaultApiName = entry.apiName;
+                break;
+            }
+        }
+        if (String.isBlank(defaultApiName)) {
+            for (ModelCatalogEntry entry : catalog) {
+                if (entry.apiName == DEFAULT_MODEL) {
+                    defaultApiName = entry.apiName;
+                    break;
+                }
+            }
+        }
+        if (String.isBlank(defaultApiName)) {
+            defaultApiName = catalog[0].apiName;
+        }
+
+        List<ModelCatalogEntry> normalizedCatalog = new List<ModelCatalogEntry>();
+        for (ModelCatalogEntry entry : catalog) {
+            normalizedCatalog.add(new ModelCatalogEntry(
+                entry.apiName,
+                entry.label,
+                entry.provider,
+                entry.apiName == defaultApiName,
+                entry.creditType
+            ));
+        }
+        return normalizedCatalog;
     }
 
     @TestVisible

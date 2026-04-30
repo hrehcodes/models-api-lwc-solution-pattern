@@ -28,6 +28,7 @@ export default class AgentforceRecordInsights extends LightningElement {
     @api defaultRelationshipsCsv;
     @api showModelPicker;
     @api defaultModelApiName;
+    @api modelSetName = 'Default';
     @api showSuggestedPrompts;
     @api showUsageMetrics;
     @api showInlineUsageStatus = false;

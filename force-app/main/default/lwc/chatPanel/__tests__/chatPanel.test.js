@@ -1,9 +1,19 @@
 import { createElement } from 'lwc';
-import { registerApexTestWireAdapter } from '@salesforce/sfdx-lwc-jest';
 import ChatPanel from 'c/chatPanel';
 import getAvailableModels from '@salesforce/apex/RecordAdvisorController.getAvailableModels';
 
-const getAvailableModelsAdapter = registerApexTestWireAdapter(getAvailableModels);
+jest.mock(
+    '@salesforce/apex/RecordAdvisorController.getAvailableModels',
+    () => ({
+        default: jest.fn()
+    }),
+    { virtual: true }
+);
+
+const getAvailableModelsAdapter = {
+    emit: jest.fn(),
+    getLastConfig: () => getAvailableModels.mock.calls[getAvailableModels.mock.calls.length - 1]?.[0]
+};
 const flushPromises = async (count = 4) => {
     for (let index = 0; index < count; index += 1) {
         await Promise.resolve();
@@ -16,6 +26,7 @@ describe('c-chat-panel', () => {
     let removeItemSpy;
 
     beforeEach(() => {
+        getAvailableModels.mockResolvedValue([]);
         getItemSpy = jest.spyOn(Storage.prototype, 'getItem');
         setItemSpy = jest.spyOn(Storage.prototype, 'setItem');
         removeItemSpy = jest.spyOn(Storage.prototype, 'removeItem');
@@ -27,6 +38,20 @@ describe('c-chat-panel', () => {
         }
         localStorage.clear();
         jest.clearAllMocks();
+    });
+
+    it('requests available models for the configured model set', async () => {
+        const element = createElement('c-chat-panel', {
+            is: ChatPanel
+        });
+        element.modelSetName = 'Executive';
+        document.body.appendChild(element);
+
+        await flushPromises();
+
+        expect(getAvailableModelsAdapter.getLastConfig()).toEqual({
+            modelSetName: 'Executive'
+        });
     });
 
     it('does not read or write persisted chat state when persistence is disabled', async () => {

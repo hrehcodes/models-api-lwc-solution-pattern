@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Is_Default__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>Marks the preferred default model for this model set.</description>
+    <fieldManageability>SubscriberControlled</fieldManageability>
+    <label>Is Default</label>
+    <type>Checkbox</type>
+</CustomField>

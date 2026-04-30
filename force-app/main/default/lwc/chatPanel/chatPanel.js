@@ -1,4 +1,4 @@
-import { LightningElement, api, track, wire } from 'lwc';
+import { LightningElement, api, track } from 'lwc';
 import AGENTFORCE_ICON from '@salesforce/resourceUrl/Agentforce_Icon';
 import sendMessage from '@salesforce/apex/RecordAdvisorController.sendMessage';
 import sendCompareMessage from '@salesforce/apex/RecordAdvisorController.sendCompareMessage';
@@ -41,6 +41,7 @@ const SUGGESTED_PROMPTS = {
 };
 
 const MODEL_CREDIT_MAP = {};
+const DEFAULT_MODEL_SET_NAME = 'Default';
 const PROMPT_OVERHEAD_TOKENS = 800;
 
 export default class ChatPanel extends LightningElement {
@@ -78,6 +79,9 @@ export default class ChatPanel extends LightningElement {
     _messageCounter = 0;
     _modelData = [];
     _storageKey;
+    _modelSetName = DEFAULT_MODEL_SET_NAME;
+    _isConnected = false;
+    _modelLoadRequestId = 0;
 
     @api
     get storageKey() {
@@ -93,35 +97,67 @@ export default class ChatPanel extends LightningElement {
         }
     }
 
-    @wire(getAvailableModels)
-    wiredModels({ data, error }) {
-        if (data) {
-            this._modelData = data;
-            this.modelOptions = data.map(m => ({
-                label: `${m.label} (${m.provider}) [${m.creditType}]`,
-                value: m.apiName
-            }));
-            data.forEach(m => { MODEL_CREDIT_MAP[m.apiName] = m.creditType; });
-            this.applyPreferredModelSelection(data.map(m => m.apiName), data.find(m => m.isDefault)?.apiName);
+    @api
+    get modelSetName() {
+        return this._modelSetName;
+    }
+    set modelSetName(value) {
+        const normalizedValue = this.normalizeModelSetName(value);
+        if (normalizedValue === this._modelSetName) {
+            return;
         }
-        if (error) {
-            this.modelOptions = [
-                { label: 'Gemini 3.1 Pro (Google) [standard]', value: 'sfdc_ai__DefaultVertexAIGeminiPro31' },
-                { label: 'GPT-4o (OpenAI) [standard]', value: 'sfdc_ai__DefaultGPT4Omni' }
-            ];
-            this.applyPreferredModelSelection(
-                this.modelOptions.map(option => option.value),
-                this.modelOptions[0]?.value
-            );
+
+        this._modelSetName = normalizedValue;
+        if (this._isConnected) {
+            this.loadModelOptions();
         }
     }
 
     connectedCallback() {
+        this._isConnected = true;
+        this.loadModelOptions();
         if (!this.persistConversationEnabled) {
             this.clearPersistedState();
         }
         this.loadConversation();
         this.loadUsageMetrics();
+    }
+
+    async loadModelOptions() {
+        const requestId = ++this._modelLoadRequestId;
+        try {
+            const data = await getAvailableModels({ modelSetName: this.modelSetName });
+            if (requestId !== this._modelLoadRequestId) {
+                return;
+            }
+            this.applyModelData(data || []);
+        } catch (error) {
+            if (requestId !== this._modelLoadRequestId) {
+                return;
+            }
+            this.applyFallbackModelOptions();
+        }
+    }
+
+    applyModelData(data) {
+        this._modelData = data;
+        this.modelOptions = data.map(m => ({
+            label: `${m.label} (${m.provider}) [${m.creditType}]`,
+            value: m.apiName
+        }));
+        data.forEach(m => { MODEL_CREDIT_MAP[m.apiName] = m.creditType; });
+        this.applyPreferredModelSelection(data.map(m => m.apiName), data.find(m => m.isDefault)?.apiName);
+    }
+
+    applyFallbackModelOptions() {
+        this.modelOptions = [
+            { label: 'Gemini 3.1 Pro (Google) [standard]', value: 'sfdc_ai__DefaultVertexAIGeminiPro31' },
+            { label: 'GPT-4o (OpenAI) [standard]', value: 'sfdc_ai__DefaultGPT4Omni' }
+        ];
+        this.applyPreferredModelSelection(
+            this.modelOptions.map(option => option.value),
+            this.modelOptions[0]?.value
+        );
     }
 
     resetForStorageChange() {
@@ -617,6 +653,11 @@ export default class ChatPanel extends LightningElement {
         }
 
         this.selectedModel = fallbackModel || availableModels[0] || null;
+    }
+
+    normalizeModelSetName(value) {
+        const normalizedValue = (value || '').trim();
+        return normalizedValue || DEFAULT_MODEL_SET_NAME;
     }
 
     isBooleanEnabled(value) {

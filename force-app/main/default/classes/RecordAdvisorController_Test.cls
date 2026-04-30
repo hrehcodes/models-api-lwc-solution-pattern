@@ -4,7 +4,7 @@ private class RecordAdvisorController_Test {
     @IsTest
     static void testGetAvailableModels() {
         Test.startTest();
-        List<RecordAdvisorController.ModelInfo> models = RecordAdvisorController.getAvailableModels();
+        List<RecordAdvisorController.ModelInfo> models = RecordAdvisorController.getAvailableModels(null);
         Test.stopTest();
 
         System.assert(!models.isEmpty(), 'Should return available models');
@@ -175,7 +175,7 @@ private class RecordAdvisorController_Test {
 
     @IsTest
     static void testGetAvailableModels_ContainsCuratedCatalogAndSingleDefault() {
-        List<RecordAdvisorController.ModelInfo> models = RecordAdvisorController.getAvailableModels();
+        List<RecordAdvisorController.ModelInfo> models = RecordAdvisorController.getAvailableModels('Default');
         Integer defaultCount = 0;
         Boolean hasFollowUpAlias = false;
         Set<String> advertisedModels = new Set<String>();
@@ -223,6 +223,92 @@ private class RecordAdvisorController_Test {
             'sfdc_ai__DefaultVertexAIGemini31FlashLite',
             'sfdc_ai__DefaultVertexAIGeminiPro31'
         }, advertisedModels, 'The curated model catalog should match the supported Models API aliases');
+    }
+
+    @IsTest
+    static void testBuildConfiguredModelInfos_FiltersNormalizesAndDeduplicates() {
+        List<RecordAdvisorController.ModelInfo> models = RecordAdvisorController.buildConfiguredModelInfos(new List<Record_Insights_Model_Alias__mdt>{
+            new Record_Insights_Model_Alias__mdt(
+                MasterLabel = 'Configured Primary',
+                Model_API_Name__c = ' configured_primary ',
+                Display_Label__c = ' Configured Primary ',
+                Provider__c = ' Test Provider ',
+                Credit_Type__c = 'ADVANCED',
+                Enabled__c = true,
+                Is_Default__c = true,
+                Model_Set__c = 'Custom'
+            ),
+            new Record_Insights_Model_Alias__mdt(
+                MasterLabel = 'Duplicate Primary',
+                Model_API_Name__c = 'configured_primary',
+                Display_Label__c = 'Duplicate Primary',
+                Provider__c = 'Test Provider',
+                Credit_Type__c = 'basic',
+                Enabled__c = true,
+                Is_Default__c = false,
+                Model_Set__c = 'Custom'
+            ),
+            new Record_Insights_Model_Alias__mdt(
+                MasterLabel = 'Other Set',
+                Model_API_Name__c = 'other_set_model',
+                Enabled__c = true,
+                Model_Set__c = 'Other'
+            ),
+            new Record_Insights_Model_Alias__mdt(
+                MasterLabel = 'Disabled',
+                Model_API_Name__c = 'disabled_model',
+                Enabled__c = false,
+                Model_Set__c = 'Custom'
+            )
+        }, ' Custom ');
+
+        System.assertEquals(1, models.size(), 'Only one active unique model from the selected model set should remain');
+        System.assertEquals('configured_primary', models[0].apiName);
+        System.assertEquals('Configured Primary', models[0].label);
+        System.assertEquals('Test Provider', models[0].provider);
+        System.assertEquals('advanced', models[0].creditType);
+        System.assertEquals(true, models[0].isDefault);
+    }
+
+    @IsTest
+    static void testBuildConfiguredModelInfos_DefaultsToFirstModelWhenNoDefault() {
+        List<RecordAdvisorController.ModelInfo> models = RecordAdvisorController.buildConfiguredModelInfos(new List<Record_Insights_Model_Alias__mdt>{
+            new Record_Insights_Model_Alias__mdt(
+                MasterLabel = 'Bad Tier',
+                Model_API_Name__c = 'bad_tier_model',
+                Display_Label__c = 'Bad Tier',
+                Provider__c = '',
+                Credit_Type__c = 'premium',
+                Enabled__c = true,
+                Is_Default__c = false,
+                Model_Set__c = ''
+            ),
+            new Record_Insights_Model_Alias__mdt(
+                MasterLabel = 'Second Model',
+                Model_API_Name__c = 'second_model',
+                Display_Label__c = 'Second Model',
+                Credit_Type__c = 'basic',
+                Enabled__c = true,
+                Is_Default__c = false,
+                Model_Set__c = 'Default'
+            )
+        }, null);
+
+        System.assertEquals(2, models.size());
+        System.assertEquals(true, models[0].isDefault, 'First configured model should become default when no row is marked default');
+        System.assertEquals('Configured', models[0].provider, 'Blank providers should use a stable fallback label');
+        System.assertEquals('standard', models[0].creditType, 'Unsupported tiers should normalize to standard');
+        System.assertEquals(false, models[1].isDefault);
+    }
+
+    @IsTest
+    static void testModelSetPicklist_ReturnsDefaultValueAndAcceptsValues() {
+        RecordInsightsModelSetPicklist picklist = new RecordInsightsModelSetPicklist();
+
+        System.assertNotEquals(null, picklist.getDefaultValue());
+        System.assertNotEquals(null, picklist.getValues(), 'Configured model sets should be available to Lightning App Builder');
+        System.assertEquals(true, picklist.isValid('Any Subscriber Set'));
+        System.assertEquals('Any Subscriber Set', picklist.getLabel('Any Subscriber Set'));
     }
 
     @IsTest

@@ -1,5 +1,4 @@
 import { createElement } from 'lwc';
-import { registerApexTestWireAdapter } from '@salesforce/sfdx-lwc-jest';
 import AgentforceRecordInsights from 'c/agentforceRecordInsights';
 import getAvailableContext from '@salesforce/apex/RecordContextService.getAvailableContext';
 import getRecordContext from '@salesforce/apex/RecordContextService.getRecordContext';
@@ -39,7 +38,17 @@ jest.mock(
     { virtual: true }
 );
 
-const getAvailableModelsAdapter = registerApexTestWireAdapter(getAvailableModels);
+jest.mock(
+    '@salesforce/apex/RecordAdvisorController.getAvailableModels',
+    () => ({
+        default: jest.fn()
+    }),
+    { virtual: true }
+);
+
+const getAvailableModelsAdapter = {
+    emit: jest.fn()
+};
 const flushPromises = async (count = 4) => {
     for (let index = 0; index < count; index += 1) {
         await Promise.resolve();
@@ -108,6 +117,7 @@ describe('c-agentforce-record-insights', () => {
 
         getAvailableContext.mockResolvedValue(baseAvailableContext);
         getRecordContext.mockResolvedValue(baseRecordContext);
+        getAvailableModels.mockResolvedValue([]);
         getAvailableCompareObjects.mockResolvedValue([
             { apiName: 'Account', label: 'Account' }
         ]);

@@ -20,6 +20,7 @@ export default class RecordCompare extends LightningElement {
     @api storageKey;
     @api showModelPicker;
     @api defaultModelApiName;
+    @api modelSetName = 'Default';
     @api showSuggestedPrompts;
     @api showUsageMetrics;
     @api showInlineUsageStatus = false;
