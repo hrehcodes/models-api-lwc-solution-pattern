@@ -146,7 +146,7 @@ export default class ChatPanel extends LightningElement {
             value: m.apiName
         }));
         data.forEach(m => { MODEL_CREDIT_MAP[m.apiName] = m.creditType; });
-        this.applyPreferredModelSelection(data.map(m => m.apiName), data.find(m => m.isDefault)?.apiName);
+        this.applyPreferredModelSelection(data.map(m => m.apiName));
     }
 
     applyFallbackModelOptions() {
@@ -641,7 +641,7 @@ export default class ChatPanel extends LightningElement {
         } catch (e) { /* ignore */ }
     }
 
-    applyPreferredModelSelection(availableModels, fallbackModel) {
+    applyPreferredModelSelection(availableModels) {
         if (this.selectedModel && availableModels.includes(this.selectedModel)) {
             return;
         }
@@ -652,7 +652,7 @@ export default class ChatPanel extends LightningElement {
             return;
         }
 
-        this.selectedModel = fallbackModel || availableModels[0] || null;
+        this.selectedModel = availableModels[0] || null;
     }
 
     normalizeModelSetName(value) {

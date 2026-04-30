@@ -7,7 +7,6 @@
     <values><field>Provider__c</field><value xsi:type="xsd:string">Vertex AI (Google)</value></values>
     <values><field>Credit_Type__c</field><value xsi:type="xsd:string">standard</value></values>
     <values><field>Enabled__c</field><value xsi:type="xsd:boolean">true</value></values>
-    <values><field>Is_Default__c</field><value xsi:type="xsd:boolean">false</value></values>
     <values><field>Sort_Order__c</field><value xsi:type="xsd:int">260</value></values>
     <values><field>Model_Set__c</field><value xsi:type="xsd:string">Default</value></values>
 </CustomMetadata>

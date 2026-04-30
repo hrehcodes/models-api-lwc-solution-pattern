@@ -440,7 +440,6 @@ public with sharing class RecordAdvisorController {
                 Provider__c,
                 Credit_Type__c,
                 Enabled__c,
-                Is_Default__c,
                 Sort_Order__c,
                 Model_Set__c
             FROM Record_Insights_Model_Alias__mdt
@@ -481,12 +480,12 @@ public with sharing class RecordAdvisorController {
                 apiName,
                 String.isNotBlank(label) ? label : apiName,
                 String.isNotBlank(provider) ? provider : 'Configured',
-                row.Is_Default__c == true,
+                false,
                 normalizeCreditType(row.Credit_Type__c)
             ));
         }
 
-        return enforceSingleDefault(catalog);
+        return catalog;
     }
 
     @TestVisible
@@ -541,43 +540,6 @@ public with sharing class RecordAdvisorController {
 
     private static String normalizeText(String value) {
         return value == null ? null : value.trim();
-    }
-
-    private static List<ModelCatalogEntry> enforceSingleDefault(List<ModelCatalogEntry> catalog) {
-        if (catalog.isEmpty()) {
-            return catalog;
-        }
-
-        String defaultApiName;
-        for (ModelCatalogEntry entry : catalog) {
-            if (entry.isDefault) {
-                defaultApiName = entry.apiName;
-                break;
-            }
-        }
-        if (String.isBlank(defaultApiName)) {
-            for (ModelCatalogEntry entry : catalog) {
-                if (entry.apiName == DEFAULT_MODEL) {
-                    defaultApiName = entry.apiName;
-                    break;
-                }
-            }
-        }
-        if (String.isBlank(defaultApiName)) {
-            defaultApiName = catalog[0].apiName;
-        }
-
-        List<ModelCatalogEntry> normalizedCatalog = new List<ModelCatalogEntry>();
-        for (ModelCatalogEntry entry : catalog) {
-            normalizedCatalog.add(new ModelCatalogEntry(
-                entry.apiName,
-                entry.label,
-                entry.provider,
-                entry.apiName == defaultApiName,
-                entry.creditType
-            ));
-        }
-        return normalizedCatalog;
     }
 
     @TestVisible

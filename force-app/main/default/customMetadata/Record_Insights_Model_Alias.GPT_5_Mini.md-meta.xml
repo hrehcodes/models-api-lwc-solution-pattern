@@ -7,7 +7,6 @@
     <values><field>Provider__c</field><value xsi:type="xsd:string">OpenAI / Azure OpenAI</value></values>
     <values><field>Credit_Type__c</field><value xsi:type="xsd:string">basic</value></values>
     <values><field>Enabled__c</field><value xsi:type="xsd:boolean">true</value></values>
-    <values><field>Is_Default__c</field><value xsi:type="xsd:boolean">false</value></values>
     <values><field>Sort_Order__c</field><value xsi:type="xsd:int">180</value></values>
     <values><field>Model_Set__c</field><value xsi:type="xsd:string">Default</value></values>
     <values><field>Notes__c</field><value xsi:type="xsd:string">Geo-aware</value></values>

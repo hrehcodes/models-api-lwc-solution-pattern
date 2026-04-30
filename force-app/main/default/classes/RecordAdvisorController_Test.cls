@@ -8,11 +8,6 @@ private class RecordAdvisorController_Test {
         Test.stopTest();
 
         System.assert(!models.isEmpty(), 'Should return available models');
-        Boolean hasDefault = false;
-        for (RecordAdvisorController.ModelInfo m : models) {
-            if (m.isDefault) hasDefault = true;
-        }
-        System.assert(hasDefault, 'Should have a default model');
     }
 
     @IsTest
@@ -174,7 +169,7 @@ private class RecordAdvisorController_Test {
     }
 
     @IsTest
-    static void testGetAvailableModels_ContainsCuratedCatalogAndSingleDefault() {
+    static void testGetAvailableModels_ContainsCuratedCatalogWithoutCmdtDefault() {
         List<RecordAdvisorController.ModelInfo> models = RecordAdvisorController.getAvailableModels('Default');
         Integer defaultCount = 0;
         Boolean hasFollowUpAlias = false;
@@ -184,14 +179,13 @@ private class RecordAdvisorController_Test {
             advertisedModels.add(model.apiName);
             if (model.isDefault) {
                 defaultCount++;
-                System.assertEquals('sfdc_ai__DefaultVertexAIGeminiPro31', model.apiName, 'Gemini 3.1 Pro should be the default model');
             }
             if (model.apiName == 'sfdc_ai__DefaultVertexAIGemini30Flash') {
                 hasFollowUpAlias = true;
             }
         }
 
-        System.assertEquals(1, defaultCount, 'Exactly one default model should be advertised');
+        System.assertEquals(0, defaultCount, 'Configured model metadata should not advertise a default model');
         System.assert(hasFollowUpAlias, 'The follow-up model alias should be part of the curated catalog');
         System.assertEquals(new Set<String>{
             'sfdc_ai__DefaultBedrockAmazonNovaLite',
@@ -235,7 +229,6 @@ private class RecordAdvisorController_Test {
                 Provider__c = ' Test Provider ',
                 Credit_Type__c = 'ADVANCED',
                 Enabled__c = true,
-                Is_Default__c = true,
                 Model_Set__c = 'Custom'
             ),
             new Record_Insights_Model_Alias__mdt(
@@ -245,7 +238,6 @@ private class RecordAdvisorController_Test {
                 Provider__c = 'Test Provider',
                 Credit_Type__c = 'basic',
                 Enabled__c = true,
-                Is_Default__c = false,
                 Model_Set__c = 'Custom'
             ),
             new Record_Insights_Model_Alias__mdt(
@@ -267,11 +259,11 @@ private class RecordAdvisorController_Test {
         System.assertEquals('Configured Primary', models[0].label);
         System.assertEquals('Test Provider', models[0].provider);
         System.assertEquals('advanced', models[0].creditType);
-        System.assertEquals(true, models[0].isDefault);
+        System.assertEquals(false, models[0].isDefault);
     }
 
     @IsTest
-    static void testBuildConfiguredModelInfos_DefaultsToFirstModelWhenNoDefault() {
+    static void testBuildConfiguredModelInfos_DoesNotSetMetadataDefault() {
         List<RecordAdvisorController.ModelInfo> models = RecordAdvisorController.buildConfiguredModelInfos(new List<Record_Insights_Model_Alias__mdt>{
             new Record_Insights_Model_Alias__mdt(
                 MasterLabel = 'Bad Tier',
@@ -280,7 +272,6 @@ private class RecordAdvisorController_Test {
                 Provider__c = '',
                 Credit_Type__c = 'premium',
                 Enabled__c = true,
-                Is_Default__c = false,
                 Model_Set__c = ''
             ),
             new Record_Insights_Model_Alias__mdt(
@@ -289,13 +280,12 @@ private class RecordAdvisorController_Test {
                 Display_Label__c = 'Second Model',
                 Credit_Type__c = 'basic',
                 Enabled__c = true,
-                Is_Default__c = false,
                 Model_Set__c = 'Default'
             )
         }, null);
 
         System.assertEquals(2, models.size());
-        System.assertEquals(true, models[0].isDefault, 'First configured model should become default when no row is marked default');
+        System.assertEquals(false, models[0].isDefault, 'Model defaults are controlled by Lightning App Builder, not custom metadata');
         System.assertEquals('Configured', models[0].provider, 'Blank providers should use a stable fallback label');
         System.assertEquals('standard', models[0].creditType, 'Unsupported tiers should normalize to standard');
         System.assertEquals(false, models[1].isDefault);
