@@ -174,14 +174,17 @@ private class RecordAdvisorController_Test {
     }
 
     @IsTest
-    static void testGetAvailableModels_ContainsFollowUpAliasAndSingleDefault() {
+    static void testGetAvailableModels_ContainsCuratedCatalogAndSingleDefault() {
         List<RecordAdvisorController.ModelInfo> models = RecordAdvisorController.getAvailableModels();
         Integer defaultCount = 0;
         Boolean hasFollowUpAlias = false;
+        Set<String> advertisedModels = new Set<String>();
 
         for (RecordAdvisorController.ModelInfo model : models) {
+            advertisedModels.add(model.apiName);
             if (model.isDefault) {
                 defaultCount++;
+                System.assertEquals('sfdc_ai__DefaultVertexAIGeminiPro31', model.apiName, 'Gemini 3.1 Pro should be the default model');
             }
             if (model.apiName == 'sfdc_ai__DefaultVertexAIGemini30Flash') {
                 hasFollowUpAlias = true;
@@ -190,6 +193,36 @@ private class RecordAdvisorController_Test {
 
         System.assertEquals(1, defaultCount, 'Exactly one default model should be advertised');
         System.assert(hasFollowUpAlias, 'The follow-up model alias should be part of the curated catalog');
+        System.assertEquals(new Set<String>{
+            'sfdc_ai__DefaultBedrockAmazonNovaLite',
+            'sfdc_ai__DefaultBedrockAmazonNovaPro',
+            'sfdc_ai__DefaultBedrockAnthropicClaude45Haiku',
+            'sfdc_ai__DefaultBedrockAnthropicClaude45Opus',
+            'sfdc_ai__DefaultBedrockAnthropicClaude46Opus',
+            'sfdc_ai__DefaultBedrockAnthropicClaude47Opus',
+            'sfdc_ai__DefaultBedrockAnthropicClaude4Sonnet',
+            'sfdc_ai__DefaultBedrockAnthropicClaude45Sonnet',
+            'sfdc_ai__DefaultBedrockAnthropicClaude46Sonnet',
+            'sfdc_ai__DefaultBedrockNvidiaNemotronNano330b',
+            'sfdc_ai__DefaultGPT4Omni',
+            'sfdc_ai__DefaultGPT4OmniMini',
+            'sfdc_ai__DefaultOpenAIGPT4OmniMini',
+            'sfdc_ai__DefaultGPT41',
+            'sfdc_ai__DefaultGPT41Mini',
+            'sfdc_ai__DefaultGPT5',
+            'sfdc_ai__DefaultGPT5Mini',
+            'sfdc_ai__DefaultGPT51',
+            'sfdc_ai__DefaultGPT52',
+            'sfdc_ai__DefaultGPT54',
+            'sfdc_ai__DefaultO3',
+            'sfdc_ai__DefaultO4Mini',
+            'sfdc_ai__DefaultVertexAIGemini25Flash001',
+            'sfdc_ai__DefaultVertexAIGemini25FlashLite001',
+            'sfdc_ai__DefaultVertexAIGeminiPro25',
+            'sfdc_ai__DefaultVertexAIGemini30Flash',
+            'sfdc_ai__DefaultVertexAIGemini31FlashLite',
+            'sfdc_ai__DefaultVertexAIGeminiPro31'
+        }, advertisedModels, 'The curated model catalog should match the supported Models API aliases');
     }
 
     @IsTest

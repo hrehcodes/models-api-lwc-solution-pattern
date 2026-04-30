@@ -29,7 +29,7 @@ public with sharing class RecordAdvisorController {
         @AuraEnabled public String label { get; set; }
         @AuraEnabled public String provider { get; set; }
         @AuraEnabled public Boolean isDefault { get; set; }
-        @AuraEnabled public String creditType { get; set; } // 'basic' or 'standard'
+        @AuraEnabled public String creditType { get; set; } // 'basic', 'standard', or 'advanced'
 
         public ModelInfo(String apiName, String label, String provider, Boolean isDefault, String creditType) {
             this.apiName = apiName;
@@ -392,28 +392,34 @@ public with sharing class RecordAdvisorController {
     @TestVisible
     private static List<ModelCatalogEntry> getModelCatalog() {
         return new List<ModelCatalogEntry>{
-            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGeminiPro31', 'Gemini 3.1 Pro (Beta)', 'Google', true, 'standard'),
-            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini30Flash', 'Gemini 3 Flash (Beta)', 'Google', false, 'basic'),
-            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGeminiPro25', 'Gemini 2.5 Pro', 'Google', false, 'standard'),
-            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini25Flash001', 'Gemini 2.5 Flash', 'Google', false, 'basic'),
-            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini25FlashLite001', 'Gemini 2.5 Flash Lite', 'Google', false, 'basic'),
-            new ModelCatalogEntry('sfdc_ai__DefaultGPT5', 'GPT-5', 'OpenAI', false, 'standard'),
-            new ModelCatalogEntry('sfdc_ai__DefaultGPT5Mini', 'GPT-5 Mini', 'OpenAI', false, 'basic'),
-            new ModelCatalogEntry('sfdc_ai__DefaultGPT51', 'GPT-5.1 (Beta)', 'OpenAI', false, 'standard'),
-            new ModelCatalogEntry('sfdc_ai__DefaultGPT52', 'GPT-5.2 (Beta)', 'OpenAI', false, 'standard'),
-            new ModelCatalogEntry('sfdc_ai__DefaultGPT41', 'GPT-4.1', 'OpenAI', false, 'standard'),
-            new ModelCatalogEntry('sfdc_ai__DefaultGPT41Mini', 'GPT-4.1 Mini', 'OpenAI', false, 'basic'),
-            new ModelCatalogEntry('sfdc_ai__DefaultGPT4Omni', 'GPT-4o', 'OpenAI', false, 'standard'),
-            new ModelCatalogEntry('sfdc_ai__DefaultGPT4OmniMini', 'GPT-4o Mini', 'OpenAI', false, 'basic'),
-            new ModelCatalogEntry('sfdc_ai__DefaultO3', 'O3', 'OpenAI', false, 'standard'),
-            new ModelCatalogEntry('sfdc_ai__DefaultO4Mini', 'O4 Mini', 'OpenAI', false, 'standard'),
-            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude45Sonnet', 'Claude Sonnet 4.5', 'Anthropic', false, 'standard'),
-            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude4Sonnet', 'Claude Sonnet 4', 'Anthropic', false, 'standard'),
-            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude45Haiku', 'Claude Haiku 4.5', 'Anthropic', false, 'standard'),
-            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude45Opus', 'Claude Opus 4.5 (Beta)', 'Anthropic', false, 'advanced'),
-            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAmazonNovaPro', 'Nova Pro', 'Amazon', false, 'standard'),
-            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAmazonNovaLite', 'Nova Lite', 'Amazon', false, 'basic'),
-            new ModelCatalogEntry('sfdc_ai__DefaultBedrockNvidiaNemotronNano330b', 'Nemotron 3 Nano 30B (Beta)', 'NVIDIA', false, 'basic')
+            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGeminiPro31', 'Gemini 3.1 Pro (Beta)', 'Vertex AI (Google)', true, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAmazonNovaLite', 'Amazon Nova Lite', 'Amazon Bedrock', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAmazonNovaPro', 'Amazon Nova Pro', 'Amazon Bedrock', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude45Haiku', 'Claude Haiku 4.5', 'Amazon Bedrock', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude45Opus', 'Claude Opus 4.5', 'Amazon Bedrock', false, 'advanced'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude46Opus', 'Claude Opus 4.6 (Beta)', 'Amazon Bedrock', false, 'advanced'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude47Opus', 'Claude Opus 4.7 (Beta)', 'Amazon Bedrock', false, 'advanced'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude4Sonnet', 'Claude Sonnet 4', 'Amazon Bedrock', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude45Sonnet', 'Claude Sonnet 4.5', 'Amazon Bedrock', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockAnthropicClaude46Sonnet', 'Claude Sonnet 4.6', 'Amazon Bedrock', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultBedrockNvidiaNemotronNano330b', 'NVIDIA Nemotron 3 Nano 30B (Beta)', 'Amazon Bedrock', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT4Omni', 'GPT-4o', 'OpenAI / Azure OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT4OmniMini', 'GPT-4o Mini', 'OpenAI / Azure OpenAI', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultOpenAIGPT4OmniMini', 'GPT-4o Mini', 'OpenAI', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT41', 'GPT-4.1', 'OpenAI / Azure OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT41Mini', 'GPT-4.1 Mini', 'OpenAI / Azure OpenAI', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT5', 'GPT-5', 'OpenAI / Azure OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT5Mini', 'GPT-5 Mini', 'OpenAI / Azure OpenAI', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT51', 'GPT-5.1', 'OpenAI / Azure OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT52', 'GPT-5.2', 'OpenAI / Azure OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultGPT54', 'GPT-5.4', 'OpenAI / Azure OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultO3', 'O3', 'OpenAI / Azure OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultO4Mini', 'O4 Mini', 'OpenAI / Azure OpenAI', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini25Flash001', 'Gemini 2.5 Flash', 'Vertex AI (Google)', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini25FlashLite001', 'Gemini 2.5 Flash Lite', 'Vertex AI (Google)', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGeminiPro25', 'Gemini 2.5 Pro', 'Vertex AI (Google)', false, 'standard'),
+            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini30Flash', 'Gemini 3 Flash', 'Vertex AI (Google)', false, 'basic'),
+            new ModelCatalogEntry('sfdc_ai__DefaultVertexAIGemini31FlashLite', 'Gemini 3.1 Flash Lite (Beta)', 'Vertex AI (Google)', false, 'basic')
         };
     }
 
