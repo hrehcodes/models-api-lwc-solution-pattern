@@ -1,5 +1,10 @@
 import { LightningElement, api, track } from 'lwc';
 import AGENTFORCE_ICON from '@salesforce/resourceUrl/Agentforce_Icon';
+import MODEL_LOGO_AMAZON from '@salesforce/resourceUrl/ModelLogoAmazon';
+import MODEL_LOGO_ANTHROPIC from '@salesforce/resourceUrl/ModelLogoAnthropic';
+import MODEL_LOGO_GOOGLE from '@salesforce/resourceUrl/ModelLogoGoogle';
+import MODEL_LOGO_NVIDIA from '@salesforce/resourceUrl/ModelLogoNvidia';
+import MODEL_LOGO_OPENAI from '@salesforce/resourceUrl/ModelLogoOpenAI';
 import sendMessage from '@salesforce/apex/RecordAdvisorController.sendMessage';
 import sendCompareMessage from '@salesforce/apex/RecordAdvisorController.sendCompareMessage';
 import generateFollowUpPrompts from '@salesforce/apex/RecordAdvisorController.generateFollowUpPrompts';
@@ -41,8 +46,26 @@ const SUGGESTED_PROMPTS = {
 };
 
 const MODEL_CREDIT_MAP = {};
+const MODEL_LOGO_MAP = {
+    amazon: MODEL_LOGO_AMAZON,
+    aws: MODEL_LOGO_AMAZON,
+    anthropic: MODEL_LOGO_ANTHROPIC,
+    claude: MODEL_LOGO_ANTHROPIC,
+    google: MODEL_LOGO_GOOGLE,
+    gemini: MODEL_LOGO_GOOGLE,
+    nvidia: MODEL_LOGO_NVIDIA,
+    openai: MODEL_LOGO_OPENAI
+};
 const DEFAULT_MODEL_SET_NAME = 'Default';
 const PROMPT_OVERHEAD_TOKENS = 800;
+const PROGRESS_ROTATION_MS = 1700;
+const PROGRESS_MESSAGES = [
+    'Preparing selected record context',
+    'Sending grounded prompt to the model',
+    'Reviewing related records',
+    'Drafting response',
+    'Preparing suggested follow-ups'
+];
 
 export default class ChatPanel extends LightningElement {
     agentforceIcon = AGENTFORCE_ICON;
@@ -75,6 +98,8 @@ export default class ChatPanel extends LightningElement {
     showLargePromptWarningModal = false;
     pendingLargePromptText;
     pendingLargePromptTokenEstimate = 0;
+    isModelPickerOpen = false;
+    progressMessageIndex = 0;
 
     _messageCounter = 0;
     _modelData = [];
@@ -82,6 +107,7 @@ export default class ChatPanel extends LightningElement {
     _modelSetName = DEFAULT_MODEL_SET_NAME;
     _isConnected = false;
     _modelLoadRequestId = 0;
+    _progressInterval;
 
     @api
     get storageKey() {
@@ -123,6 +149,10 @@ export default class ChatPanel extends LightningElement {
         this.loadUsageMetrics();
     }
 
+    disconnectedCallback() {
+        this.stopProgressCarousel();
+    }
+
     async loadModelOptions() {
         const requestId = ++this._modelLoadRequestId;
         try {
@@ -150,10 +180,26 @@ export default class ChatPanel extends LightningElement {
     }
 
     applyFallbackModelOptions() {
-        this.modelOptions = [
-            { label: 'Gemini 3.1 Pro (Google) [standard]', value: 'sfdc_ai__DefaultVertexAIGeminiPro31' },
-            { label: 'GPT-4o (OpenAI) [standard]', value: 'sfdc_ai__DefaultGPT4Omni' }
+        const fallbackData = [
+            {
+                label: 'Gemini 3.1 Pro',
+                provider: 'Google',
+                creditType: 'standard',
+                apiName: 'sfdc_ai__DefaultVertexAIGeminiPro31'
+            },
+            {
+                label: 'GPT-4o',
+                provider: 'OpenAI',
+                creditType: 'standard',
+                apiName: 'sfdc_ai__DefaultGPT4Omni'
+            }
         ];
+        this._modelData = fallbackData;
+        this.modelOptions = fallbackData.map(m => ({
+            label: `${m.label} (${m.provider}) [${m.creditType}]`,
+            value: m.apiName
+        }));
+        fallbackData.forEach(m => { MODEL_CREDIT_MAP[m.apiName] = m.creditType; });
         this.applyPreferredModelSelection(
             this.modelOptions.map(option => option.value),
             this.modelOptions[0]?.value
@@ -228,6 +274,74 @@ export default class ChatPanel extends LightningElement {
         return this.isBooleanEnabled(this.showModelPicker);
     }
 
+    get selectedModelData() {
+        return this._modelData.find(model => model.apiName === this.selectedModel);
+    }
+
+    get selectedModelLabel() {
+        return this.selectedModelData?.label || 'Choose model';
+    }
+
+    get selectedModelMeta() {
+        const model = this.selectedModelData;
+        if (!model) {
+            return 'Model catalog';
+        }
+        const provider = model.provider || 'Provider';
+        const tier = this.formatCreditTier(model.creditType);
+        return `${provider} · ${tier}`;
+    }
+
+    get selectedModelInitial() {
+        const label = this.selectedModelLabel || 'M';
+        return label.trim().slice(0, 1).toUpperCase();
+    }
+
+    get selectedModelLogo() {
+        return this.resolveModelLogo(this.selectedModelData);
+    }
+
+    get selectedModelLogoAlt() {
+        const model = this.selectedModelData;
+        const provider = model?.provider || model?.label || 'Selected model';
+        return `${provider} logo`;
+    }
+
+    get modelPickerItems() {
+        const data = this._modelData.length
+            ? this._modelData
+            : this.modelOptions.map(option => ({
+                label: option.label,
+                apiName: option.value,
+                provider: '',
+                creditType: MODEL_CREDIT_MAP[option.value] || 'standard'
+            }));
+
+        return data.map(model => {
+            const isActive = model.apiName === this.selectedModel;
+            return {
+                id: model.apiName,
+                label: model.label,
+                provider: model.provider || 'Configured model',
+                creditLabel: this.formatCreditTier(model.creditType),
+                logo: this.resolveModelLogo(model),
+                logoAlt: `${model.provider || model.label || 'Model'} logo`,
+                itemClass: isActive ? 'model-option model-option-active' : 'model-option',
+                isActive
+            };
+        });
+    }
+
+    get modelPickerButtonClass() {
+        return this.isModelPickerOpen
+            ? 'model-picker-button model-picker-button-open'
+            : 'model-picker-button';
+    }
+
+    get currentProgressMessage() {
+        return PROGRESS_MESSAGES[this.progressMessageIndex] || PROGRESS_MESSAGES[0];
+    }
+
     get showSuggestedPromptsEnabled() {
         return this.isBooleanEnabled(this.showSuggestedPrompts);
     }
@@ -288,8 +402,21 @@ export default class ChatPanel extends LightningElement {
 
     // ── Event Handlers ──
 
-    handleModelChange(event) {
-        this.selectedModel = event.detail.value;
+    handleModelPickerToggle() {
+        this.isModelPickerOpen = !this.isModelPickerOpen;
+    }
+
+    handleModelPickerClose() {
+        this.isModelPickerOpen = false;
+    }
+
+    handleModelSelect(event) {
+        const modelId = event.currentTarget?.dataset?.modelId;
+        if (!modelId) {
+            return;
+        }
+        this.selectedModel = modelId;
+        this.isModelPickerOpen = false;
     }
 
     handleInputChange(event) {
@@ -305,12 +432,12 @@ export default class ChatPanel extends LightningElement {
     }
 
     handleSuggestedPrompt(event) {
-        this.userInput = event.target.dataset.prompt;
+        this.userInput = event.currentTarget?.dataset?.prompt;
         this.handleSend();
     }
 
     handleFollowUpPrompt(event) {
-        this.userInput = event.target.dataset.prompt;
+        this.userInput = event.currentTarget?.dataset?.prompt;
         this.followUpPrompts = [];
         this.handleSend();
     }
@@ -356,6 +483,7 @@ export default class ChatPanel extends LightningElement {
         this.userInput = '';
         this.followUpPrompts = [];
         this.isLoading = true;
+        this.startProgressCarousel();
         this.resetInputHeight();
         this.scrollToBottom();
 
@@ -394,8 +522,17 @@ export default class ChatPanel extends LightningElement {
             this.addMessage('assistant', `Error: ${errMsg}`);
         } finally {
             this.isLoading = false;
+            this.stopProgressCarousel();
             this.scrollToBottom();
         }
+    }
+
+    async handleRetryMessage() {
+        const lastUserMsg = [...this.messages].reverse().find(m => m.role === 'user');
+        if (!lastUserMsg || this.isLoading) {
+            return;
+        }
+        await this.handleRegenerate();
     }
 
     async handleRegenerate() {
@@ -417,7 +554,7 @@ export default class ChatPanel extends LightningElement {
     }
 
     handleCopyMessage(event) {
-        const idx = parseInt(event.target.dataset.index, 10);
+        const idx = parseInt(event.currentTarget?.dataset?.index, 10);
         const msg = this.messages[idx];
         if (msg) {
             navigator.clipboard.writeText(msg.text);
@@ -510,8 +647,10 @@ export default class ChatPanel extends LightningElement {
             bubbleClass: `message-bubble ${role === 'user' ? 'user-bubble' : 'assistant-bubble'}`,
             isUser: role === 'user',
             isAssistant: role === 'assistant',
+            isError: role === 'assistant' && this.isErrorMessage(text),
             htmlContent: role === 'assistant' ? this.renderMarkdown(text) : null,
-            isLastAssistant: role === 'assistant'
+            isLastAssistant: role === 'assistant',
+            timestampLabel: this.formatMessageTimestamp(new Date())
         };
 
         if (role === 'assistant') {
@@ -585,8 +724,10 @@ export default class ChatPanel extends LightningElement {
                         bubbleClass: `message-bubble ${m.role === 'user' ? 'user-bubble' : 'assistant-bubble'}`,
                         isUser: m.role === 'user',
                         isAssistant: m.role === 'assistant',
+                        isError: m.role === 'assistant' && this.isErrorMessage(m.text),
                         htmlContent: m.role === 'assistant' ? this.renderMarkdown(m.text) : null,
-                        isLastAssistant: false
+                        isLastAssistant: false,
+                        timestampLabel: this.formatMessageTimestamp(m.timestamp)
                     };
                 });
                 for (let i = this.messages.length - 1; i >= 0; i--) {
@@ -667,6 +808,75 @@ export default class ChatPanel extends LightningElement {
     formatMetricValue(value) {
         const numericValue = Number(value) || 0;
         return numericValue.toLocaleString();
+    }
+
+    formatCreditTier(value) {
+        const normalized = value ? String(value).trim().toLowerCase() : 'standard';
+        return `${normalized.slice(0, 1).toUpperCase()}${normalized.slice(1)} tier`;
+    }
+
+    resolveModelLogo(model) {
+        const key = this.resolveModelLogoKey(model);
+        return MODEL_LOGO_MAP[key] || MODEL_LOGO_OPENAI;
+    }
+
+    resolveModelLogoKey(model) {
+        const searchable = [
+            model?.provider,
+            model?.label,
+            model?.apiName
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        if (searchable.includes('anthropic') || searchable.includes('claude')) {
+            return 'anthropic';
+        }
+        if (searchable.includes('google') || searchable.includes('gemini') || searchable.includes('vertex')) {
+            return 'google';
+        }
+        if (searchable.includes('nvidia') || searchable.includes('nemotron')) {
+            return 'nvidia';
+        }
+        if (searchable.includes('amazon') || searchable.includes('nova')) {
+            return 'amazon';
+        }
+        if (searchable.includes('openai') || searchable.includes('gpt')) {
+            return 'openai';
+        }
+        return 'openai';
+    }
+
+    formatMessageTimestamp(value) {
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return '';
+        }
+        return date.toLocaleTimeString([], {
+            hour: 'numeric',
+            minute: '2-digit'
+        });
+    }
+
+    isErrorMessage(text) {
+        return typeof text === 'string' && text.trim().toLowerCase().startsWith('error:');
+    }
+
+    startProgressCarousel() {
+        this.stopProgressCarousel(false);
+        this.progressMessageIndex = 0;
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        this._progressInterval = setInterval(() => {
+            this.progressMessageIndex = (this.progressMessageIndex + 1) % PROGRESS_MESSAGES.length;
+        }, PROGRESS_ROTATION_MS);
+    }
+
+    stopProgressCarousel(resetIndex = true) {
+        if (this._progressInterval) {
+            clearInterval(this._progressInterval);
+            this._progressInterval = null;
+        }
+        if (resetIndex) {
+            this.progressMessageIndex = 0;
+        }
     }
 
     // ── Markdown Rendering ──

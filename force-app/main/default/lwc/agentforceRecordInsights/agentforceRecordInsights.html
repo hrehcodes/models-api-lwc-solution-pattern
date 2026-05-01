@@ -69,34 +69,75 @@
             <template lwc:if={isInsightsMode}>
                 <!-- No record context (app page) -->
                 <template lwc:if={showInsightsRecordPicker}>
-                    <div class="slds-p-around_medium slds-text-align_center">
-                        <lightning-icon icon-name="utility:info" size="small" class="slds-m-bottom_small"></lightning-icon>
-                        <p class="slds-text-body_regular slds-m-bottom_medium">
-                            Place this component on a record page for automatic context detection, or search for a supported record below.
-                        </p>
-                        <c-record-picker
-                            mode="insights"
-                            object-type-options={filteredObjectTypeOptions}
-                            selected-object-type={selectedObjectType}
-                            object-type-filter={objectTypeFilter}
-                            is-loading-object-types={isLoadingObjectTypes}
-                            object-type-error={objectTypeError}
-                            no-filtered-object-options={noFilteredObjectOptions}
-                            selected-records={selectedInsightsRecords}
-                            can-search={insightsCanSearch}
-                            search-term={searchTerm}
-                            search-results={searchResults}
-                            search-error={searchError}
-                            show-advanced-id-entry="true"
-                            manual-record-id={manualRecordId}
-                            onobjecttypechange={handleObjectTypeChange}
-                            onobjectfilterchange={handleObjectFilterChange}
-                            onsearchchange={handleSearchChange}
-                            onrecordselect={handleInsightsRecordSelect}
-                            onrecordremove={handleInsightsRecordRemove}
-                            onmanualidchange={handleManualRecordIdChange}
-                            onmanualload={handleLoadManualRecord}
-                        ></c-record-picker>
+                    <div class="landing-state">
+                        <div class="landing-hero">
+                            <div class="landing-icon-ring">
+                                <img src={agentforceIcon} alt="Agentforce" class="landing-agentforce-icon" />
+                            </div>
+                            <p class="landing-eyebrow">Agentforce Record Insights</p>
+                            <h2 class="landing-title">{landingIntroTitle}</h2>
+                            <p class="landing-copy">{landingIntroCopy}</p>
+                        </div>
+
+                        <div class="landing-task-section">
+                            <div class="landing-section-header">
+                                <span class="landing-section-title">Pick a starting point</span>
+                                <span class="landing-section-copy">This only narrows the record picker.</span>
+                            </div>
+                            <div class="landing-task-grid">
+                                <template for:each={landingTaskCards} for:item="task">
+                                    <button
+                                        key={task.id}
+                                        class={task.cardClass}
+                                        data-object-api-name={task.objectApiName}
+                                        onclick={handleLandingTaskSelect}
+                                        type="button"
+                                        disabled={task.isUnavailable}
+                                    >
+                                        <span class="landing-task-icon-wrap">
+                                            <lightning-icon icon-name={task.iconName} size="small" class="landing-task-icon"></lightning-icon>
+                                        </span>
+                                        <span class="landing-task-copy">
+                                            <span class="landing-task-label">{task.label}</span>
+                                            <span class="landing-task-description">{task.description}</span>
+                                        </span>
+                                        <lightning-icon icon-name="utility:chevronright" size="xx-small" class="landing-task-arrow"></lightning-icon>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="landing-picker-card">
+                            <div class="landing-picker-header">
+                                <div>
+                                    <span class="landing-section-title">Find a record</span>
+                                    <p class="landing-picker-copy">Search records you can access, then tune context before chatting.</p>
+                                </div>
+                            </div>
+                            <c-record-picker
+                                mode="insights"
+                                object-type-options={filteredObjectTypeOptions}
+                                selected-object-type={selectedObjectType}
+                                object-type-filter={objectTypeFilter}
+                                is-loading-object-types={isLoadingObjectTypes}
+                                object-type-error={objectTypeError}
+                                no-filtered-object-options={noFilteredObjectOptions}
+                                selected-records={selectedInsightsRecords}
+                                can-search={insightsCanSearch}
+                                search-term={searchTerm}
+                                search-results={searchResults}
+                                search-error={searchError}
+                                show-advanced-id-entry="true"
+                                manual-record-id={manualRecordId}
+                                onobjecttypechange={handleObjectTypeChange}
+                                onobjectfilterchange={handleObjectFilterChange}
+                                onsearchchange={handleSearchChange}
+                                onrecordselect={handleInsightsRecordSelect}
+                                onrecordremove={handleInsightsRecordRemove}
+                                onmanualidchange={handleManualRecordIdChange}
+                                onmanualload={handleLoadManualRecord}
+                            ></c-record-picker>
+                        </div>
                     </div>
                 </template>
 

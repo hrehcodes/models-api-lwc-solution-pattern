@@ -1,16 +1,58 @@
 <template>
     <!-- Model Selector (collapsed into bar) -->
     <template lwc:if={showModelBar}>
-        <div class="model-bar slds-p-horizontal_small slds-p-vertical_xx-small">
+        <div class="model-bar">
             <template lwc:if={showModelPicker}>
-                <lightning-combobox
-                    label="Model"
-                    value={selectedModel}
-                    options={modelOptions}
-                    onchange={handleModelChange}
-                    variant="label-hidden"
-                    class="model-picker"
-                ></lightning-combobox>
+                <div class="model-picker-shell">
+                    <button
+                        class={modelPickerButtonClass}
+                        type="button"
+                        onclick={handleModelPickerToggle}
+                        aria-haspopup="listbox"
+                        aria-expanded={isModelPickerOpen}
+                        title="Switch AI model"
+                    >
+                        <span class="model-avatar" aria-hidden="true">
+                            <img src={selectedModelLogo} alt={selectedModelLogoAlt} class="model-logo-img" />
+                        </span>
+                        <span class="model-button-copy">
+                            <span class="model-button-label">{selectedModelLabel}</span>
+                            <span class="model-button-meta">{selectedModelMeta}</span>
+                        </span>
+                        <lightning-icon icon-name="utility:chevrondown" size="xx-small" class="model-chevron"></lightning-icon>
+                    </button>
+                    <template lwc:if={isModelPickerOpen}>
+                        <div class="model-picker-backdrop" onclick={handleModelPickerClose}></div>
+                        <div class="model-picker-popover" role="listbox" aria-label="Choose Model">
+                            <div class="model-picker-title">Choose Model</div>
+                            <template for:each={modelPickerItems} for:item="model">
+                                <button
+                                    key={model.id}
+                                    class={model.itemClass}
+                                    data-model-id={model.id}
+                                    onclick={handleModelSelect}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={model.isActive}
+                                >
+                                    <span class="model-option-check" aria-hidden="true">
+                                        <template lwc:if={model.isActive}>
+                                            <lightning-icon icon-name="utility:check" size="xx-small"></lightning-icon>
+                                        </template>
+                                    </span>
+                                    <span class="model-option-logo" aria-hidden="true">
+                                        <img src={model.logo} alt={model.logoAlt} class="model-logo-img" />
+                                    </span>
+                                    <span class="model-option-copy">
+                                        <span class="model-option-label">{model.label}</span>
+                                        <span class="model-option-meta">{model.provider}</span>
+                                    </span>
+                                    <span class="model-tier-badge">{model.creditLabel}</span>
+                                </button>
+                            </template>
+                        </div>
+                    </template>
+                </div>
             </template>
             <template lwc:if={hasMessages}>
                 <lightning-button-icon
@@ -18,7 +60,7 @@
                     alternative-text="Clear conversation"
                     title="Clear conversation"
                     onclick={handleClearConversation}
-                    class="slds-m-left_x-small"
+                    class="clear-conversation-btn"
                     size="small"
                 ></lightning-button-icon>
             </template>
@@ -41,26 +83,29 @@
     <!-- Chat Messages -->
     <div class="chat-messages" lwc:ref="chatContainer">
         <template lwc:if={showWelcome}>
-            <div class="welcome-container slds-text-align_center slds-p-around_medium">
-                <div class="header-with-icon slds-grid slds-grid_vertical-align-center slds-grid_align-center slds-m-bottom_x-small">
+            <div class="welcome-container">
+                <div class="welcome-icon-ring">
                     <img src={agentforceIcon} alt="Agentforce" class="agentforce-header-icon" />
                 </div>
-                <p class="slds-text-body_regular slds-text-color_weak slds-m-bottom_medium">
-                    Ask me anything about <strong>{recordName}</strong>. I can see the fields and related records you've selected in the context panel.
+                <h2 class="welcome-title">Ready for grounded record insights</h2>
+                <p class="welcome-copy">
+                    Ask about <strong>{recordName}</strong>. I will use the selected fields, related records, and context settings shown in the panel.
                 </p>
 
                 <!-- Suggested Prompts -->
                 <template lwc:if={showSuggestedPromptButtons}>
                     <div class="suggested-prompts">
                         <template for:each={suggestedPrompts} for:item="prompt">
-                            <lightning-button
+                            <button
                                 key={prompt.id}
-                                label={prompt.text}
                                 onclick={handleSuggestedPrompt}
                                 data-prompt={prompt.text}
-                                variant="neutral"
-                                class="prompt-chip slds-m-around_xx-small"
-                            ></lightning-button>
+                                class="prompt-chip"
+                                type="button"
+                            >
+                                <lightning-icon icon-name="utility:sparkles" size="xx-small" class="prompt-chip-icon"></lightning-icon>
+                                <span>{prompt.text}</span>
+                            </button>
                         </template>
                     </div>
                 </template>
@@ -69,35 +114,53 @@
 
         <template for:each={messages} for:item="msg">
             <div key={msg.id} class={msg.containerClass}>
-                <div class={msg.bubbleClass}>
-                    <!-- User message -->
-                    <template lwc:if={msg.isUser}>
-                        <p class="message-text">{msg.text}</p>
-                    </template>
+                <template lwc:if={msg.isAssistant}>
+                    <div class="assistant-avatar">
+                        <img src={agentforceIcon} alt="" class="assistant-avatar-icon" />
+                    </div>
+                </template>
+                <div class="message-stack">
+                    <div class={msg.bubbleClass}>
+                        <!-- User message -->
+                        <template lwc:if={msg.isUser}>
+                            <p class="message-text">{msg.text}</p>
+                        </template>
 
-                    <!-- Assistant message (with markdown) -->
-                    <template lwc:if={msg.isAssistant}>
-                        <lightning-formatted-rich-text value={msg.htmlContent} class="message-text"></lightning-formatted-rich-text>
-                        <div class="message-actions slds-m-top_xx-small">
-                            <lightning-button-icon
-                                icon-name="utility:copy_to_clipboard"
-                                alternative-text="Copy"
-                                title="Copy to clipboard"
-                                data-index={msg.index}
-                                onclick={handleCopyMessage}
-                                size="x-small"
-                            ></lightning-button-icon>
-                            <template lwc:if={msg.isLastAssistant}>
-                                <lightning-button-icon
-                                    icon-name="utility:refresh"
-                                    alternative-text="Regenerate"
-                                    title="Regenerate response"
-                                    onclick={handleRegenerate}
-                                    size="x-small"
-                                    class="slds-m-left_xx-small"
-                                ></lightning-button-icon>
+                        <!-- Assistant message (with markdown) -->
+                        <template lwc:if={msg.isAssistant}>
+                            <lightning-formatted-rich-text value={msg.htmlContent} class="message-text"></lightning-formatted-rich-text>
+                            <template lwc:if={msg.isError}>
+                                <div class="retry-actions">
+                                    <button class="retry-chip" data-index={msg.index} onclick={handleRetryMessage} type="button">
+                                        <lightning-icon icon-name="utility:refresh" size="xx-small"></lightning-icon>
+                                        <span>Retry</span>
+                                    </button>
+                                </div>
                             </template>
-                        </div>
+                            <div class="message-actions">
+                                <lightning-button-icon
+                                    icon-name="utility:copy_to_clipboard"
+                                    alternative-text="Copy"
+                                    title="Copy to clipboard"
+                                    data-index={msg.index}
+                                    onclick={handleCopyMessage}
+                                    size="x-small"
+                                ></lightning-button-icon>
+                                <template lwc:if={msg.isLastAssistant}>
+                                    <lightning-button-icon
+                                        icon-name="utility:refresh"
+                                        alternative-text="Regenerate"
+                                        title="Regenerate response"
+                                        onclick={handleRegenerate}
+                                        size="x-small"
+                                        class="slds-m-left_xx-small"
+                                    ></lightning-button-icon>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                    <template lwc:if={msg.timestampLabel}>
+                        <span class="message-timestamp">{msg.timestampLabel}</span>
                     </template>
                 </div>
             </div>
@@ -106,7 +169,11 @@
         <!-- Loading indicator -->
         <template lwc:if={isLoading}>
             <div class="message-row assistant-row">
+                <div class="assistant-avatar">
+                    <img src={agentforceIcon} alt="" class="assistant-avatar-icon" />
+                </div>
                 <div class="message-bubble assistant-bubble loading-bubble">
+                    <div class="progress-copy" aria-live="polite">{currentProgressMessage}</div>
                     <div class="typing-indicator">
                         <span class="dot"></span>
                         <span class="dot"></span>
@@ -146,15 +213,9 @@
                 rows="2"
                 aria-label="Message"
             ></textarea>
-            <lightning-button-icon
-                icon-name="utility:send"
-                alternative-text="Send"
-                variant="brand"
-                onclick={handleSend}
-                disabled={sendDisabled}
-                class="send-btn slds-m-left_x-small"
-                size="medium"
-            ></lightning-button-icon>
+            <button class="send-btn" onclick={handleSend} disabled={sendDisabled} type="button" title="Send message">
+                <lightning-icon icon-name="utility:send" size="x-small" class="send-icon"></lightning-icon>
+            </button>
         </div>
         <template lwc:if={showInlineUsageStatusEnabled}>
             <div class="usage-status-bar" role="status" aria-live="polite">

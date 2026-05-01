@@ -80,6 +80,30 @@ export default class ContextPanel extends LightningElement {
             ? 'context-warning context-warning-failed'
             : 'context-warning';
     }
+    get contextStatusLabel() {
+        if (this.contextStatus === 'failed') {
+            return 'Context failed';
+        }
+        if (this.contextStatus === 'partial') {
+            return 'Partial context';
+        }
+        if (this.contextStatus === 'ready') {
+            return 'Context ready';
+        }
+        return 'Preparing context';
+    }
+    get contextStatusClass() {
+        if (this.contextStatus === 'failed') {
+            return 'status-pill status-pill-failed';
+        }
+        if (this.contextStatus === 'partial') {
+            return 'status-pill status-pill-partial';
+        }
+        if (this.contextStatus === 'ready') {
+            return 'status-pill status-pill-ready';
+        }
+        return 'status-pill';
+    }
     get hideContextWarningsEnabled() {
         return this.hideContextWarnings === true || this.hideContextWarnings === 'true';
     }
@@ -267,6 +291,37 @@ export default class ContextPanel extends LightningElement {
         return this.includedRelationships?.length || 0;
     }
 
+    get fieldSummaryText() {
+        const modeLabel = this.fieldSelectionMode === 'fields' ? 'specific fields' : 'category fields';
+        return `${this.totalFieldCount} ${modeLabel}`;
+    }
+
+    get relationshipSummaryText() {
+        const count = this.includedRelCount;
+        return `${count} relationship${count === 1 ? '' : 's'} included`;
+    }
+
+    get parentSummaryText() {
+        const count = this.includedParentRefCount;
+        return `${count} parent record${count === 1 ? '' : 's'} included`;
+    }
+
+    get formattedTokenEstimate() {
+        return this.tokenEstimate ? this.tokenEstimate.toLocaleString() : '0';
+    }
+
+    get formattedSessionTokens() {
+        return this.formatMetricValue(this.sessionTokens);
+    }
+
+    get formattedSessionCredits() {
+        return this.formatMetricValue(this.sessionCredits);
+    }
+
+    get usageSummaryText() {
+        return `${this.formattedTokenEstimate} context tokens`;
+    }
+
     get tokenEstimate() {
         const explicitEstimate = parseInt(this.contextTokenEstimate, 10);
         if (!Number.isNaN(explicitEstimate) && explicitEstimate > 0) {
@@ -363,6 +418,11 @@ export default class ContextPanel extends LightningElement {
 
     isBooleanEnabled(value) {
         return value !== false && value !== 'false';
+    }
+
+    formatMetricValue(value) {
+        const numericValue = Number(value) || 0;
+        return numericValue.toLocaleString();
     }
 
     isRelationshipCountKnown(relationship) {

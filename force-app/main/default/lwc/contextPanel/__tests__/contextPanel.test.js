@@ -60,6 +60,28 @@ describe('c-context-panel', () => {
         expect(warning.textContent).toContain('configured warning threshold of 100 tokens');
     });
 
+    it('renders polished context status and usage summaries', async () => {
+        const element = createElement('c-context-panel', {
+            is: ContextPanel
+        });
+        element.availableContext = baseAvailableContext;
+        element.includedCategories = ['core'];
+        element.contextStatus = 'ready';
+        element.showUsageMetrics = true;
+        element.contextTokenEstimate = 1234;
+        element.sessionTokens = 9876;
+        element.sessionCredits = 12;
+        document.body.appendChild(element);
+
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('.status-pill-ready')).not.toBeNull();
+        expect(element.shadowRoot.textContent).toContain('Context ready');
+        expect(element.shadowRoot.textContent).toContain('1,234 context tokens');
+        expect(element.shadowRoot.textContent).toContain('9,876');
+        expect(element.shadowRoot.textContent).toContain('12');
+    });
+
     it('disables threshold-based warning visuals when the threshold is zero but keeps the usage estimate visible', async () => {
         const element = createElement('c-context-panel', {
             is: ContextPanel

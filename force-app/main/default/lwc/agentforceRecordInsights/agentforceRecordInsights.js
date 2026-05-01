@@ -11,6 +11,36 @@ const AVAILABLE_MODES_BOTH = 'both';
 const AVAILABLE_MODES_INSIGHTS_ONLY = 'insightsonly';
 const AVAILABLE_MODES_COMPARE_ONLY = 'compareonly';
 const LOADING_STEP_ROTATION_MS = 1400;
+const LANDING_TASKS = [
+    {
+        id: 'account',
+        label: 'Account briefing',
+        description: 'Start with account context, engagement, open cases, and opportunities.',
+        objectApiName: 'Account',
+        iconName: 'standard:account'
+    },
+    {
+        id: 'opportunity',
+        label: 'Deal review',
+        description: 'Review opportunity status, risks, stakeholders, and next steps.',
+        objectApiName: 'Opportunity',
+        iconName: 'standard:opportunity'
+    },
+    {
+        id: 'case',
+        label: 'Case summary',
+        description: 'Summarize case status, resolution work, and related patterns.',
+        objectApiName: 'Case',
+        iconName: 'standard:case'
+    },
+    {
+        id: 'contact',
+        label: 'Contact insight',
+        description: 'Understand contact engagement, role, open activity, and account context.',
+        objectApiName: 'Contact',
+        iconName: 'standard:contact'
+    }
+];
 
 export default class AgentforceRecordInsights extends LightningElement {
     agentforceIcon = AGENTFORCE_ICON;
@@ -361,6 +391,25 @@ export default class AgentforceRecordInsights extends LightningElement {
         }));
     }
 
+    get landingTaskCards() {
+        const availableObjectTypes = new Set(this.objectTypeOptions.map(option => option.value));
+        return LANDING_TASKS.map(task => ({
+            ...task,
+            isUnavailable: this.objectTypeOptions.length > 0 && !availableObjectTypes.has(task.objectApiName),
+            cardClass: this.selectedObjectType === task.objectApiName
+                ? 'landing-task-card landing-task-card-selected'
+                : 'landing-task-card'
+        }));
+    }
+
+    get landingIntroTitle() {
+        return 'Choose a record to start grounded insights';
+    }
+
+    get landingIntroCopy() {
+        return 'Search for a Salesforce record, tune the context, and ask questions grounded in fields and related records you can access.';
+    }
+
     get storageKey() {
         return this.activeRecordId ? `ari_chat_${this.activeRecordId}` : null;
     }
@@ -374,6 +423,26 @@ export default class AgentforceRecordInsights extends LightningElement {
     handleToggleContext() { this.contextPanelOpen = !this.contextPanelOpen; }
     handleModeSelect(event) {
         this.setMode(event.detail.value);
+    }
+
+    async handleLandingTaskSelect(event) {
+        const objectApiName = event.currentTarget?.dataset?.objectApiName;
+        if (!objectApiName) {
+            return;
+        }
+
+        if (!this.objectTypeOptions.length) {
+            await this.ensureInsightsPickerInitialized();
+        }
+
+        this.objectTypeFilter = '';
+        this.selectedObjectType = objectApiName;
+        this.searchTerm = '';
+        this.searchResults = [];
+        this.searchError = null;
+        this.objectTypeError = null;
+        this.clearStandaloneInsightsSelection();
+        this.performInsightsSearch();
     }
 
     handleObjectTypeChange(event) {

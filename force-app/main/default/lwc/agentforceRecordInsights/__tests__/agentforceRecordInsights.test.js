@@ -392,6 +392,8 @@ describe('c-agentforce-record-insights', () => {
 
         const picker = element.shadowRoot.querySelector('c-record-picker');
         expect(picker).not.toBeNull();
+        expect(element.shadowRoot.querySelector('.landing-state')).not.toBeNull();
+        expect(element.shadowRoot.textContent).toContain('Choose a record to start grounded insights');
         expect(picker.objectTypeOptions).toEqual([{ label: 'Account', value: 'Account' }]);
 
         picker.dispatchEvent(
@@ -421,6 +423,35 @@ describe('c-agentforce-record-insights', () => {
             includeSameObjectSiblingsThroughParents: false,
             parentSiblingRelationshipByReferenceField: {},
             includedFields: null
+        });
+    });
+
+    it('lets landing task cards narrow the app-page insights picker', async () => {
+        getAvailableCompareObjects.mockResolvedValue([
+            { apiName: 'Account', label: 'Account' },
+            { apiName: 'Opportunity', label: 'Opportunity' }
+        ]);
+
+        const element = createElement('c-agentforce-record-insights', {
+            is: AgentforceRecordInsights
+        });
+        element.defaultMode = 'insights';
+        element.availableModes = 'insightsOnly';
+        document.body.appendChild(element);
+
+        await flushPromises();
+
+        const taskCard = element.shadowRoot.querySelector('button[data-object-api-name="Opportunity"]');
+        expect(taskCard).not.toBeNull();
+        taskCard.click();
+        await flushPromises();
+
+        const picker = element.shadowRoot.querySelector('c-record-picker');
+        expect(picker.selectedObjectType).toBe('Opportunity');
+        expect(searchRecords).toHaveBeenCalledWith({
+            objectApiName: 'Opportunity',
+            searchTerm: '',
+            maxResults: 10
         });
     });
 

@@ -1,9 +1,18 @@
 import { createElement } from 'lwc';
 import ChatPanel from 'c/chatPanel';
 import getAvailableModels from '@salesforce/apex/RecordAdvisorController.getAvailableModels';
+import sendMessage from '@salesforce/apex/RecordAdvisorController.sendMessage';
 
 jest.mock(
     '@salesforce/apex/RecordAdvisorController.getAvailableModels',
+    () => ({
+        default: jest.fn()
+    }),
+    { virtual: true }
+);
+
+jest.mock(
+    '@salesforce/apex/RecordAdvisorController.sendMessage',
     () => ({
         default: jest.fn()
     }),
@@ -27,6 +36,10 @@ describe('c-chat-panel', () => {
 
     beforeEach(() => {
         getAvailableModels.mockResolvedValue([]);
+        sendMessage.mockResolvedValue({
+            success: true,
+            response: 'Generated response'
+        });
         getItemSpy = jest.spyOn(Storage.prototype, 'getItem');
         setItemSpy = jest.spyOn(Storage.prototype, 'setItem');
         removeItemSpy = jest.spyOn(Storage.prototype, 'removeItem');
@@ -260,11 +273,114 @@ describe('c-chat-panel', () => {
         textarea.dispatchEvent(new Event('input'));
         await flushPromises();
 
-        const sendButton = element.shadowRoot.querySelector('lightning-button-icon');
+        const sendButton = element.shadowRoot.querySelector('.send-btn');
         sendButton.click();
         await flushPromises();
 
         expect(element.shadowRoot.querySelector('.slds-modal')).not.toBeNull();
         expect(element.shadowRoot.querySelectorAll('.message-row')).toHaveLength(0);
+    });
+
+    it('renders the rich model picker and updates the selected model', async () => {
+        getAvailableModels.mockResolvedValue([
+            {
+                label: 'Gemini Pro',
+                provider: 'Google',
+                creditType: 'standard',
+                apiName: 'sfdc_ai__DefaultVertexAIGeminiPro31'
+            },
+            {
+                label: 'GPT-5',
+                provider: 'OpenAI',
+                creditType: 'advanced',
+                apiName: 'sfdc_ai__DefaultGPT5'
+            },
+            {
+                label: 'Amazon Nova Lite',
+                provider: 'Amazon Bedrock',
+                creditType: 'standard',
+                apiName: 'sfdc_ai__DefaultBedrockAmazonNovaLite'
+            }
+        ]);
+
+        const element = createElement('c-chat-panel', {
+            is: ChatPanel
+        });
+        element.showModelPicker = true;
+        document.body.appendChild(element);
+
+        await flushPromises();
+
+        const pickerButton = element.shadowRoot.querySelector('.model-picker-button');
+        expect(pickerButton).not.toBeNull();
+        expect(pickerButton.textContent).toContain('Gemini Pro');
+        expect(pickerButton.querySelector('img')).not.toBeNull();
+
+        pickerButton.click();
+        await flushPromises();
+
+        const options = element.shadowRoot.querySelectorAll('.model-option');
+        expect(options).toHaveLength(3);
+        expect(element.shadowRoot.querySelectorAll('.model-option-logo img')).toHaveLength(3);
+        expect(options[2].querySelector('.model-option-logo img').src).toContain('ModelLogoAmazon');
+        options[1].click();
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('.model-picker-button').textContent).toContain('GPT-5');
+    });
+
+    it('sends starter prompts when nested prompt content is clicked', async () => {
+        const element = createElement('c-chat-panel', {
+            is: ChatPanel
+        });
+        element.recordContextJson = JSON.stringify({
+            fields: {
+                Name: { label: 'Name', value: 'Acme' }
+            }
+        });
+        element.objectApiName = 'Account';
+        element.recordName = 'Acme';
+        element.showSuggestedPrompts = true;
+        document.body.appendChild(element);
+
+        await flushPromises();
+
+        const promptLabel = element.shadowRoot.querySelector('.prompt-chip span');
+        expect(promptLabel).not.toBeNull();
+        promptLabel.click();
+        await flushPromises();
+
+        expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+            userMessage: 'Give me a complete overview of this account.'
+        }));
+    });
+
+    it('shows staged progress copy while a model response is pending', async () => {
+        sendMessage.mockReturnValue(new Promise(() => {}));
+
+        const element = createElement('c-chat-panel', {
+            is: ChatPanel
+        });
+        element.recordContextJson = JSON.stringify({
+            fields: {
+                Name: { label: 'Name', value: 'Acme' }
+            }
+        });
+        document.body.appendChild(element);
+
+        await flushPromises();
+
+        const textarea = element.shadowRoot.querySelector('textarea');
+        textarea.value = 'Summarize this record.';
+        textarea.dispatchEvent(new Event('input'));
+        await flushPromises();
+
+        const sendButton = element.shadowRoot.querySelector('.send-btn');
+        sendButton.click();
+        await flushPromises();
+
+        const progressCopy = element.shadowRoot.querySelector('.progress-copy');
+        expect(progressCopy).not.toBeNull();
+        expect(progressCopy.textContent).toContain('Preparing selected record context');
     });
 });
