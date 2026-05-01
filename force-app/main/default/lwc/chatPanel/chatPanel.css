@@ -188,6 +188,17 @@
     flex-shrink: 0;
 }
 
+.model-comparison-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.secondary-model-picker {
+    width: 16rem;
+}
+
 .context-warning {
     padding: 0.625rem 0.875rem;
     border-bottom: 1px solid #f0b75e;
@@ -218,6 +229,206 @@
 
 .warning-list li {
     margin-bottom: 0.125rem;
+}
+
+.model-response-metrics {
+    margin-bottom: 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: var(--ari-text-muted);
+}
+
+.citation-list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.75rem;
+    padding-top: 0.625rem;
+    border-top: 1px solid #ecebea;
+    min-width: 0;
+}
+
+.citation-list-label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: var(--ari-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.citation-pill {
+    display: inline-flex;
+    align-items: center;
+    max-width: min(100%, 20rem);
+    padding: 0.1875rem 0.5rem;
+    border: 1px solid #c9e2ff;
+    border-radius: 999px;
+    background: #eef4ff;
+    color: #0b5cab;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.35;
+}
+
+.citation-pill:hover {
+    text-decoration: underline;
+}
+
+.citation-pill-static {
+    border-color: #dddbda;
+    background: #f3f3f3;
+    color: #3e3e3c;
+    pointer-events: none;
+}
+
+.model-comparison-bubble {
+    width: min(100%, 54rem);
+}
+
+.model-comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.model-comparison-card {
+    min-width: 0;
+    padding: 0.75rem;
+    border: 1px solid #dddbda;
+    border-radius: 0.75rem;
+    background: #ffffff;
+}
+
+.model-comparison-card-error {
+    border-color: #f3b3ac;
+    background: #fef1ee;
+}
+
+.model-comparison-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.model-comparison-title {
+    font-weight: 800;
+    color: var(--ari-text);
+}
+
+.model-comparison-status {
+    font-size: 0.6875rem;
+    color: var(--ari-text-muted);
+    white-space: nowrap;
+}
+
+.usage-guardrail,
+.context-preview-card {
+    margin-bottom: 0.5rem;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--ari-border);
+    border-radius: 0.75rem;
+    background: #ffffff;
+}
+
+.usage-guardrail {
+    border-color: #f0b75e;
+    background: #fff7e6;
+    color: #5c3b00;
+    font-size: 0.75rem;
+}
+
+.usage-guardrail ul {
+    margin: 0.25rem 0 0;
+    padding-left: 1rem;
+}
+
+.context-preview-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.context-preview-title {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--ari-text);
+}
+
+.context-preview-mode {
+    font-size: 0.6875rem;
+    color: var(--ari-text-muted);
+}
+
+.context-preview-record {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--ari-text-muted);
+}
+
+.context-preview-header .context-preview-record {
+    margin-top: 0;
+}
+
+.context-preview-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-top: 0.5rem;
+}
+
+.context-preview-grid span {
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+    background: #f3f3f3;
+    font-size: 0.6875rem;
+    color: #3e3e3c;
+}
+
+.context-preview-warning {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: #8a6d00;
+}
+
+.collapsible-toggle {
+    width: 100%;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.5rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+    text-align: left;
+}
+
+.collapsible-title {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--ari-text);
+}
+
+.collapsible-summary {
+    min-width: 0;
+    color: var(--ari-text-muted);
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.context-preview-details {
+    margin-top: 0.5rem;
 }
 
 @media (max-width: 1200px) {
@@ -493,14 +704,17 @@
 }
 
 /* Follow-up bar */
+.follow-up-panel {
+    border-top: 1px solid #e5e5e5;
+    background-color: #fafaf9;
+    flex-shrink: 0;
+}
+
 .follow-up-bar {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-    border-top: 1px solid #e5e5e5;
-    background-color: #fafaf9;
-    padding: 6px 12px;
-    flex-shrink: 0;
+    padding-top: 0.5rem;
 }
 
 .follow-up-chip {
@@ -599,9 +813,16 @@
 }
 
 /* Markdown styles */
-.assistant-bubble h2.md-h1 { font-size: 1.1rem; font-weight: 700; margin: 8px 0 4px; }
-.assistant-bubble h3.md-h2 { font-size: 1rem; font-weight: 700; margin: 8px 0 4px; }
-.assistant-bubble h4.md-h3 { font-size: 0.9rem; font-weight: 700; margin: 6px 0 4px; }
+.assistant-bubble h2.md-h1,
+.assistant-bubble h3.md-h2,
+.assistant-bubble h4.md-h3 {
+    color: #181818;
+    line-height: 1.25;
+}
+
+.assistant-bubble h2.md-h1 { font-size: 1rem; font-weight: 800; margin: 0.75rem 0 0.35rem; }
+.assistant-bubble h3.md-h2 { font-size: 0.9375rem; font-weight: 800; margin: 0.7rem 0 0.3rem; }
+.assistant-bubble h4.md-h3 { font-size: 0.875rem; font-weight: 800; margin: 0.65rem 0 0.25rem; }
 
 .assistant-bubble .md-list {
     padding-left: 24px;
@@ -640,6 +861,31 @@
 
 .assistant-bubble a {
     color: #0070d2;
+    text-decoration: underline;
+}
+
+.assistant-bubble .inline-citation-group {
+    display: inline-flex;
+    gap: 0.125rem;
+    margin-left: 0.25rem;
+    vertical-align: baseline;
+}
+
+.assistant-bubble a.inline-citation {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 0.25rem;
+    border: 1px solid #c9e2ff;
+    border-radius: 999px;
+    background: #eef4ff;
+    color: #0b5cab;
+    font-size: 0.6875rem;
+    font-weight: 800;
+    line-height: 1.35;
+    text-decoration: none;
+}
+
+.assistant-bubble a.inline-citation:hover {
     text-decoration: underline;
 }
 

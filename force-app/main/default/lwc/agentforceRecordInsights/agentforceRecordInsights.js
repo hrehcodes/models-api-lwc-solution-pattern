@@ -11,6 +11,7 @@ const AVAILABLE_MODES_BOTH = 'both';
 const AVAILABLE_MODES_INSIGHTS_ONLY = 'insightsonly';
 const AVAILABLE_MODES_COMPARE_ONLY = 'compareonly';
 const LOADING_STEP_ROTATION_MS = 1400;
+const MAX_SOURCE_REGISTRY_ITEMS = 80;
 const LANDING_TASKS = [
     {
         id: 'account',
@@ -67,6 +68,11 @@ export default class AgentforceRecordInsights extends LightningElement {
     @api enableSuggestedFollowUps;
     @api hideContextWarnings;
     @api promptWarningThresholdTokens = 20000;
+    @api enableSourceGrounding;
+    @api enableModelComparison = false;
+    @api showContextPreview;
+    @api sessionTokenWarningThreshold = 50000;
+    @api sessionCreditWarningThreshold = 100;
     @api maxCompareRecords = 5;
     @api relatedRecordsPerRelationship = 10;
     @api defaultParentReferencesCsv;
@@ -231,10 +237,27 @@ export default class AgentforceRecordInsights extends LightningElement {
     get hideContextWarningsEnabled() {
         return this.hideContextWarnings === true || this.hideContextWarnings === 'true';
     }
+    get enableSourceGroundingEnabled() { return this.isBooleanEnabled(this.enableSourceGrounding); }
+    get enableModelComparisonEnabled() { return this.isBooleanEnabled(this.enableModelComparison); }
+    get showContextPreviewEnabled() { return this.isBooleanEnabled(this.showContextPreview); }
     get normalizedPromptWarningThreshold() {
         const parsedThreshold = parseInt(this.promptWarningThresholdTokens, 10);
         if (Number.isNaN(parsedThreshold)) {
             return 20000;
+        }
+        return Math.max(parsedThreshold, 0);
+    }
+    get normalizedSessionTokenWarningThreshold() {
+        const parsedThreshold = parseInt(this.sessionTokenWarningThreshold, 10);
+        if (Number.isNaN(parsedThreshold)) {
+            return 50000;
+        }
+        return Math.max(parsedThreshold, 0);
+    }
+    get normalizedSessionCreditWarningThreshold() {
+        const parsedThreshold = parseInt(this.sessionCreditWarningThreshold, 10);
+        if (Number.isNaN(parsedThreshold)) {
+            return 100;
         }
         return Math.max(parsedThreshold, 0);
     }
@@ -763,6 +786,7 @@ export default class AgentforceRecordInsights extends LightningElement {
         }
 
         const warningMessages = this.extractCompletenessMessages(ctx.completeness);
+        const sourceRegistry = this.buildSourceRegistryFromRecordContext(ctx);
 
         const parentChildSelections = Object.entries(
             this.parentSiblingRelationshipByReferenceField || {}
@@ -791,13 +815,159 @@ export default class AgentforceRecordInsights extends LightningElement {
                 sameObjectSiblingsEnabled: Boolean(this.includeSameObjectSiblingsThroughParents),
                 parentChildRelationshipsSelected: parentChildSelections,
                 contextStatus: warningMessages.length ? 'partial' : 'ready',
+                sourceCount: sourceRegistry.length,
                 warningSummary: warningMessages.length
                     ? 'Some record context was skipped or truncated. AI responses may be incomplete.'
                     : null,
                 warningMessages
             },
+            sourceRegistry,
             recordContext: ctx
         };
+    }
+
+    buildSourceRegistryFromRecordContext(ctx) {
+        const registry = [];
+        const addSource = source => {
+            if (!source || registry.length >= MAX_SOURCE_REGISTRY_ITEMS) {
+                return;
+            }
+            registry.push({
+                sourceId: `src${registry.length + 1}`,
+                sourceType: source.sourceType || 'context',
+                displayLabel: source.displayLabel || 'Context source',
+                objectApiName: source.objectApiName || null,
+                recordId: source.recordId || null,
+                fieldApiName: source.fieldApiName || null,
+                relationshipName: source.relationshipName || null,
+                valueSummary: this.summarizeValue(source.valueSummary)
+            });
+        };
+
+        addSource({
+            sourceType: 'record',
+            displayLabel: `${ctx.objectLabel || ctx.objectApiName || 'Record'}: ${ctx.recordName || ctx.recordId}`,
+            objectApiName: ctx.objectApiName,
+            recordId: ctx.recordId,
+            valueSummary: this.summarizeFieldMap(ctx.fields)
+        });
+
+        Object.entries(ctx.fields || {}).forEach(([fieldApiName, fieldData]) => {
+            addSource({
+                sourceType: 'field',
+                displayLabel: `${ctx.recordName || ctx.objectLabel || 'Record'} · ${fieldData?.label || fieldApiName}`,
+                objectApiName: ctx.objectApiName,
+                recordId: ctx.recordId,
+                fieldApiName,
+                valueSummary: this.getFieldValue(fieldData)
+            });
+        });
+
+        (ctx.relatedRecordSets || []).forEach(set => {
+            addSource({
+                sourceType: 'relationship',
+                displayLabel: `${set.childObjectLabel || set.childObjectApiName || 'Related records'} (${set.relationshipName})`,
+                objectApiName: set.childObjectApiName,
+                recordId: ctx.recordId,
+                relationshipName: set.relationshipName,
+                valueSummary: `${(set.records || []).length} related records included`
+            });
+            (set.records || []).slice(0, 6).forEach(record => {
+                const relatedRecordId = this.getRecordIdFromFieldMap(record);
+                addSource({
+                    sourceType: 'relatedRecord',
+                    displayLabel: `${set.childObjectLabel || set.childObjectApiName || 'Related record'}: ${this.getRecordNameFromFieldMap(record) || relatedRecordId || 'Included record'}`,
+                    objectApiName: set.childObjectApiName,
+                    recordId: relatedRecordId,
+                    relationshipName: set.relationshipName,
+                    valueSummary: this.summarizeFieldMap(record)
+                });
+            });
+        });
+
+        (ctx.parentRecordContexts || []).forEach(parent => {
+            addSource({
+                sourceType: 'parentRecord',
+                displayLabel: `${parent.parentObjectLabel || parent.parentObjectApiName || 'Parent record'}: ${parent.parentRecordName || parent.parentRecordId}`,
+                objectApiName: parent.parentObjectApiName,
+                recordId: parent.parentRecordId,
+                fieldApiName: parent.referenceFieldApiName,
+                valueSummary: this.summarizeFieldMap(parent.fields)
+            });
+            Object.entries(parent.fields || {}).slice(0, 8).forEach(([fieldApiName, fieldData]) => {
+                addSource({
+                    sourceType: 'parentField',
+                    displayLabel: `${parent.parentRecordName || parent.parentObjectLabel || 'Parent'} · ${fieldData?.label || fieldApiName}`,
+                    objectApiName: parent.parentObjectApiName,
+                    recordId: parent.parentRecordId,
+                    fieldApiName,
+                    valueSummary: this.getFieldValue(fieldData)
+                });
+            });
+            (parent.sameObjectSiblings || []).slice(0, 5).forEach(record => {
+                const siblingRecordId = this.getRecordIdFromFieldMap(record);
+                addSource({
+                    sourceType: 'siblingRecord',
+                    displayLabel: `${parent.sameObjectSiblingsObjectApiName || ctx.objectLabel || 'Sibling record'}: ${this.getRecordNameFromFieldMap(record) || siblingRecordId || 'Included sibling'}`,
+                    objectApiName: parent.sameObjectSiblingsObjectApiName || ctx.objectApiName,
+                    recordId: siblingRecordId,
+                    relationshipName: parent.referenceFieldApiName,
+                    valueSummary: this.summarizeFieldMap(record)
+                });
+            });
+            if (parent.selectedChildRelationship) {
+                const childSet = parent.selectedChildRelationship;
+                addSource({
+                    sourceType: 'parentChildRelationship',
+                    displayLabel: `${childSet.childObjectLabel || childSet.childObjectApiName || 'Parent related records'} (${childSet.relationshipName})`,
+                    objectApiName: childSet.childObjectApiName,
+                    recordId: parent.parentRecordId,
+                    relationshipName: childSet.relationshipName,
+                    valueSummary: `${(childSet.records || []).length} related records included from parent`
+                });
+            }
+        });
+
+        return registry;
+    }
+
+    getRecordIdFromFieldMap(fieldMap) {
+        return this.getFieldValue(fieldMap?.Id) || this.getFieldValue(fieldMap?.id) || null;
+    }
+
+    getRecordNameFromFieldMap(fieldMap) {
+        return this.getFieldValue(fieldMap?.Name) || this.getFieldValue(fieldMap?.name) || null;
+    }
+
+    summarizeFieldMap(fieldMap) {
+        const parts = [];
+        Object.entries(fieldMap || {}).forEach(([fieldName, fieldData]) => {
+            if (parts.length >= 3 || fieldName === 'Id') {
+                return;
+            }
+            const value = this.getFieldValue(fieldData);
+            if (value === null || value === undefined || value === '') {
+                return;
+            }
+            const label = fieldData?.label || fieldName;
+            parts.push(`${label}: ${this.summarizeValue(value)}`);
+        });
+        return parts.join('; ');
+    }
+
+    getFieldValue(fieldData) {
+        if (fieldData && typeof fieldData === 'object' && Object.prototype.hasOwnProperty.call(fieldData, 'value')) {
+            return fieldData.value;
+        }
+        return fieldData;
+    }
+
+    summarizeValue(value) {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+        const text = String(value).replace(/\s+/g, ' ').trim();
+        return text.length > 120 ? `${text.slice(0, 117)}...` : text;
     }
 
     getInitialMode() {

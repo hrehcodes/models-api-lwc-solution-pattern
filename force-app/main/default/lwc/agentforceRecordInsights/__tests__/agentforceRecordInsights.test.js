@@ -88,6 +88,7 @@ const baseAvailableContext = {
 };
 
 const baseRecordContext = {
+    recordId: '001000000000001AAA',
     objectApiName: 'Account',
     objectLabel: 'Account',
     recordName: 'Acme',
@@ -144,6 +145,11 @@ describe('c-agentforce-record-insights', () => {
         element.objectApiName = 'Account';
         element.startWithContextPanelOpen = true;
         element.showInlineUsageStatus = true;
+        element.enableSourceGrounding = true;
+        element.enableModelComparison = true;
+        element.showContextPreview = true;
+        element.sessionTokenWarningThreshold = 25;
+        element.sessionCreditWarningThreshold = 5;
         element.relatedRecordsPerRelationship = 7;
         document.body.appendChild(element);
 
@@ -168,10 +174,18 @@ describe('c-agentforce-record-insights', () => {
         });
         expect(chatPanel.recordContextJson).toContain('"selectionSummary"');
         expect(chatPanel.recordContextJson).toContain('"recordContext"');
+        expect(chatPanel.recordContextJson).toContain('"sourceRegistry"');
+        expect(chatPanel.recordContextJson).toContain('"sourceCount"');
         expect(chatPanel.recordContextJson).toContain('"completeness"');
         expect(chatPanel.showInlineUsageStatus).toBe(true);
+        expect(chatPanel.enableSourceGrounding).toBe(true);
+        expect(chatPanel.enableModelComparison).toBe(true);
+        expect(chatPanel.showContextPreview).toBe(true);
+        expect(chatPanel.sessionTokenWarningThreshold).toBe(25);
+        expect(chatPanel.sessionCreditWarningThreshold).toBe(5);
         expect(element.shadowRoot.querySelector('c-record-compare')).not.toBeNull();
         expect(element.shadowRoot.querySelector('c-record-compare').showInlineUsageStatus).toBe(true);
+        expect(element.shadowRoot.querySelector('c-record-compare').enableModelComparison).toBe(true);
     });
 
     it('does not mount compare mode in the background when preload compare mode is turned off', async () => {

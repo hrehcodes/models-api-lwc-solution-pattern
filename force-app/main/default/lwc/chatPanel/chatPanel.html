@@ -54,6 +54,28 @@
                     </template>
                 </div>
             </template>
+            <template lwc:if={showModelComparisonControls}>
+                <div class="model-comparison-controls">
+                    <lightning-input
+                        type="toggle"
+                        label={modelComparisonLabel}
+                        checked={useModelComparison}
+                        onchange={handleModelComparisonToggle}
+                        message-toggle-active="On"
+                        message-toggle-inactive="Off"
+                    ></lightning-input>
+                    <template lwc:if={showSecondaryModelPicker}>
+                        <lightning-combobox
+                            label="Second model"
+                            variant="label-hidden"
+                            value={secondarySelectedModel}
+                            options={secondaryModelOptions}
+                            onchange={handleSecondaryModelChange}
+                            class="secondary-model-picker"
+                        ></lightning-combobox>
+                    </template>
+                </div>
+            </template>
             <template lwc:if={hasMessages}>
                 <lightning-button-icon
                     icon-name="utility:clear"
@@ -128,7 +150,48 @@
 
                         <!-- Assistant message (with markdown) -->
                         <template lwc:if={msg.isAssistant}>
-                            <lightning-formatted-rich-text value={msg.htmlContent} class="message-text"></lightning-formatted-rich-text>
+                            <template lwc:if={msg.isModelComparison}>
+                                <div class="model-comparison-grid">
+                                    <template for:each={msg.comparisonCards} for:item="card">
+                                        <article key={card.id} class={card.cardClass}>
+                                            <div class="model-comparison-card-header">
+                                                <span class="model-comparison-title">{card.modelLabel}</span>
+                                                <span class="model-comparison-status">{card.statusLabel}</span>
+                                            </div>
+                                            <template lwc:if={card.metricsLabel}>
+                                                <div class="model-response-metrics">{card.metricsLabel}</div>
+                                            </template>
+                                            <lightning-formatted-rich-text value={card.htmlContent} class="message-text"></lightning-formatted-rich-text>
+                                            <template lwc:if={card.hasCitations}>
+                                                <div class="citation-list" aria-label="Grounding sources">
+                                                    <span class="citation-list-label">Sources</span>
+                                                    <template for:each={card.citations} for:item="citation">
+                                                        <a key={citation.id} href={citation.href} target="_blank" rel="noopener" class={citation.className} title={citation.summary}>
+                                                            {citation.label}
+                                                        </a>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </article>
+                                    </template>
+                                </div>
+                            </template>
+                            <template lwc:else>
+                                <template lwc:if={msg.hasMetrics}>
+                                    <div class="model-response-metrics">{msg.metricsLabel}</div>
+                                </template>
+                                <lightning-formatted-rich-text value={msg.htmlContent} class="message-text"></lightning-formatted-rich-text>
+                                <template lwc:if={msg.hasCitations}>
+                                    <div class="citation-list" aria-label="Grounding sources">
+                                        <span class="citation-list-label">Sources</span>
+                                        <template for:each={msg.citations} for:item="citation">
+                                            <a key={citation.id} href={citation.href} target="_blank" rel="noopener" class={citation.className} title={citation.summary}>
+                                                {citation.label}
+                                            </a>
+                                        </template>
+                                    </div>
+                                </template>
+                            </template>
                             <template lwc:if={msg.isError}>
                                 <div class="retry-actions">
                                     <button class="retry-chip" data-index={msg.index} onclick={handleRetryMessage} type="button">
@@ -186,22 +249,68 @@
 
     <!-- Follow-up Prompts -->
     <template lwc:if={hasFollowUpPrompts}>
-        <div class="follow-up-bar slds-p-horizontal_small slds-p-vertical_xx-small">
-            <template for:each={followUpPromptsKeyed} for:item="fp">
-                <lightning-button
-                    key={fp.id}
-                    label={fp.text}
-                    onclick={handleFollowUpPrompt}
-                    data-prompt={fp.text}
-                    variant="neutral"
-                    class="follow-up-chip slds-m-right_xx-small"
-                ></lightning-button>
+        <div class="follow-up-panel slds-p-horizontal_small slds-p-vertical_xx-small">
+            <button class="collapsible-toggle" type="button" onclick={handleToggleFollowUps} aria-label={followUpToggleLabel}>
+                <span class="collapsible-title">Suggested follow-ups</span>
+                <span class="collapsible-summary">{followUpSummaryLabel}</span>
+                <lightning-icon icon-name={followUpToggleIcon} size="xx-small"></lightning-icon>
+            </button>
+            <template lwc:if={isFollowUpExpanded}>
+                <div class="follow-up-bar">
+                    <template for:each={followUpPromptsKeyed} for:item="fp">
+                        <lightning-button
+                            key={fp.id}
+                            label={fp.text}
+                            onclick={handleFollowUpPrompt}
+                            data-prompt={fp.text}
+                            variant="neutral"
+                            class="follow-up-chip slds-m-right_xx-small"
+                        ></lightning-button>
+                    </template>
+                </div>
             </template>
         </div>
     </template>
 
     <!-- Input Area -->
     <div class="input-area slds-p-around_small">
+        <template lwc:if={showUsageGuardrail}>
+            <div class="usage-guardrail" role="status">
+                <strong>Usage guardrail</strong>
+                <ul>
+                    <template for:each={usageGuardrailMessages} for:item="warning">
+                        <li key={warning.id}>{warning.message}</li>
+                    </template>
+                </ul>
+            </div>
+        </template>
+        <template lwc:if={showContextPreviewCard}>
+            <div class="context-preview-card">
+                <button class="collapsible-toggle context-preview-toggle" type="button" onclick={handleToggleContextPreview} aria-label={contextPreviewToggleLabel}>
+                    <span class="collapsible-title">{contextPreview.title}</span>
+                    <span class="collapsible-summary">{contextPreviewSummaryLabel}</span>
+                    <lightning-icon icon-name={contextPreviewToggleIcon} size="xx-small"></lightning-icon>
+                </button>
+                <template lwc:if={isContextPreviewExpanded}>
+                    <div class="context-preview-details">
+                        <div class="context-preview-header">
+                            <span class="context-preview-record">{contextPreview.objectLabel} · {contextPreview.recordLabel}</span>
+                            <span class="context-preview-mode">{contextPreview.modeLabel}</span>
+                        </div>
+                        <div class="context-preview-grid">
+                            <span>{contextPreview.fieldLabel}</span>
+                            <span>{contextPreview.relationshipLabel}</span>
+                            <span>{contextPreview.parentLabel}</span>
+                            <span>{contextPreview.sourceLabel}</span>
+                            <span>{contextPreview.tokenLabel}</span>
+                        </div>
+                        <template lwc:if={contextPreview.warningLabel}>
+                            <div class="context-preview-warning">{contextPreview.warningLabel}</div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </template>
         <div class="input-row">
             <textarea
                 lwc:ref="messageInput"

@@ -2,6 +2,7 @@ import { createElement } from 'lwc';
 import ChatPanel from 'c/chatPanel';
 import getAvailableModels from '@salesforce/apex/RecordAdvisorController.getAvailableModels';
 import sendMessage from '@salesforce/apex/RecordAdvisorController.sendMessage';
+import compareModels from '@salesforce/apex/RecordAdvisorController.compareModels';
 
 jest.mock(
     '@salesforce/apex/RecordAdvisorController.getAvailableModels',
@@ -13,6 +14,14 @@ jest.mock(
 
 jest.mock(
     '@salesforce/apex/RecordAdvisorController.sendMessage',
+    () => ({
+        default: jest.fn()
+    }),
+    { virtual: true }
+);
+
+jest.mock(
+    '@salesforce/apex/RecordAdvisorController.compareModels',
     () => ({
         default: jest.fn()
     }),
@@ -38,7 +47,15 @@ describe('c-chat-panel', () => {
         getAvailableModels.mockResolvedValue([]);
         sendMessage.mockResolvedValue({
             success: true,
-            response: 'Generated response'
+            response: 'Generated response',
+            modelLabel: 'Gemini Pro',
+            latencyMs: 120,
+            estimatedTokens: 1000,
+            estimatedCredits: 4
+        });
+        compareModels.mockResolvedValue({
+            success: true,
+            results: []
         });
         getItemSpy = jest.spyOn(Storage.prototype, 'getItem');
         setItemSpy = jest.spyOn(Storage.prototype, 'setItem');
@@ -327,6 +344,169 @@ describe('c-chat-panel', () => {
         await flushPromises();
 
         expect(element.shadowRoot.querySelector('.model-picker-button').textContent).toContain('GPT-5');
+    });
+
+    it('renders grounding citations from the model response as source links', async () => {
+        sendMessage.mockResolvedValue({
+            success: true,
+            response: 'Executive Summary\nAcme is active [src1].',
+            citations: [
+                {
+                    sourceId: 'src1',
+                    displayLabel: 'Acme · Account Name',
+                    objectApiName: 'Account',
+                    recordId: '001000000000001AAA',
+                    valueSummary: 'Acme'
+                }
+            ],
+            modelLabel: 'Gemini Pro',
+            latencyMs: 140,
+            estimatedTokens: 900,
+            estimatedCredits: 4
+        });
+
+        const element = createElement('c-chat-panel', {
+            is: ChatPanel
+        });
+        element.recordContextJson = JSON.stringify({
+            selectionSummary: { objectLabel: 'Account', recordName: 'Acme' },
+            sourceRegistry: [{ sourceId: 'src1', displayLabel: 'Acme · Account Name' }],
+            recordContext: {
+                fields: {
+                    Name: { label: 'Account Name', value: 'Acme' }
+                }
+            }
+        });
+        document.body.appendChild(element);
+        await flushPromises();
+
+        const textarea = element.shadowRoot.querySelector('textarea');
+        textarea.value = 'Summarize this record.';
+        textarea.dispatchEvent(new Event('input'));
+        element.shadowRoot.querySelector('.send-btn').click();
+        await flushPromises();
+
+        const citation = element.shadowRoot.querySelector('.citation-pill');
+        expect(citation).not.toBeNull();
+        expect(citation.textContent).toContain('Acme · Account Name');
+        expect(citation.href).toContain('/lightning/r/Account/001000000000001AAA/view');
+        expect(element.shadowRoot.querySelector('lightning-formatted-rich-text').value).toContain('inline-citation');
+        expect(element.shadowRoot.querySelector('lightning-formatted-rich-text').value).toContain('md-h3');
+        expect(element.shadowRoot.querySelector('.model-response-metrics').textContent).toContain('Gemini Pro');
+    });
+
+    it('shows context preview and session guardrails when configured thresholds are exceeded', async () => {
+        localStorage.setItem(
+            'ari_chat_guardrail_usage',
+            JSON.stringify({
+                sessionTokens: 51,
+                sessionCredits: 6
+            })
+        );
+
+        const element = createElement('c-chat-panel', {
+            is: ChatPanel
+        });
+        element.storageKey = 'ari_chat_guardrail';
+        element.persistConversation = true;
+        element.sessionTokenWarningThreshold = 50;
+        element.sessionCreditWarningThreshold = 5;
+        element.recordContextJson = JSON.stringify({
+            selectionSummary: {
+                objectLabel: 'Account',
+                recordName: 'Acme',
+                selectedRelationships: ['Contacts'],
+                sourceCount: 1
+            },
+            sourceRegistry: [{ sourceId: 'src1', displayLabel: 'Acme' }],
+            recordContext: {
+                fields: {
+                    Name: { label: 'Account Name', value: 'Acme' }
+                }
+            }
+        });
+        document.body.appendChild(element);
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('.context-preview-card').textContent).toContain('Context preview');
+        expect(element.shadowRoot.querySelector('.context-preview-card').textContent).toContain('1 relationship');
+        expect(element.shadowRoot.querySelector('.context-preview-grid')).toBeNull();
+        element.shadowRoot.querySelector('.context-preview-toggle').click();
+        await flushPromises();
+        expect(element.shadowRoot.querySelector('.context-preview-grid')).not.toBeNull();
+        expect(element.shadowRoot.querySelector('.usage-guardrail').textContent).toContain('Session token estimate');
+        expect(element.shadowRoot.querySelector('.usage-guardrail').textContent).toContain('Session flex credit estimate');
+    });
+
+    it('sends one prompt to two models when model comparison is enabled', async () => {
+        getAvailableModels.mockResolvedValue([
+            {
+                label: 'Gemini Pro',
+                provider: 'Google',
+                creditType: 'standard',
+                apiName: 'sfdc_ai__DefaultVertexAIGeminiPro31'
+            },
+            {
+                label: 'GPT-5',
+                provider: 'OpenAI',
+                creditType: 'advanced',
+                apiName: 'sfdc_ai__DefaultGPT5'
+            }
+        ]);
+        compareModels.mockResolvedValue({
+            success: true,
+            results: [
+                {
+                    success: true,
+                    modelLabel: 'Gemini Pro',
+                    response: 'Gemini answer',
+                    latencyMs: 100,
+                    estimatedTokens: 500,
+                    estimatedCredits: 4,
+                    citations: []
+                },
+                {
+                    success: true,
+                    modelLabel: 'GPT-5',
+                    response: 'GPT answer',
+                    latencyMs: 180,
+                    estimatedTokens: 600,
+                    estimatedCredits: 16,
+                    citations: []
+                }
+            ]
+        });
+
+        const element = createElement('c-chat-panel', {
+            is: ChatPanel
+        });
+        element.showModelPicker = true;
+        element.enableModelComparison = true;
+        element.recordContextJson = JSON.stringify({
+            selectionSummary: { objectLabel: 'Account', recordName: 'Acme' },
+            recordContext: { fields: { Name: { label: 'Name', value: 'Acme' } } }
+        });
+        document.body.appendChild(element);
+        await flushPromises();
+
+        element.shadowRoot.querySelector('lightning-input').checked = true;
+        element.shadowRoot.querySelector('lightning-input').dispatchEvent(new CustomEvent('change'));
+        await flushPromises();
+
+        const textarea = element.shadowRoot.querySelector('textarea');
+        textarea.value = 'Compare model answers.';
+        textarea.dispatchEvent(new Event('input'));
+        element.shadowRoot.querySelector('.send-btn').click();
+        await flushPromises();
+
+        expect(compareModels).toHaveBeenCalledWith(expect.objectContaining({
+            primaryModelApiName: 'sfdc_ai__DefaultVertexAIGeminiPro31',
+            secondaryModelApiName: 'sfdc_ai__DefaultGPT5',
+            mode: 'insights'
+        }));
+        expect(element.shadowRoot.querySelectorAll('.model-comparison-card')).toHaveLength(2);
+        expect(element.shadowRoot.textContent).toContain('Gemini answer');
+        expect(element.shadowRoot.textContent).toContain('GPT answer');
     });
 
     it('sends starter prompts when nested prompt content is clicked', async () => {

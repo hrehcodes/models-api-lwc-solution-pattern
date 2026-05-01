@@ -71,6 +71,9 @@ describe('c-record-compare', () => {
             { apiName: 'Custom_Object__c', label: 'Custom Object' }
         ]);
         getComparisonContext.mockResolvedValue({
+            objectApiName: 'Account',
+            objectLabel: 'Account',
+            recordCount: 0,
             records: [],
             completeness: {
                 isComplete: true,
@@ -169,6 +172,9 @@ describe('c-record-compare', () => {
 
     it('uses the staged compare flow to review optional settings and load chat context', async () => {
         getComparisonContext.mockResolvedValue({
+            objectApiName: 'Account',
+            objectLabel: 'Account',
+            recordCount: 2,
             records: [
                 {
                     recordId: '001000000000001AAA',
@@ -206,6 +212,11 @@ describe('c-record-compare', () => {
         element.objectApiName = 'Account';
         element.recordId = '001000000000001AAA';
         element.showInlineUsageStatus = true;
+        element.enableSourceGrounding = true;
+        element.enableModelComparison = true;
+        element.showContextPreview = true;
+        element.sessionTokenWarningThreshold = 25;
+        element.sessionCreditWarningThreshold = 5;
         element.maxCompareRecords = 4;
         element.relatedRecordsPerRelationship = 7;
         document.body.appendChild(element);
@@ -261,6 +272,12 @@ describe('c-record-compare', () => {
 
         expect(element.shadowRoot.querySelector('c-chat-panel')).not.toBeNull();
         expect(element.shadowRoot.querySelector('c-chat-panel').showInlineUsageStatus).toBe(true);
+        expect(element.shadowRoot.querySelector('c-chat-panel').comparisonContextJson).toContain('"sourceRegistry"');
+        expect(element.shadowRoot.querySelector('c-chat-panel').enableSourceGrounding).toBe(true);
+        expect(element.shadowRoot.querySelector('c-chat-panel').enableModelComparison).toBe(true);
+        expect(element.shadowRoot.querySelector('c-chat-panel').showContextPreview).toBe(true);
+        expect(element.shadowRoot.querySelector('c-chat-panel').sessionTokenWarningThreshold).toBe(25);
+        expect(element.shadowRoot.querySelector('c-chat-panel').sessionCreditWarningThreshold).toBe(5);
     });
 
     it('prevents adding records beyond the configured compare limit and shows a warning', async () => {

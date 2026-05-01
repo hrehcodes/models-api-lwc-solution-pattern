@@ -102,6 +102,14 @@ private class RecordAdvisorController_Test {
         System.assertEquals(true, resp.success);
         System.assertEquals('Test response', resp.response);
         System.assertEquals(null, resp.error);
+        resp.citations = new List<RecordAdvisorController.GroundingCitation>();
+        resp.modelApiName = 'test_model';
+        resp.modelLabel = 'Test Model';
+        resp.latencyMs = 123;
+        resp.estimatedTokens = 1000;
+        resp.estimatedCredits = 4;
+        System.assertEquals('Test Model', resp.modelLabel);
+        System.assertEquals(123, resp.latencyMs);
     }
 
     @IsTest
@@ -142,6 +150,88 @@ private class RecordAdvisorController_Test {
         System.assert(prompt.contains('No record data provided.'));
         System.assert(prompt.contains('selectionSummary'));
         System.assert(prompt.contains('If completeness metadata indicates warnings'));
+    }
+
+    @IsTest
+    static void testSourceRegistryParsingAndCitationFiltering() {
+        String contextJson = JSON.serialize(new Map<String, Object>{
+            'selectionSummary' => new Map<String, Object>{ 'objectApiName' => 'Account' },
+            'sourceRegistry' => new List<Object>{
+                new Map<String, Object>{
+                    'sourceId' => 'src1',
+                    'sourceType' => 'field',
+                    'displayLabel' => 'Acme · Account Name',
+                    'objectApiName' => 'Account',
+                    'recordId' => '001000000000001AAA',
+                    'fieldApiName' => 'Name',
+                    'valueSummary' => 'Acme'
+                },
+                new Map<String, Object>{
+                    'sourceId' => 'src2',
+                    'sourceType' => 'field',
+                    'displayLabel' => 'Acme · Probability',
+                    'objectApiName' => 'Opportunity',
+                    'recordId' => '006000000000001AAA',
+                    'fieldApiName' => 'Probability',
+                    'valueSummary' => '75%'
+                }
+            }
+        });
+
+        Map<String, RecordAdvisorController.GroundingCitation> registry =
+            RecordAdvisorController.extractSourceRegistry(contextJson);
+        String sanitized = RecordAdvisorController.sanitizeCitationMarkers(
+            'Supported [src1, src2, src99]. Unsupported only [src99].',
+            registry
+        );
+        List<RecordAdvisorController.GroundingCitation> citations =
+            RecordAdvisorController.extractCitations(sanitized + ' Duplicate [src1].', registry);
+
+        System.assertEquals(true, RecordAdvisorController.hasSourceRegistry(contextJson));
+        System.assertEquals(2, registry.size(), 'Expected two sources from the registry');
+        System.assertEquals('Supported [src1, src2]. Unsupported only .', sanitized);
+        System.assertEquals(2, citations.size(), 'Only valid unique citation markers should survive');
+        System.assertEquals('Acme · Account Name', citations[0].displayLabel);
+        System.assertEquals('001000000000001AAA', citations[0].recordId);
+        System.assertEquals('Acme · Probability', citations[1].displayLabel);
+    }
+
+    @IsTest
+    static void testPromptAddsCitationInstructionsOnlyWithSourceRegistry() {
+        String groundedContextJson = JSON.serialize(new Map<String, Object>{
+            'selectionSummary' => new Map<String, Object>{ 'objectApiName' => 'Account' },
+            'sourceRegistry' => new List<Object>{
+                new Map<String, Object>{ 'sourceId' => 'src1', 'displayLabel' => 'Acme' }
+            },
+            'recordContext' => new Map<String, Object>()
+        });
+
+        String groundedPrompt = RecordAdvisorController.buildInsightsSystemPrompt(groundedContextJson);
+        String ungroundedPrompt = RecordAdvisorController.buildInsightsSystemPrompt('{"selectionSummary":{},"recordContext":{}}');
+
+        System.assert(groundedPrompt.contains('Source Citations'));
+        System.assert(groundedPrompt.contains('[src1]'));
+        System.assert(!ungroundedPrompt.contains('Source Citations'));
+    }
+
+    @IsTest
+    static void testCompareModels_RequiresDifferentSecondModel() {
+        Boolean missingSecondThrown = false;
+        try {
+            RecordAdvisorController.compareModels('{}', 'test', null, 'model_one', null, 'insights');
+        } catch (AuraHandledException e) {
+            missingSecondThrown = true;
+        }
+
+        Boolean duplicateThrown = false;
+        try {
+            RecordAdvisorController.compareModels('{}', 'test', null, 'model_one', 'model_one', 'insights');
+        } catch (AuraHandledException e) {
+            duplicateThrown = true;
+        }
+
+        System.assertEquals(true, missingSecondThrown, 'A second model is required');
+        System.assertEquals(true, duplicateThrown, 'The two model API names must differ');
     }
 
     @IsTest

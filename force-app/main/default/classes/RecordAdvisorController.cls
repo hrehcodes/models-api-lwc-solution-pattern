@@ -24,6 +24,47 @@ public with sharing class RecordAdvisorController {
         @AuraEnabled public String response { get; set; }
         @AuraEnabled public Boolean success { get; set; }
         @AuraEnabled public String error { get; set; }
+        @AuraEnabled public List<GroundingCitation> citations { get; set; }
+        @AuraEnabled public String modelApiName { get; set; }
+        @AuraEnabled public String modelLabel { get; set; }
+        @AuraEnabled public Integer latencyMs { get; set; }
+        @AuraEnabled public Integer estimatedTokens { get; set; }
+        @AuraEnabled public Integer estimatedCredits { get; set; }
+    }
+
+    public class GroundingCitation {
+        @AuraEnabled public String sourceId { get; set; }
+        @AuraEnabled public String sourceType { get; set; }
+        @AuraEnabled public String displayLabel { get; set; }
+        @AuraEnabled public String objectApiName { get; set; }
+        @AuraEnabled public String recordId { get; set; }
+        @AuraEnabled public String fieldApiName { get; set; }
+        @AuraEnabled public String relationshipName { get; set; }
+        @AuraEnabled public String valueSummary { get; set; }
+    }
+
+    public class ModelComparisonResponse {
+        @AuraEnabled public Boolean success { get; set; }
+        @AuraEnabled public String error { get; set; }
+        @AuraEnabled public List<ModelComparisonResult> results { get; set; }
+    }
+
+    public class ModelComparisonResult {
+        @AuraEnabled public String modelApiName { get; set; }
+        @AuraEnabled public String modelLabel { get; set; }
+        @AuraEnabled public String response { get; set; }
+        @AuraEnabled public Boolean success { get; set; }
+        @AuraEnabled public String error { get; set; }
+        @AuraEnabled public List<GroundingCitation> citations { get; set; }
+        @AuraEnabled public Integer latencyMs { get; set; }
+        @AuraEnabled public Integer estimatedTokens { get; set; }
+        @AuraEnabled public Integer estimatedCredits { get; set; }
+    }
+
+    private class ModelCallResult {
+        public String content { get; set; }
+        public String modelApiName { get; set; }
+        public Integer latencyMs { get; set; }
     }
 
     public class ModelInfo {
@@ -91,28 +132,20 @@ public with sharing class RecordAdvisorController {
 
         try {
             String systemPrompt = buildInsightsSystemPrompt(recordContextJson);
-
-            List<aiplatform.ModelsAPI_ChatMessageRequest> messages = new List<aiplatform.ModelsAPI_ChatMessageRequest>();
-
-            // System message
-            aiplatform.ModelsAPI_ChatMessageRequest sysMsg = new aiplatform.ModelsAPI_ChatMessageRequest();
-            sysMsg.role = 'system';
-            sysMsg.content = systemPrompt;
-            messages.add(sysMsg);
-
-            // Conversation history
-            if (String.isNotBlank(conversationHistoryJson)) {
-                addHistoryMessages(messages, conversationHistoryJson);
-            }
-
-            // Current user message
-            aiplatform.ModelsAPI_ChatMessageRequest userMsg = new aiplatform.ModelsAPI_ChatMessageRequest();
-            userMsg.role = 'user';
-            userMsg.content = userMessage;
-            messages.add(userMsg);
+            List<aiplatform.ModelsAPI_ChatMessageRequest> messages =
+                buildChatMessages(systemPrompt, conversationHistoryJson, userMessage);
+            Map<String, GroundingCitation> sourceRegistry = extractSourceRegistry(recordContextJson);
 
             String selectedModel = String.isNotBlank(modelApiName) ? modelApiName : DEFAULT_MODEL;
-            result.response = callModelsAPI(messages, selectedModel);
+            ModelCallResult modelResult = callModelsAPIDetailed(messages, selectedModel);
+            result.response = sanitizeCitationMarkers(modelResult.content, sourceRegistry);
+            List<GroundingCitation> citations = extractCitations(result.response, sourceRegistry);
+            result.citations = citations;
+            result.modelApiName = modelResult.modelApiName;
+            result.modelLabel = getModelDisplayLabel(modelResult.modelApiName);
+            result.latencyMs = modelResult.latencyMs;
+            result.estimatedTokens = estimateTokens(recordContextJson, conversationHistoryJson, userMessage, result.response);
+            result.estimatedCredits = estimateCredits(result.estimatedTokens, modelResult.modelApiName);
             result.success = true;
 
         } catch (AuraHandledException e) {
@@ -151,25 +184,20 @@ public with sharing class RecordAdvisorController {
 
         try {
             String systemPrompt = buildCompareSystemPrompt(comparisonContextJson);
-
-            List<aiplatform.ModelsAPI_ChatMessageRequest> messages = new List<aiplatform.ModelsAPI_ChatMessageRequest>();
-
-            aiplatform.ModelsAPI_ChatMessageRequest sysMsg = new aiplatform.ModelsAPI_ChatMessageRequest();
-            sysMsg.role = 'system';
-            sysMsg.content = systemPrompt;
-            messages.add(sysMsg);
-
-            if (String.isNotBlank(conversationHistoryJson)) {
-                addHistoryMessages(messages, conversationHistoryJson);
-            }
-
-            aiplatform.ModelsAPI_ChatMessageRequest userMsg = new aiplatform.ModelsAPI_ChatMessageRequest();
-            userMsg.role = 'user';
-            userMsg.content = userMessage;
-            messages.add(userMsg);
+            List<aiplatform.ModelsAPI_ChatMessageRequest> messages =
+                buildChatMessages(systemPrompt, conversationHistoryJson, userMessage);
+            Map<String, GroundingCitation> sourceRegistry = extractSourceRegistry(comparisonContextJson);
 
             String selectedModel = String.isNotBlank(modelApiName) ? modelApiName : DEFAULT_MODEL;
-            result.response = callModelsAPI(messages, selectedModel);
+            ModelCallResult modelResult = callModelsAPIDetailed(messages, selectedModel);
+            result.response = sanitizeCitationMarkers(modelResult.content, sourceRegistry);
+            List<GroundingCitation> citations = extractCitations(result.response, sourceRegistry);
+            result.citations = citations;
+            result.modelApiName = modelResult.modelApiName;
+            result.modelLabel = getModelDisplayLabel(modelResult.modelApiName);
+            result.latencyMs = modelResult.latencyMs;
+            result.estimatedTokens = estimateTokens(comparisonContextJson, conversationHistoryJson, userMessage, result.response);
+            result.estimatedCredits = estimateCredits(result.estimatedTokens, modelResult.modelApiName);
             result.success = true;
 
         } catch (AuraHandledException e) {
@@ -268,10 +296,72 @@ public with sharing class RecordAdvisorController {
         return models;
     }
 
+    /**
+     * Sends one prompt to two selected models and returns independent results.
+     */
+    @AuraEnabled
+    public static ModelComparisonResponse compareModels(
+        String contextJson,
+        String userMessage,
+        String conversationHistoryJson,
+        String primaryModelApiName,
+        String secondaryModelApiName,
+        String mode
+    ) {
+        if (String.isBlank(userMessage)) {
+            throw new AuraHandledException('Message is required.');
+        }
+        if (userMessage.length() > MAX_PROMPT_LENGTH) {
+            throw new AuraHandledException('Message exceeds maximum length.');
+        }
+        if (String.isNotBlank(conversationHistoryJson) && conversationHistoryJson.length() > MAX_HISTORY_LENGTH) {
+            throw new AuraHandledException('Conversation history exceeds maximum length.');
+        }
+        validateContextLength(contextJson, 'Context exceeds maximum length.');
+
+        ModelComparisonResponse response = new ModelComparisonResponse();
+        response.success = false;
+        response.results = new List<ModelComparisonResult>();
+
+        String firstModel = String.isNotBlank(primaryModelApiName) ? primaryModelApiName : DEFAULT_MODEL;
+        String secondModel = String.isNotBlank(secondaryModelApiName) ? secondaryModelApiName : null;
+        if (String.isBlank(secondModel)) {
+            throw new AuraHandledException('A second model is required for model comparison.');
+        }
+        if (firstModel == secondModel) {
+            throw new AuraHandledException('Choose two different models for model comparison.');
+        }
+
+        try {
+            Boolean compareMode = String.valueOf(mode).toLowerCase() == 'compare';
+            String systemPrompt = compareMode
+                ? buildCompareSystemPrompt(contextJson)
+                : buildInsightsSystemPrompt(contextJson);
+            List<aiplatform.ModelsAPI_ChatMessageRequest> messages =
+                buildChatMessages(systemPrompt, conversationHistoryJson, userMessage);
+            Map<String, GroundingCitation> sourceRegistry = extractSourceRegistry(contextJson);
+
+            response.results.add(runModelComparison(messages, sourceRegistry, contextJson, conversationHistoryJson, userMessage, firstModel));
+            response.results.add(runModelComparison(messages, sourceRegistry, contextJson, conversationHistoryJson, userMessage, secondModel));
+            response.success = true;
+        } catch (AuraHandledException e) {
+            throw e;
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, 'Unexpected error in compareModels: ' + e.getMessage());
+            response.error = 'Unexpected error comparing model responses. Please try again.';
+        }
+
+        return response;
+    }
+
     // ── Private Methods ──
 
     @TestVisible
     private static String buildCoreGuidelines() {
+        return buildCoreGuidelines(false);
+    }
+
+    private static String buildCoreGuidelines(Boolean includeSourceGrounding) {
         String today = Datetime.now().format('yyyy-MM-dd');
         String guidelines = '=== CORE GUIDELINES ===\n';
         guidelines += 'Today\'s date: ' + today + '\n\n';
@@ -288,12 +378,22 @@ public with sharing class RecordAdvisorController {
         guidelines += '- Only the fields listed in the provided record payload are available; do not assume other fields exist, are missing, or contain any particular value.\n';
         guidelines += '- If a question cannot be answered from the available data, say so clearly and explain what data would be needed.\n\n';
 
+        if (includeSourceGrounding) {
+            guidelines += '--- Source Citations ---\n';
+            guidelines += '- Use only source IDs that appear in `sourceRegistry`.\n';
+            guidelines += '- Add compact source markers like [src1] after factual claims that use a specific source.\n';
+            guidelines += '- Prefer 1-3 high-value source markers per section; do not cite every sentence.\n';
+            guidelines += '- Never invent source IDs. If no source directly supports a claim, omit the marker and say the context is insufficient.\n\n';
+        }
+
         guidelines += '--- Scope ---\n';
         guidelines += '- You are an analysis-only advisor. Do not attempt to modify records or take actions.\n';
         guidelines += '- Do not generate SOQL queries, code, or API calls unless the user explicitly asks.\n\n';
 
         guidelines += '--- Formatting ---\n';
         guidelines += '- Use markdown: **bold** for key values, headers for sections, bullet lists for details.\n';
+        guidelines += '- Start with a short executive summary, then separate factual observations from recommendations.\n';
+        guidelines += '- Use tables only for compact comparisons or scalar field summaries; use bullets for narrative insights.\n';
         guidelines += '- Aim for 150–400 words unless the user requests more or less detail.\n';
         guidelines += '- When discussing dates, calculate relative timeframes from today (e.g., "3 days ago", "2 weeks overdue").\n';
         guidelines += '- For currency values, format with appropriate symbols and thousands separators.\n\n';
@@ -307,11 +407,13 @@ public with sharing class RecordAdvisorController {
 
     @TestVisible
     private static String buildInsightsSystemPrompt(String recordContextJson) {
+        Boolean includeSourceGrounding = hasSourceRegistry(recordContextJson);
         String prompt = 'You are Agentforce Record Insights, an AI advisor that helps Salesforce users '
             + 'understand their CRM data.\n\n';
         prompt += 'You have been given a JSON payload with `selectionSummary` and `recordContext`. '
             + '`selectionSummary` describes which categories, relationships, parent references, '
             + 'and depth were included. '
+            + '`sourceRegistry`, when present, lists stable source IDs that can be cited in the final answer. '
             + '`recordContext` contains the actual grounded field values, related records, parent records, '
             + 'sibling records, and completeness metadata. '
             + 'Field API names map to objects containing a human-readable `label` and `value`. '
@@ -334,11 +436,11 @@ public with sharing class RecordAdvisorController {
         prompt += '- `parentRecordContexts[].selectedChildRelationship` (if present) contains one user-picked child-relationship expansion on the parent.\n';
         prompt += '- Sibling data is provided for comparison and benchmarking only. It is one hop deep; do not infer further relationships, automation, or workflow rules from it.\n\n';
 
-        prompt += buildCoreGuidelines() + '\n';
+        prompt += buildCoreGuidelines(includeSourceGrounding) + '\n';
 
         prompt += '=== INSIGHTS-SPECIFIC GUIDELINES ===\n';
-        prompt += '- Start with a short fact-grounded summary of the most important current state.\n';
-        prompt += '- Then provide recommendations separately, with rationale tied directly to the provided data.\n';
+        prompt += '- Start with a short fact-grounded executive summary of the most important current state.\n';
+        prompt += '- Then provide a `Key observations` section and a separate `Recommended next steps` section.\n';
         prompt += '- Prioritize actionable insights — surface risks, opportunities, overdue items, and anomalies.\n';
         prompt += '- When related records are available, draw connections across them '
             + '(e.g., open cases on an account, recent activities on an opportunity).\n';
@@ -353,11 +455,13 @@ public with sharing class RecordAdvisorController {
 
     @TestVisible
     private static String buildCompareSystemPrompt(String comparisonContextJson) {
+        Boolean includeSourceGrounding = hasSourceRegistry(comparisonContextJson);
         String prompt = 'You are Agentforce Record Insights in comparison mode. '
             + 'You help users compare multiple Salesforce records of the same type.\n\n';
         prompt += 'The JSON payload includes `selectionSummary` and `comparisonContext`. '
             + '`selectionSummary` describes which categories, relationships, parent references, '
             + 'and depth were included. '
+            + '`sourceRegistry`, when present, lists stable source IDs that can be cited in the final answer. '
             + '`comparisonContext` contains the comparison-level metadata and the list of records. '
             + 'Each record contains `fields` with field API names mapped to objects with a human-readable `label` and `value`. '
             + 'Records may also contain `relatedRecordSets`, `parentRecordContexts`, and `completeness` metadata. '
@@ -379,12 +483,12 @@ public with sharing class RecordAdvisorController {
         prompt += '- `parentRecordContexts[].selectedChildRelationship` shows one optional user-picked child-relationship expansion under the parent.\n';
         prompt += '- Use these only to enrich comparison takeaways (e.g., "both records share the same Account and that Account has 4 other open Orders"). Do not infer workflow rules or aggregate metrics beyond what the data contains.\n\n';
 
-        prompt += buildCoreGuidelines() + '\n';
+        prompt += buildCoreGuidelines(includeSourceGrounding) + '\n';
 
         prompt += '=== COMPARISON-SPECIFIC GUIDELINES ===\n';
         prompt += '- Structure comparisons as: (1) an executive summary of how the records differ, '
-            + '(2) a field-by-field comparison table for the most relevant fields, '
-            + '(3) recommendations with rationale.\n';
+            + '(2) a compact comparison table for the most relevant fields, '
+            + '(3) risks or differentiators, and (4) recommendations with rationale.\n';
         prompt += '- Use markdown tables only for compact scalar field comparisons. Use bullet lists for related-record patterns, qualitative differences, and narrative takeaways.\n';
         prompt += '- When evaluating fields, read values from each record\'s `fields` map. '
             + 'Use `relatedRecordSets` only when the user\'s question depends on related-record context.\n';
@@ -610,7 +714,228 @@ public with sharing class RecordAdvisorController {
         }
     }
 
+    private static List<aiplatform.ModelsAPI_ChatMessageRequest> buildChatMessages(
+        String systemPrompt,
+        String conversationHistoryJson,
+        String userMessage
+    ) {
+        List<aiplatform.ModelsAPI_ChatMessageRequest> messages = new List<aiplatform.ModelsAPI_ChatMessageRequest>();
+
+        aiplatform.ModelsAPI_ChatMessageRequest sysMsg = new aiplatform.ModelsAPI_ChatMessageRequest();
+        sysMsg.role = 'system';
+        sysMsg.content = systemPrompt;
+        messages.add(sysMsg);
+
+        if (String.isNotBlank(conversationHistoryJson)) {
+            addHistoryMessages(messages, conversationHistoryJson);
+        }
+
+        aiplatform.ModelsAPI_ChatMessageRequest userMsg = new aiplatform.ModelsAPI_ChatMessageRequest();
+        userMsg.role = 'user';
+        userMsg.content = userMessage;
+        messages.add(userMsg);
+
+        return messages;
+    }
+
+    private static ModelComparisonResult runModelComparison(
+        List<aiplatform.ModelsAPI_ChatMessageRequest> messages,
+        Map<String, GroundingCitation> sourceRegistry,
+        String contextJson,
+        String conversationHistoryJson,
+        String userMessage,
+        String modelApiName
+    ) {
+        ModelComparisonResult result = new ModelComparisonResult();
+        result.modelApiName = modelApiName;
+        result.modelLabel = getModelDisplayLabel(modelApiName);
+        result.success = false;
+
+        try {
+            ModelCallResult modelResult = callModelsAPIDetailed(messages, modelApiName);
+            result.modelApiName = modelResult.modelApiName;
+            result.modelLabel = getModelDisplayLabel(modelResult.modelApiName);
+            result.response = sanitizeCitationMarkers(modelResult.content, sourceRegistry);
+            result.citations = extractCitations(result.response, sourceRegistry);
+            result.latencyMs = modelResult.latencyMs;
+            result.estimatedTokens = estimateTokens(contextJson, conversationHistoryJson, userMessage, result.response);
+            result.estimatedCredits = estimateCredits(result.estimatedTokens, modelResult.modelApiName);
+            result.success = true;
+        } catch (Exception e) {
+            result.error = e.getMessage();
+        }
+
+        return result;
+    }
+
+    @TestVisible
+    private static Boolean hasSourceRegistry(String contextJson) {
+        return !extractSourceRegistry(contextJson).isEmpty();
+    }
+
+    @TestVisible
+    private static Map<String, GroundingCitation> extractSourceRegistry(String contextJson) {
+        Map<String, GroundingCitation> registry = new Map<String, GroundingCitation>();
+        if (String.isBlank(contextJson)) {
+            return registry;
+        }
+
+        try {
+            Object raw = JSON.deserializeUntyped(contextJson);
+            if (!(raw instanceof Map<String, Object>)) {
+                return registry;
+            }
+            Map<String, Object> root = (Map<String, Object>) raw;
+            Object sourceRegistryObj = root.get('sourceRegistry');
+            if (!(sourceRegistryObj instanceof List<Object>)) {
+                return registry;
+            }
+
+            for (Object sourceObj : (List<Object>) sourceRegistryObj) {
+                if (!(sourceObj instanceof Map<String, Object>)) {
+                    continue;
+                }
+                Map<String, Object> sourceMap = (Map<String, Object>) sourceObj;
+                String sourceId = normalizeText(stringValue(sourceMap.get('sourceId')));
+                if (String.isBlank(sourceId) || registry.containsKey(sourceId)) {
+                    continue;
+                }
+
+                GroundingCitation citation = new GroundingCitation();
+                citation.sourceId = sourceId;
+                citation.sourceType = normalizeText(stringValue(sourceMap.get('sourceType')));
+                citation.displayLabel = normalizeText(stringValue(sourceMap.get('displayLabel')));
+                citation.objectApiName = normalizeText(stringValue(sourceMap.get('objectApiName')));
+                citation.recordId = normalizeText(stringValue(sourceMap.get('recordId')));
+                citation.fieldApiName = normalizeText(stringValue(sourceMap.get('fieldApiName')));
+                citation.relationshipName = normalizeText(stringValue(sourceMap.get('relationshipName')));
+                citation.valueSummary = normalizeText(stringValue(sourceMap.get('valueSummary')));
+                registry.put(sourceId, citation);
+            }
+        } catch (Exception e) {
+            System.debug('Error parsing source registry: ' + e.getMessage());
+        }
+
+        return registry;
+    }
+
+    @TestVisible
+    private static List<GroundingCitation> extractCitations(
+        String responseText,
+        Map<String, GroundingCitation> sourceRegistry
+    ) {
+        List<GroundingCitation> citations = new List<GroundingCitation>();
+        if (String.isBlank(responseText) || sourceRegistry == null || sourceRegistry.isEmpty()) {
+            return citations;
+        }
+
+        Set<String> seen = new Set<String>();
+        Pattern citationPattern = Pattern.compile('src\\d+');
+        Matcher matcher = citationPattern.matcher(responseText);
+        while (matcher.find()) {
+            String sourceId = matcher.group(0);
+            if (seen.add(sourceId) && sourceRegistry.containsKey(sourceId)) {
+                citations.add(sourceRegistry.get(sourceId));
+            }
+        }
+        return citations;
+    }
+
+    @TestVisible
+    private static String sanitizeCitationMarkers(
+        String responseText,
+        Map<String, GroundingCitation> sourceRegistry
+    ) {
+        if (String.isBlank(responseText)) {
+            return responseText;
+        }
+        if (sourceRegistry == null || sourceRegistry.isEmpty()) {
+            return responseText.replaceAll('\\s*\\[((?:src\\d+\\s*,\\s*)*src\\d+)\\]', '').trim();
+        }
+
+        Pattern citationGroupPattern = Pattern.compile('\\[((?:src\\d+\\s*,\\s*)*src\\d+)\\]');
+        Matcher matcher = citationGroupPattern.matcher(responseText);
+        String sanitized = '';
+        Integer cursor = 0;
+
+        while (matcher.find()) {
+            sanitized += responseText.substring(cursor, matcher.start());
+            List<String> validSourceIds = new List<String>();
+            Set<String> seen = new Set<String>();
+            for (String token : matcher.group(1).split(',')) {
+                String sourceId = token == null ? null : token.trim();
+                if (String.isNotBlank(sourceId) && sourceRegistry.containsKey(sourceId) && seen.add(sourceId)) {
+                    validSourceIds.add(sourceId);
+                }
+            }
+            if (!validSourceIds.isEmpty()) {
+                sanitized += '[' + String.join(validSourceIds, ', ') + ']';
+            }
+            cursor = matcher.end();
+        }
+
+        sanitized += responseText.substring(cursor);
+        return sanitized.trim();
+    }
+
+    private static String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private static Integer estimateTokens(
+        String contextJson,
+        String conversationHistoryJson,
+        String userMessage,
+        String responseText
+    ) {
+        Integer totalChars = 800;
+        totalChars += String.isBlank(contextJson) ? 0 : contextJson.length();
+        totalChars += String.isBlank(conversationHistoryJson) ? 0 : conversationHistoryJson.length();
+        totalChars += String.isBlank(userMessage) ? 0 : userMessage.length();
+        totalChars += String.isBlank(responseText) ? 0 : responseText.length();
+        return Math.max(1, (Integer) Math.ceil(Decimal.valueOf(totalChars) / 4));
+    }
+
+    private static Integer estimateCredits(Integer estimatedTokens, String modelApiName) {
+        Integer chunks = Math.max(1, (Integer) Math.ceil(Decimal.valueOf(estimatedTokens == null ? 0 : estimatedTokens) / 2000));
+        String creditType = getModelCreditType(modelApiName);
+        Integer costPerChunk = creditType == 'advanced' ? 16 : (creditType == 'basic' ? 2 : 4);
+        return chunks * costPerChunk;
+    }
+
+    private static String getModelCreditType(String modelApiName) {
+        for (ModelCatalogEntry entry : getModelCatalog()) {
+            if (entry.apiName == modelApiName) {
+                return entry.creditType;
+            }
+        }
+        String normalized = String.isBlank(modelApiName) ? '' : modelApiName.toLowerCase();
+        if (normalized.contains('mini') || normalized.contains('flash') || normalized.contains('lite') || normalized.contains('nano')) {
+            return 'basic';
+        }
+        if (normalized.contains('opus')) {
+            return 'advanced';
+        }
+        return 'standard';
+    }
+
+    private static String getModelDisplayLabel(String modelApiName) {
+        for (ModelCatalogEntry entry : getModelCatalog()) {
+            if (entry.apiName == modelApiName) {
+                return entry.label;
+            }
+        }
+        return String.isNotBlank(modelApiName) ? modelApiName : DEFAULT_MODEL;
+    }
+
     private static String callModelsAPI(
+        List<aiplatform.ModelsAPI_ChatMessageRequest> messages,
+        String primaryModel
+    ) {
+        return callModelsAPIDetailed(messages, primaryModel).content;
+    }
+
+    private static ModelCallResult callModelsAPIDetailed(
         List<aiplatform.ModelsAPI_ChatMessageRequest> messages,
         String primaryModel
     ) {
@@ -622,6 +947,7 @@ public with sharing class RecordAdvisorController {
             String modelName = modelsToTry[i];
             Boolean isLast = (i == modelsToTry.size() - 1);
             try {
+                Long startedAt = DateTime.now().getTime();
                 aiplatform.ModelsAPI modelsAPI = new aiplatform.ModelsAPI();
                 aiplatform.ModelsAPI.createChatGenerations_Request request =
                     new aiplatform.ModelsAPI.createChatGenerations_Request();
@@ -639,7 +965,14 @@ public with sharing class RecordAdvisorController {
                     && !apiResponse.Code200.generationDetails.generations.isEmpty()) {
                     String content = apiResponse.Code200.generationDetails.generations[0].content;
                     if (String.isNotBlank(content)) {
-                        return content.trim();
+                        ModelCallResult result = new ModelCallResult();
+                        result.content = content.trim();
+                        result.modelApiName = modelName;
+                        Long elapsedMs = DateTime.now().getTime() - startedAt;
+                        result.latencyMs = elapsedMs > 2147483647
+                            ? 2147483647
+                            : Integer.valueOf(String.valueOf(elapsedMs));
+                        return result;
                     }
                 }
 

@@ -7,6 +7,7 @@ import MODEL_LOGO_NVIDIA from '@salesforce/resourceUrl/ModelLogoNvidia';
 import MODEL_LOGO_OPENAI from '@salesforce/resourceUrl/ModelLogoOpenAI';
 import sendMessage from '@salesforce/apex/RecordAdvisorController.sendMessage';
 import sendCompareMessage from '@salesforce/apex/RecordAdvisorController.sendCompareMessage';
+import compareModels from '@salesforce/apex/RecordAdvisorController.compareModels';
 import generateFollowUpPrompts from '@salesforce/apex/RecordAdvisorController.generateFollowUpPrompts';
 import getAvailableModels from '@salesforce/apex/RecordAdvisorController.getAvailableModels';
 
@@ -86,11 +87,17 @@ export default class ChatPanel extends LightningElement {
     @api contextWarningMessages = [];
     @api hideContextWarnings;
     @api tokenWarningThreshold = 20000;
+    @api enableSourceGrounding;
+    @api enableModelComparison = false;
+    @api showContextPreview;
+    @api sessionTokenWarningThreshold = 50000;
+    @api sessionCreditWarningThreshold = 100;
 
     @track messages = [];
     userInput = '';
     isLoading = false;
     selectedModel = null;
+    secondarySelectedModel = null;
     @track modelOptions = [];
     @track followUpPrompts = [];
     sessionTokens = 0;
@@ -99,6 +106,9 @@ export default class ChatPanel extends LightningElement {
     pendingLargePromptText;
     pendingLargePromptTokenEstimate = 0;
     isModelPickerOpen = false;
+    useModelComparison = false;
+    isContextPreviewExpanded = false;
+    isFollowUpExpanded = false;
     progressMessageIndex = 0;
 
     _messageCounter = 0;
@@ -209,6 +219,7 @@ export default class ChatPanel extends LightningElement {
     resetForStorageChange() {
         this.messages = [];
         this.followUpPrompts = [];
+        this.isFollowUpExpanded = false;
         this.sessionTokens = 0;
         this.sessionCredits = 0;
         this._messageCounter = 0;
@@ -229,7 +240,7 @@ export default class ChatPanel extends LightningElement {
     }
 
     get showModelBar() {
-        return this.showModelPickerEnabled || this.hasMessages;
+        return this.showModelPickerEnabled || this.hasMessages || this.showModelComparisonControls;
     }
 
     get sendDisabled() {
@@ -338,6 +349,122 @@ export default class ChatPanel extends LightningElement {
             : 'model-picker-button';
     }
 
+    get secondaryModelOptions() {
+        return this.modelOptions
+            .filter(option => option.value !== this.selectedModel)
+            .map(option => ({ label: option.label, value: option.value }));
+    }
+
+    get showModelComparisonControls() {
+        return this.enableModelComparisonEnabled && this.showModelPickerEnabled && this.modelOptions.length > 1;
+    }
+
+    get showSecondaryModelPicker() {
+        return this.showModelComparisonControls && this.useModelComparison;
+    }
+
+    get modelComparisonLabel() {
+        return this.useModelComparison ? 'Comparing models' : 'Compare models';
+    }
+
+    get sourceGroundingEnabled() {
+        return this.isBooleanEnabled(this.enableSourceGrounding);
+    }
+
+    get enableModelComparisonEnabled() {
+        return this.isBooleanEnabled(this.enableModelComparison);
+    }
+
+    get showContextPreviewEnabled() {
+        return this.isBooleanEnabled(this.showContextPreview);
+    }
+
+    get contextPreview() {
+        const payload = this.getActiveContextPayload();
+        const summary = payload?.selectionSummary || {};
+        const sources = payload?.sourceRegistry || [];
+        const contextJson = this.mode === 'compare' ? this.comparisonContextJson : this.recordContextJson;
+        const selectedFields = summary.selectedFields?.length
+            ? summary.selectedFields.length
+            : this.countPayloadFields(payload);
+        const selectedRelationships = summary.selectedRelationships?.length || 0;
+        const parentRefs = summary.selectedParentReferenceFields?.length || summary.selectedParentReferences?.length || 0;
+        return {
+            title: this.mode === 'compare' ? 'Comparison context preview' : 'Context preview',
+            modeLabel: this.mode === 'compare' ? 'Compare mode' : 'Insights mode',
+            objectLabel: summary.objectLabel || summary.objectApiName || this.objectApiName || 'Current object',
+            recordLabel: summary.recordName || this.recordName || `${summary.comparedRecordCount || 0} records`,
+            fieldLabel: selectedFields === 1 ? '1 field source' : `${selectedFields.toLocaleString()} field sources`,
+            relationshipLabel: selectedRelationships === 1 ? '1 relationship' : `${selectedRelationships} relationships`,
+            parentLabel: parentRefs === 1 ? '1 parent reference' : `${parentRefs} parent references`,
+            sourceLabel: sources.length === 1 ? '1 citation source' : `${sources.length} citation sources`,
+            tokenLabel: `~${Math.ceil((contextJson || '').length / 4).toLocaleString()} context tokens`,
+            warningLabel: summary.warningSummary || null
+        };
+    }
+
+    get showContextPreviewCard() {
+        return this.showContextPreviewEnabled && this.hasGroundedContext;
+    }
+
+    get contextPreviewToggleIcon() {
+        return this.isContextPreviewExpanded ? 'utility:chevronup' : 'utility:chevrondown';
+    }
+
+    get contextPreviewToggleLabel() {
+        return this.isContextPreviewExpanded ? 'Collapse context preview' : 'Expand context preview';
+    }
+
+    get contextPreviewSummaryLabel() {
+        return `${this.contextPreview.fieldLabel} · ${this.contextPreview.relationshipLabel} · ${this.contextPreview.tokenLabel}`;
+    }
+
+    get followUpToggleIcon() {
+        return this.isFollowUpExpanded ? 'utility:chevronup' : 'utility:chevrondown';
+    }
+
+    get followUpToggleLabel() {
+        return this.isFollowUpExpanded ? 'Hide suggested follow-ups' : 'Show suggested follow-ups';
+    }
+
+    get followUpSummaryLabel() {
+        const count = this.followUpPromptsKeyed.length;
+        return count === 1 ? '1 suggestion ready' : `${count} suggestions ready`;
+    }
+
+    get normalizedSessionTokenWarningThreshold() {
+        const parsedThreshold = parseInt(this.sessionTokenWarningThreshold, 10);
+        if (Number.isNaN(parsedThreshold)) {
+            return 50000;
+        }
+        return Math.max(parsedThreshold, 0);
+    }
+
+    get normalizedSessionCreditWarningThreshold() {
+        const parsedThreshold = parseInt(this.sessionCreditWarningThreshold, 10);
+        if (Number.isNaN(parsedThreshold)) {
+            return 100;
+        }
+        return Math.max(parsedThreshold, 0);
+    }
+
+    get usageGuardrailMessages() {
+        const messages = [];
+        if (this.normalizedSessionTokenWarningThreshold > 0
+            && this.sessionTokens >= this.normalizedSessionTokenWarningThreshold) {
+            messages.push(`Session token estimate is over ${this.normalizedSessionTokenWarningThreshold.toLocaleString()}.`);
+        }
+        if (this.normalizedSessionCreditWarningThreshold > 0
+            && this.sessionCredits >= this.normalizedSessionCreditWarningThreshold) {
+            messages.push(`Session flex credit estimate is over ${this.normalizedSessionCreditWarningThreshold.toLocaleString()}.`);
+        }
+        return messages.map((message, index) => ({ id: `guardrail_${index}`, message }));
+    }
+
+    get showUsageGuardrail() {
+        return this.usageGuardrailMessages.length > 0;
+    }
+
     get currentProgressMessage() {
         return PROGRESS_MESSAGES[this.progressMessageIndex] || PROGRESS_MESSAGES[0];
     }
@@ -416,7 +543,25 @@ export default class ChatPanel extends LightningElement {
             return;
         }
         this.selectedModel = modelId;
+        this.ensureSecondaryModelSelection();
         this.isModelPickerOpen = false;
+    }
+
+    handleModelComparisonToggle(event) {
+        this.useModelComparison = event.target.checked;
+        this.ensureSecondaryModelSelection();
+    }
+
+    handleSecondaryModelChange(event) {
+        this.secondarySelectedModel = event.detail.value;
+    }
+
+    handleToggleContextPreview() {
+        this.isContextPreviewExpanded = !this.isContextPreviewExpanded;
+    }
+
+    handleToggleFollowUps() {
+        this.isFollowUpExpanded = !this.isFollowUpExpanded;
     }
 
     handleInputChange(event) {
@@ -439,6 +584,7 @@ export default class ChatPanel extends LightningElement {
     handleFollowUpPrompt(event) {
         this.userInput = event.currentTarget?.dataset?.prompt;
         this.followUpPrompts = [];
+        this.isFollowUpExpanded = false;
         this.handleSend();
     }
 
@@ -482,6 +628,7 @@ export default class ChatPanel extends LightningElement {
         this.addMessage('user', text);
         this.userInput = '';
         this.followUpPrompts = [];
+        this.isFollowUpExpanded = false;
         this.isLoading = true;
         this.startProgressCarousel();
         this.resetInputHeight();
@@ -492,25 +639,41 @@ export default class ChatPanel extends LightningElement {
             const modelToUse = this.selectedModel || undefined;
             let result;
 
-            if (this.mode === 'compare') {
+            if (this.useModelComparison && this.showModelComparisonControls) {
+                this.ensureSecondaryModelSelection();
+                result = await compareModels({
+                    contextJson: this.getRequestContextJson(),
+                    userMessage: text,
+                    conversationHistoryJson: historyJson,
+                    primaryModelApiName: modelToUse,
+                    secondaryModelApiName: this.secondarySelectedModel,
+                    mode: this.mode
+                });
+            } else if (this.mode === 'compare') {
                 result = await sendCompareMessage({
-                    comparisonContextJson: this.comparisonContextJson,
+                    comparisonContextJson: this.getRequestContextJson(),
                     userMessage: text,
                     conversationHistoryJson: historyJson,
                     modelApiName: modelToUse
                 });
             } else {
                 result = await sendMessage({
-                    recordContextJson: this.recordContextJson,
+                    recordContextJson: this.getRequestContextJson(),
                     userMessage: text,
                     conversationHistoryJson: historyJson,
                     modelApiName: modelToUse
                 });
             }
 
-            if (result.success) {
-                this.addMessage('assistant', result.response);
-                this.trackUsage(text, result.response);
+            if (result.success && result.results) {
+                this.addModelComparisonMessage(result.results);
+                this.trackComparisonUsage(result.results);
+                if (this.enableSuggestedFollowUpsEnabled && this.hasGroundedContext) {
+                    this.generateFollowUps();
+                }
+            } else if (result.success) {
+                this.addMessage('assistant', result.response, this.buildAssistantMetadata(result));
+                this.trackUsage(text, result.response, result);
                 if (this.enableSuggestedFollowUpsEnabled && this.hasGroundedContext) {
                     this.generateFollowUps();
                 }
@@ -564,6 +727,7 @@ export default class ChatPanel extends LightningElement {
     handleClearConversation() {
         this.messages = [];
         this.followUpPrompts = [];
+        this.isFollowUpExpanded = false;
         this.sessionTokens = 0;
         this.sessionCredits = 0;
         this.saveConversation();
@@ -573,10 +737,10 @@ export default class ChatPanel extends LightningElement {
 
     // ── Usage Tracking ──
 
-    trackUsage(userText, assistantText) {
+    trackUsage(userText, assistantText, result = {}) {
         const contextTokens = this.estimateContextTokens();
         const messageTokens = Math.ceil((userText.length + assistantText.length) / 4);
-        const totalTokens = contextTokens + messageTokens;
+        const totalTokens = result.estimatedTokens || (contextTokens + messageTokens);
 
         // Each 2,000-token chunk counts as one prompt (rounded up)
         const promptChunks = Math.ceil(totalTokens / 2000);
@@ -586,11 +750,28 @@ export default class ChatPanel extends LightningElement {
         const CREDIT_COSTS = { starter: 2, basic: 2, standard: 4, advanced: 16 };
         const creditType = MODEL_CREDIT_MAP[this.selectedModel] || 'standard';
         const costPerChunk = CREDIT_COSTS[creditType] || 4;
-        const creditsUsed = promptChunks * costPerChunk;
+        const creditsUsed = result.estimatedCredits || (promptChunks * costPerChunk);
 
         this.sessionTokens += totalTokens;
         this.sessionCredits += creditsUsed;
 
+        this.saveUsageMetrics();
+        this.dispatchUsageUpdate();
+    }
+
+    trackComparisonUsage(results = []) {
+        const successfulResults = results.filter(result => result.success);
+        const totalTokens = successfulResults.reduce(
+            (sum, result) => sum + (Number(result.estimatedTokens) || 0),
+            0
+        );
+        const totalCredits = successfulResults.reduce(
+            (sum, result) => sum + (Number(result.estimatedCredits) || 0),
+            0
+        );
+
+        this.sessionTokens += totalTokens;
+        this.sessionCredits += totalCredits;
         this.saveUsageMetrics();
         this.dispatchUsageUpdate();
     }
@@ -635,8 +816,9 @@ export default class ChatPanel extends LightningElement {
         return -1;
     }
 
-    addMessage(role, text) {
+    addMessage(role, text, metadata = {}) {
         this._messageCounter++;
+        const citationItems = this.buildCitationItems(metadata.citations || []);
         const formatted = {
             id: `msg_${this._messageCounter}_${Date.now()}`,
             role,
@@ -648,7 +830,13 @@ export default class ChatPanel extends LightningElement {
             isUser: role === 'user',
             isAssistant: role === 'assistant',
             isError: role === 'assistant' && this.isErrorMessage(text),
-            htmlContent: role === 'assistant' ? this.renderMarkdown(text) : null,
+            htmlContent: role === 'assistant' ? this.renderMarkdown(text, citationItems) : null,
+            citations: citationItems,
+            hasCitations: citationItems.length > 0,
+            modelLabel: metadata.modelLabel,
+            metricsLabel: this.buildMetricsLabel(metadata),
+            hasMetrics: Boolean(this.buildMetricsLabel(metadata)),
+            isModelComparison: false,
             isLastAssistant: role === 'assistant',
             timestampLabel: this.formatMessageTimestamp(new Date())
         };
@@ -657,6 +845,46 @@ export default class ChatPanel extends LightningElement {
             this.messages = this.messages.map(m => ({ ...m, isLastAssistant: false }));
         }
 
+        this.messages = [...this.messages, formatted];
+        this.saveConversation();
+    }
+
+    addModelComparisonMessage(results = []) {
+        this._messageCounter++;
+        const cards = results.map((result, index) => {
+            const responseText = result.response || result.error || 'No response returned.';
+            const citationItems = this.buildCitationItems(result.citations || []);
+            return {
+                id: `${result.modelApiName || 'model'}_${index}`,
+                modelLabel: result.modelLabel || result.modelApiName || `Model ${index + 1}`,
+                statusLabel: result.success ? 'Response ready' : 'Response failed',
+                cardClass: result.success ? 'model-comparison-card' : 'model-comparison-card model-comparison-card-error',
+                htmlContent: this.renderMarkdown(responseText, citationItems),
+                citations: citationItems,
+                hasCitations: citationItems.length > 0,
+                metricsLabel: this.buildMetricsLabel(result)
+            };
+        });
+        const text = results.map(result => `${result.modelLabel || result.modelApiName}: ${result.response || result.error || ''}`).join('\n\n');
+        const formatted = {
+            id: `msg_${this._messageCounter}_${Date.now()}`,
+            role: 'assistant',
+            text,
+            timestamp: new Date().toISOString(),
+            index: this.messages.length,
+            containerClass: 'message-row assistant-row',
+            bubbleClass: 'message-bubble assistant-bubble model-comparison-bubble',
+            isUser: false,
+            isAssistant: true,
+            isError: false,
+            htmlContent: null,
+            isModelComparison: true,
+            comparisonCards: cards,
+            isLastAssistant: true,
+            timestampLabel: this.formatMessageTimestamp(new Date())
+        };
+
+        this.messages = this.messages.map(m => ({ ...m, isLastAssistant: false }));
         this.messages = [...this.messages, formatted];
         this.saveConversation();
     }
@@ -726,6 +954,11 @@ export default class ChatPanel extends LightningElement {
                         isAssistant: m.role === 'assistant',
                         isError: m.role === 'assistant' && this.isErrorMessage(m.text),
                         htmlContent: m.role === 'assistant' ? this.renderMarkdown(m.text) : null,
+                        citations: [],
+                        hasCitations: false,
+                        metricsLabel: null,
+                        hasMetrics: false,
+                        isModelComparison: false,
                         isLastAssistant: false,
                         timestampLabel: this.formatMessageTimestamp(m.timestamp)
                     };
@@ -784,16 +1017,131 @@ export default class ChatPanel extends LightningElement {
 
     applyPreferredModelSelection(availableModels) {
         if (this.selectedModel && availableModels.includes(this.selectedModel)) {
+            this.ensureSecondaryModelSelection();
             return;
         }
 
         const configuredModel = (this.defaultModelApiName || '').trim();
         if (configuredModel && availableModels.includes(configuredModel)) {
             this.selectedModel = configuredModel;
+            this.ensureSecondaryModelSelection();
             return;
         }
 
         this.selectedModel = availableModels[0] || null;
+        this.ensureSecondaryModelSelection();
+    }
+
+    ensureSecondaryModelSelection() {
+        if (!this.modelOptions.length) {
+            this.secondarySelectedModel = null;
+            return;
+        }
+        const availableSecondaryModels = this.modelOptions
+            .map(option => option.value)
+            .filter(value => value !== this.selectedModel);
+        if (this.secondarySelectedModel && availableSecondaryModels.includes(this.secondarySelectedModel)) {
+            return;
+        }
+        this.secondarySelectedModel = availableSecondaryModels[0] || null;
+    }
+
+    buildAssistantMetadata(result = {}) {
+        return {
+            citations: this.sourceGroundingEnabled ? result.citations : [],
+            modelLabel: result.modelLabel,
+            latencyMs: result.latencyMs,
+            estimatedTokens: result.estimatedTokens,
+            estimatedCredits: result.estimatedCredits
+        };
+    }
+
+    buildMetricsLabel(result = {}) {
+        const parts = [];
+        if (result.modelLabel) {
+            parts.push(result.modelLabel);
+        }
+        if (result.latencyMs !== undefined && result.latencyMs !== null) {
+            parts.push(`${Number(result.latencyMs).toLocaleString()} ms`);
+        }
+        if (result.estimatedTokens) {
+            parts.push(`~${Number(result.estimatedTokens).toLocaleString()} tokens`);
+        }
+        if (result.estimatedCredits) {
+            parts.push(`~${Number(result.estimatedCredits).toLocaleString()} credits`);
+        }
+        return parts.join(' · ');
+    }
+
+    buildCitationItems(citations = []) {
+        if (!this.sourceGroundingEnabled || !Array.isArray(citations)) {
+            return [];
+        }
+        return citations.map((citation, index) => ({
+            id: citation.sourceId || `citation_${index}`,
+            sourceId: citation.sourceId,
+            label: citation.displayLabel || citation.sourceId || 'Source',
+            summary: citation.valueSummary,
+            href: this.buildCitationHref(citation) || '#',
+            className: this.buildCitationHref(citation)
+                ? 'citation-pill'
+                : 'citation-pill citation-pill-static'
+        }));
+    }
+
+    buildCitationHref(citation = {}) {
+        if (!citation.recordId) {
+            return null;
+        }
+        if (citation.objectApiName) {
+            return `/lightning/r/${citation.objectApiName}/${citation.recordId}/view`;
+        }
+        return `/lightning/r/${citation.recordId}/view`;
+    }
+
+    getActiveContextPayload() {
+        const contextJson = this.mode === 'compare' ? this.comparisonContextJson : this.recordContextJson;
+        if (!contextJson) {
+            return null;
+        }
+        try {
+            return JSON.parse(contextJson);
+        } catch (error) {
+            return null;
+        }
+    }
+
+    getRequestContextJson() {
+        const contextJson = this.mode === 'compare' ? this.comparisonContextJson : this.recordContextJson;
+        if (this.sourceGroundingEnabled || !contextJson) {
+            return contextJson;
+        }
+        try {
+            const payload = JSON.parse(contextJson);
+            delete payload.sourceRegistry;
+            if (payload.selectionSummary) {
+                delete payload.selectionSummary.sourceCount;
+            }
+            return JSON.stringify(payload);
+        } catch (error) {
+            return contextJson;
+        }
+    }
+
+    countPayloadFields(payload) {
+        if (!payload) {
+            return 0;
+        }
+        if (payload.recordContext?.fields) {
+            return Object.keys(payload.recordContext.fields).length;
+        }
+        if (payload.comparisonContext?.records) {
+            return payload.comparisonContext.records.reduce(
+                (sum, record) => sum + Object.keys(record.fields || {}).length,
+                0
+            );
+        }
+        return 0;
     }
 
     normalizeModelSetName(value) {
@@ -881,7 +1229,7 @@ export default class ChatPanel extends LightningElement {
 
     // ── Markdown Rendering ──
 
-    renderMarkdown(text) {
+    renderMarkdown(text, citations = []) {
         if (!text) return '';
         let html = this.escapeHtml(text);
 
@@ -891,6 +1239,7 @@ export default class ChatPanel extends LightningElement {
 
         // Tables - must be processed before paragraph handling
         html = this.renderTables(html);
+        html = this.normalizeSectionHeadings(html);
 
         // Headers
         html = html.replace(/^### (.+)$/gm, '<h4 class="md-h3">$1</h4>');
@@ -929,6 +1278,8 @@ export default class ChatPanel extends LightningElement {
             return `<a href="${url}" target="_blank" rel="noopener">${linkText}</a>`;
         });
 
+        html = this.renderInlineCitations(html, citations);
+
         // Paragraphs
         html = html.replace(/\n\n/g, '</p><p>');
         html = '<p>' + html + '</p>';
@@ -947,6 +1298,34 @@ export default class ChatPanel extends LightningElement {
         html = html.replace(/(<\/table>)\s*<\/p>/g, '$1');
 
         return html;
+    }
+
+    renderInlineCitations(html, citations = []) {
+        if (!Array.isArray(citations) || citations.length === 0) {
+            return html.replace(/\[((?:src\d+\s*,\s*)*src\d+)\]/g, '');
+        }
+
+        const citationsById = new Map(citations.map(citation => [citation.sourceId, citation]));
+        return html.replace(/\[((?:src\d+\s*,\s*)*src\d+)\]/g, (match, sourceGroup) => {
+            const links = sourceGroup
+                .split(',')
+                .map(sourceId => sourceId.trim())
+                .filter((sourceId, index, sourceIds) => sourceIds.indexOf(sourceId) === index)
+                .map(sourceId => citationsById.get(sourceId))
+                .filter(Boolean)
+                .map(citation => {
+                    const title = this.escapeHtml(citation.label || citation.sourceId || 'Source');
+                    return `<a href="${citation.href}" target="_blank" rel="noopener" class="inline-citation" title="${title}">${citation.sourceId}</a>`;
+                })
+                .join('');
+
+            return links ? `<span class="inline-citation-group">${links}</span>` : '';
+        });
+    }
+
+    normalizeSectionHeadings(html) {
+        const headingPattern = /^(Executive Summary|Key Observations|Key Risks Identified|Risks Identified|Recommended Next Steps|Recommendations|Recommendation|Risks or Differentiators|Data-Grounded Observations)$/gm;
+        return html.replace(headingPattern, '### $1');
     }
 
     renderTables(html) {
