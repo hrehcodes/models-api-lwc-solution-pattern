@@ -346,6 +346,30 @@ describe('c-chat-panel', () => {
         expect(element.shadowRoot.querySelector('.model-picker-button').textContent).toContain('GPT-5');
     });
 
+    it('renders the answer length pill and updates the selected density', async () => {
+        const element = createElement('c-chat-panel', {
+            is: ChatPanel
+        });
+        element.showModelPicker = true;
+        element.answerDensityLabel = 'Answer length';
+        element.answerDensityHelpText = 'Choose how much detail to include.';
+        document.body.appendChild(element);
+        await flushPromises();
+
+        const densityButton = element.shadowRoot.querySelector('.answer-density-button');
+        expect(densityButton).not.toBeNull();
+        expect(element.shadowRoot.querySelector('.answer-density-button-meta').textContent).toBe('Answer length');
+        expect(element.shadowRoot.querySelector('.answer-density-button-label').textContent).toBe('Standard');
+        expect(element.shadowRoot.querySelector('lightning-helptext').content).toBe('Choose how much detail to include.');
+
+        densityButton.click();
+        await flushPromises();
+        element.shadowRoot.querySelector('button[data-density-value="detailed"]').click();
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('.answer-density-button-label').textContent).toBe('Detailed');
+    });
+
     it('renders grounding citations from the model response as source links', async () => {
         sendMessage.mockResolvedValue({
             success: true,
@@ -386,12 +410,20 @@ describe('c-chat-panel', () => {
         element.shadowRoot.querySelector('.send-btn').click();
         await flushPromises();
 
+        expect(element.shadowRoot.querySelector('lightning-formatted-rich-text').value).not.toContain('src1');
+        expect(element.shadowRoot.querySelector('lightning-formatted-rich-text').value).not.toContain('inline-citation');
+        expect(element.shadowRoot.querySelector('lightning-formatted-rich-text').value).toContain('md-h3');
+        expect(element.shadowRoot.querySelector('.citation-pill')).toBeNull();
+        const sourceToggle = element.shadowRoot.querySelector('.source-disclosure-toggle');
+        expect(sourceToggle).not.toBeNull();
+        expect(sourceToggle.textContent).toContain('Sources · 1 source');
+        sourceToggle.click();
+        await flushPromises();
+
         const citation = element.shadowRoot.querySelector('.citation-pill');
         expect(citation).not.toBeNull();
         expect(citation.textContent).toContain('Acme · Account Name');
         expect(citation.href).toContain('/lightning/r/Account/001000000000001AAA/view');
-        expect(element.shadowRoot.querySelector('lightning-formatted-rich-text').value).toContain('inline-citation');
-        expect(element.shadowRoot.querySelector('lightning-formatted-rich-text').value).toContain('md-h3');
         expect(element.shadowRoot.querySelector('.model-response-metrics').textContent).toContain('Gemini Pro');
     });
 
@@ -411,6 +443,7 @@ describe('c-chat-panel', () => {
         element.persistConversation = true;
         element.sessionTokenWarningThreshold = 50;
         element.sessionCreditWarningThreshold = 5;
+        element.contextTokenEstimate = 1234;
         element.recordContextJson = JSON.stringify({
             selectionSummary: {
                 objectLabel: 'Account',
@@ -426,6 +459,14 @@ describe('c-chat-panel', () => {
             }
         });
         document.body.appendChild(element);
+        await flushPromises();
+
+        const readiness = element.shadowRoot.querySelector('.prompt-readiness-panel');
+        expect(readiness.textContent).toContain('Prompt readiness');
+        expect(readiness.textContent).toContain('2 warnings');
+        expect(readiness.textContent).toContain('~1,234 context tokens');
+        expect(element.shadowRoot.querySelector('.context-preview-card')).toBeNull();
+        element.shadowRoot.querySelector('.prompt-readiness-toggle').click();
         await flushPromises();
 
         expect(element.shadowRoot.querySelector('.context-preview-card').textContent).toContain('Context preview');
@@ -459,11 +500,19 @@ describe('c-chat-panel', () => {
                 {
                     success: true,
                     modelLabel: 'Gemini Pro',
-                    response: 'Gemini answer',
+                    response: 'Gemini answer [src1]',
                     latencyMs: 100,
                     estimatedTokens: 500,
                     estimatedCredits: 4,
-                    citations: []
+                    citations: [
+                        {
+                            sourceId: 'src1',
+                            displayLabel: 'Acme · Account Name',
+                            objectApiName: 'Account',
+                            recordId: '001000000000001AAA',
+                            valueSummary: 'Acme'
+                        }
+                    ]
                 },
                 {
                     success: true,
@@ -489,9 +538,17 @@ describe('c-chat-panel', () => {
         document.body.appendChild(element);
         await flushPromises();
 
-        element.shadowRoot.querySelector('lightning-input').checked = true;
-        element.shadowRoot.querySelector('lightning-input').dispatchEvent(new CustomEvent('change'));
+        const compareButton = element.shadowRoot.querySelector('.compare-settings-button');
+        expect(compareButton).not.toBeNull();
+        expect(compareButton.textContent).toContain('Compare models');
+        compareButton.click();
         await flushPromises();
+        expect(element.shadowRoot.querySelector('.compare-settings-popover').textContent).toContain('Compare settings');
+        element.shadowRoot.querySelector('.compare-settings-popover lightning-input').checked = true;
+        element.shadowRoot.querySelector('.compare-settings-popover lightning-input').dispatchEvent(new CustomEvent('change'));
+        await flushPromises();
+        expect(element.shadowRoot.querySelector('.compare-settings-button').textContent).toContain('Comparing models');
+        expect(element.shadowRoot.querySelector('.secondary-model-picker')).not.toBeNull();
 
         const textarea = element.shadowRoot.querySelector('textarea');
         textarea.value = 'Compare model answers.';
@@ -507,6 +564,14 @@ describe('c-chat-panel', () => {
         expect(element.shadowRoot.querySelectorAll('.model-comparison-card')).toHaveLength(2);
         expect(element.shadowRoot.textContent).toContain('Gemini answer');
         expect(element.shadowRoot.textContent).toContain('GPT answer');
+        expect(element.shadowRoot.querySelector('.model-comparison-card lightning-formatted-rich-text').value).not.toContain('src1');
+        expect(element.shadowRoot.querySelectorAll('.model-comparison-card .citation-pill')).toHaveLength(0);
+        const compareSourceToggle = element.shadowRoot.querySelector('.model-comparison-card .source-disclosure-toggle');
+        expect(compareSourceToggle).not.toBeNull();
+        expect(compareSourceToggle.textContent).toContain('Sources · 1 source');
+        compareSourceToggle.click();
+        await flushPromises();
+        expect(element.shadowRoot.querySelectorAll('.model-comparison-card .citation-pill')).toHaveLength(1);
     });
 
     it('sends starter prompts when nested prompt content is clicked', async () => {

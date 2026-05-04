@@ -165,6 +165,7 @@
                                     context-warning-summary={contextWarningSummary}
                                     context-warning-messages={contextWarningMessages}
                                     hide-context-warnings={hideContextWarningsEnabled}
+                                    context-token-estimate={activeContextTokenEstimate}
                                     token-warning-threshold={normalizedPromptWarningThreshold}
                                     oncontextchange={handleContextChange}
                                     onparentcontextchange={handleParentContextChange}
@@ -191,10 +192,14 @@
                                 context-warning-summary={contextWarningSummary}
                                 context-warning-messages={contextWarningMessages}
                                 hide-context-warnings={hideContextWarningsEnabled}
+                                context-token-estimate={activeContextTokenEstimate}
                                 token-warning-threshold={normalizedPromptWarningThreshold}
                                 enable-source-grounding={enableSourceGroundingEnabled}
                                 enable-model-comparison={enableModelComparisonEnabled}
                                 show-context-preview={showContextPreviewEnabled}
+                                show-answer-density-toggle={showAnswerDensityToggleEnabled}
+                                answer-density-label={answerDensityLabel}
+                                answer-density-help-text={answerDensityHelpText}
                                 session-token-warning-threshold={normalizedSessionTokenWarningThreshold}
                                 session-credit-warning-threshold={normalizedSessionCreditWarningThreshold}
                                 onusageupdate={handleUsageUpdate}
@@ -263,6 +268,9 @@
                         enable-source-grounding={enableSourceGroundingEnabled}
                         enable-model-comparison={enableModelComparisonEnabled}
                         show-context-preview={showContextPreviewEnabled}
+                        show-answer-density-toggle={showAnswerDensityToggleEnabled}
+                        answer-density-label={answerDensityLabel}
+                        answer-density-help-text={answerDensityHelpText}
                         session-token-warning-threshold={normalizedSessionTokenWarningThreshold}
                         session-credit-warning-threshold={normalizedSessionCreditWarningThreshold}
                         max-compare-records={normalizedMaxCompareRecords}

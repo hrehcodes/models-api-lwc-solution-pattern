@@ -4,6 +4,7 @@ import getAvailableContext from '@salesforce/apex/RecordContextService.getAvaila
 import getRecordContext from '@salesforce/apex/RecordContextService.getRecordContext';
 import getAvailableCompareObjects from '@salesforce/apex/RecordCompareService.getAvailableCompareObjects';
 import searchRecords from '@salesforce/apex/RecordCompareService.searchRecords';
+import { buildContextSignals } from 'c/contextSignalUtils';
 
 const MODE_INSIGHTS = 'insights';
 const MODE_COMPARE = 'compare';
@@ -71,6 +72,13 @@ export default class AgentforceRecordInsights extends LightningElement {
     @api enableSourceGrounding;
     @api enableModelComparison = false;
     @api showContextPreview;
+    @api showAnswerDensityToggle;
+    @api answerDensityLabel = 'Answer length';
+    @api answerDensityHelpText = 'Controls how much detail the AI asks the model to include. Brief is shorter, while Detailed includes more rationale and caveats.';
+    @api showWhyThisAnswerPanel;
+    @api showModelComparisonAnalysis;
+    @api showContextBudgetControl;
+    @api showCitationQualityWarnings;
     @api sessionTokenWarningThreshold = 50000;
     @api sessionCreditWarningThreshold = 100;
     @api maxCompareRecords = 5;
@@ -82,7 +90,7 @@ export default class AgentforceRecordInsights extends LightningElement {
     @api fieldSelectionMode = 'categories';
 
     mode = MODE_INSIGHTS;
-    contextPanelOpen = true;
+    contextPanelOpen = false;
     availableContext;
     recordContextJson;
     includedCategories = [];
@@ -240,6 +248,7 @@ export default class AgentforceRecordInsights extends LightningElement {
     get enableSourceGroundingEnabled() { return this.isBooleanEnabled(this.enableSourceGrounding); }
     get enableModelComparisonEnabled() { return this.isBooleanEnabled(this.enableModelComparison); }
     get showContextPreviewEnabled() { return this.isBooleanEnabled(this.showContextPreview); }
+    get showAnswerDensityToggleEnabled() { return this.isBooleanEnabled(this.showAnswerDensityToggle); }
     get normalizedPromptWarningThreshold() {
         const parsedThreshold = parseInt(this.promptWarningThresholdTokens, 10);
         if (Number.isNaN(parsedThreshold)) {
@@ -304,6 +313,13 @@ export default class AgentforceRecordInsights extends LightningElement {
             && this.recordContextJson
             && !this.isLoadingContext
             && !this.contextError;
+    }
+
+    get activeContextTokenEstimate() {
+        if (!this.recordContextJson) {
+            return null;
+        }
+        return Math.max(1, Math.ceil(this.recordContextJson.length / 4));
     }
 
     get showFieldSelectorSafe() {
@@ -797,31 +813,34 @@ export default class AgentforceRecordInsights extends LightningElement {
                 relationshipName
             }));
 
+        const selectionSummary = {
+            mode: MODE_INSIGHTS,
+            objectApiName: ctx.objectApiName,
+            objectLabel: ctx.objectLabel,
+            recordName: ctx.recordName,
+            depth: this.currentDepth,
+            selectedCategories: [...this.includedCategories],
+            selectedRelationships: [...this.includedRelationships],
+            selectedFields:
+                this.activeFieldSelectionMode === 'fields'
+                    ? [...(this.includedFields || [])]
+                    : [],
+            fieldSelectionMode: this.activeFieldSelectionMode,
+            selectedParentReferenceFields: [...(this.includedParentReferenceFields || [])],
+            sameObjectSiblingsEnabled: Boolean(this.includeSameObjectSiblingsThroughParents),
+            parentChildRelationshipsSelected: parentChildSelections,
+            contextStatus: warningMessages.length ? 'partial' : 'ready',
+            sourceCount: sourceRegistry.length,
+            warningSummary: warningMessages.length
+                ? 'Some record context was skipped or truncated. AI responses may be incomplete.'
+                : null,
+            warningMessages
+        };
+
         return {
-            selectionSummary: {
-                mode: MODE_INSIGHTS,
-                objectApiName: ctx.objectApiName,
-                objectLabel: ctx.objectLabel,
-                recordName: ctx.recordName,
-                depth: this.currentDepth,
-                selectedCategories: [...this.includedCategories],
-                selectedRelationships: [...this.includedRelationships],
-                selectedFields:
-                    this.activeFieldSelectionMode === 'fields'
-                        ? [...(this.includedFields || [])]
-                        : [],
-                fieldSelectionMode: this.activeFieldSelectionMode,
-                selectedParentReferenceFields: [...(this.includedParentReferenceFields || [])],
-                sameObjectSiblingsEnabled: Boolean(this.includeSameObjectSiblingsThroughParents),
-                parentChildRelationshipsSelected: parentChildSelections,
-                contextStatus: warningMessages.length ? 'partial' : 'ready',
-                sourceCount: sourceRegistry.length,
-                warningSummary: warningMessages.length
-                    ? 'Some record context was skipped or truncated. AI responses may be incomplete.'
-                    : null,
-                warningMessages
-            },
+            selectionSummary,
             sourceRegistry,
+            contextSignals: buildContextSignals({ recordContext: ctx, selectionSummary }),
             recordContext: ctx
         };
     }

@@ -67,6 +67,23 @@ const PROGRESS_MESSAGES = [
     'Drafting response',
     'Preparing suggested follow-ups'
 ];
+const ANSWER_DENSITY_OPTIONS = [
+    {
+        value: 'brief',
+        label: 'Brief',
+        description: 'Concise answer with only the most important facts.'
+    },
+    {
+        value: 'standard',
+        label: 'Standard',
+        description: 'Balanced answer with key observations and next steps.'
+    },
+    {
+        value: 'detailed',
+        label: 'Detailed',
+        description: 'Expanded rationale, caveats, and supporting context.'
+    }
+];
 
 export default class ChatPanel extends LightningElement {
     agentforceIcon = AGENTFORCE_ICON;
@@ -90,6 +107,10 @@ export default class ChatPanel extends LightningElement {
     @api enableSourceGrounding;
     @api enableModelComparison = false;
     @api showContextPreview;
+    @api showAnswerDensityToggle;
+    @api answerDensityLabel = 'Answer length';
+    @api answerDensityHelpText = 'Controls how much detail the AI asks the model to include. Brief is shorter, while Detailed includes more rationale and caveats.';
+    @api contextTokenEstimate;
     @api sessionTokenWarningThreshold = 50000;
     @api sessionCreditWarningThreshold = 100;
 
@@ -106,10 +127,14 @@ export default class ChatPanel extends LightningElement {
     pendingLargePromptText;
     pendingLargePromptTokenEstimate = 0;
     isModelPickerOpen = false;
+    isAnswerDensityPickerOpen = false;
+    isCompareSettingsOpen = false;
+    isPromptReadinessExpanded = false;
     useModelComparison = false;
     isContextPreviewExpanded = false;
     isFollowUpExpanded = false;
     progressMessageIndex = 0;
+    selectedAnswerDensity = 'standard';
 
     _messageCounter = 0;
     _modelData = [];
@@ -355,6 +380,24 @@ export default class ChatPanel extends LightningElement {
             .map(option => ({ label: option.label, value: option.value }));
     }
 
+    get secondaryModelData() {
+        return this._modelData.find(model => model.apiName === this.secondarySelectedModel);
+    }
+
+    get secondaryModelLabel() {
+        return this.secondaryModelData?.label
+            || this.secondaryModelOptions.find(option => option.value === this.secondarySelectedModel)?.label
+            || 'Second model';
+    }
+
+    get secondaryModelMeta() {
+        const model = this.secondaryModelData;
+        if (!model) {
+            return 'Choose another model';
+        }
+        return `${model.provider || 'Provider'} · ${this.formatCreditTier(model.creditType)}`;
+    }
+
     get showModelComparisonControls() {
         return this.enableModelComparisonEnabled && this.showModelPickerEnabled && this.modelOptions.length > 1;
     }
@@ -365,6 +408,79 @@ export default class ChatPanel extends LightningElement {
 
     get modelComparisonLabel() {
         return this.useModelComparison ? 'Comparing models' : 'Compare models';
+    }
+
+    get compareSettingsButtonClass() {
+        return this.isCompareSettingsOpen
+            ? 'compare-settings-button compare-settings-button-open'
+            : 'compare-settings-button';
+    }
+
+    get compareSettingsLabel() {
+        return this.useModelComparison ? 'Comparing models' : 'Compare models';
+    }
+
+    get compareSettingsMeta() {
+        return this.useModelComparison
+            ? `${this.selectedModelLabel} + ${this.secondaryModelLabel}`
+            : 'Single model response';
+    }
+
+    get compareSettingsButtonLabel() {
+        return `${this.compareSettingsLabel}: ${this.compareSettingsMeta}`;
+    }
+
+    get compareSettingsCostLabel() {
+        if (!this.hasGroundedContext) {
+            return 'Load context to estimate usage.';
+        }
+        if (!this.useModelComparison) {
+            return `Single-model prompt estimate: ~${this.comparePromptTokenEstimate.toLocaleString()} tokens and ~${this.estimateCreditsForModel(this.comparePromptTokenEstimate, this.selectedModel).toLocaleString()} credits.`;
+        }
+        return `Dual-model prompt estimate: ~${(this.comparePromptTokenEstimate * 2).toLocaleString()} total tokens and ~${this.comparePromptCreditEstimate.toLocaleString()} credits.`;
+    }
+
+    get showAnswerDensityToggleEnabled() {
+        return this.showAnswerDensityToggle !== false && this.showAnswerDensityToggle !== 'false';
+    }
+
+    get selectedAnswerDensityOption() {
+        return ANSWER_DENSITY_OPTIONS.find(option => option.value === this.selectedAnswerDensity)
+            || ANSWER_DENSITY_OPTIONS.find(option => option.value === 'standard')
+            || ANSWER_DENSITY_OPTIONS[0];
+    }
+
+    get selectedAnswerDensityLabel() {
+        return this.selectedAnswerDensityOption?.label || 'Standard';
+    }
+
+    get answerDensityButtonClass() {
+        return this.isAnswerDensityPickerOpen
+            ? 'answer-density-button answer-density-button-open'
+            : 'answer-density-button';
+    }
+
+    get answerDensityButtonLabel() {
+        return `${this.normalizedAnswerDensityLabel}: ${this.selectedAnswerDensityLabel}`;
+    }
+
+    get answerDensityPickerItems() {
+        return ANSWER_DENSITY_OPTIONS.map(option => ({
+            ...option,
+            id: `density_${option.value}`,
+            isActive: option.value === this.selectedAnswerDensity,
+            itemClass: option.value === this.selectedAnswerDensity
+                ? 'answer-density-option answer-density-option-active'
+                : 'answer-density-option'
+        }));
+    }
+
+    get normalizedAnswerDensityLabel() {
+        return (this.answerDensityLabel || 'Answer length').trim() || 'Answer length';
+    }
+
+    get normalizedAnswerDensityHelpText() {
+        return (this.answerDensityHelpText || 'Controls how much detail the AI asks the model to include. Brief is shorter, while Detailed includes more rationale and caveats.').trim();
     }
 
     get sourceGroundingEnabled() {
@@ -379,11 +495,19 @@ export default class ChatPanel extends LightningElement {
         return this.isBooleanEnabled(this.showContextPreview);
     }
 
+    get normalizedContextTokenEstimate() {
+        const explicitEstimate = parseInt(this.contextTokenEstimate, 10);
+        if (!Number.isNaN(explicitEstimate) && explicitEstimate > 0) {
+            return explicitEstimate;
+        }
+        return null;
+    }
+
     get contextPreview() {
         const payload = this.getActiveContextPayload();
         const summary = payload?.selectionSummary || {};
         const sources = payload?.sourceRegistry || [];
-        const contextJson = this.mode === 'compare' ? this.comparisonContextJson : this.recordContextJson;
+        const tokenEstimate = this.estimateContextTokens();
         const selectedFields = summary.selectedFields?.length
             ? summary.selectedFields.length
             : this.countPayloadFields(payload);
@@ -398,13 +522,66 @@ export default class ChatPanel extends LightningElement {
             relationshipLabel: selectedRelationships === 1 ? '1 relationship' : `${selectedRelationships} relationships`,
             parentLabel: parentRefs === 1 ? '1 parent reference' : `${parentRefs} parent references`,
             sourceLabel: sources.length === 1 ? '1 citation source' : `${sources.length} citation sources`,
-            tokenLabel: `~${Math.ceil((contextJson || '').length / 4).toLocaleString()} context tokens`,
+            tokenLabel: `~${tokenEstimate.toLocaleString()} context tokens`,
             warningLabel: summary.warningSummary || null
         };
     }
 
     get showContextPreviewCard() {
         return this.showContextPreviewEnabled && this.hasGroundedContext;
+    }
+
+    get showCompareCostBanner() {
+        return this.useModelComparison && this.showModelComparisonControls && this.hasGroundedContext;
+    }
+
+    get comparePromptTokenEstimate() {
+        return this.estimatePromptTokens(this.userInput || '');
+    }
+
+    get comparePromptCreditEstimate() {
+        const tokens = this.comparePromptTokenEstimate;
+        return this.estimateCreditsForModel(tokens, this.selectedModel)
+            + this.estimateCreditsForModel(tokens, this.secondarySelectedModel);
+    }
+
+    get compareCostEstimateLabel() {
+        return `Dual-model compare will send this context twice: ~${(this.comparePromptTokenEstimate * 2).toLocaleString()} total tokens and ~${this.comparePromptCreditEstimate.toLocaleString()} estimated credits.`;
+    }
+
+    get showPromptReadinessPanel() {
+        return this.showUsageGuardrail || this.showCompareCostBanner || this.showContextPreviewCard;
+    }
+
+    get promptReadinessToggleIcon() {
+        return this.isPromptReadinessExpanded ? 'utility:chevronup' : 'utility:chevrondown';
+    }
+
+    get promptReadinessToggleLabel() {
+        return this.isPromptReadinessExpanded ? 'Collapse prompt readiness' : 'Expand prompt readiness';
+    }
+
+    get promptReadinessClass() {
+        return this.showUsageGuardrail
+            ? 'prompt-readiness-panel prompt-readiness-panel-warning'
+            : 'prompt-readiness-panel';
+    }
+
+    get promptReadinessSummaryLabel() {
+        const parts = [];
+        const warningCount = this.usageGuardrailMessages.length;
+        if (warningCount) {
+            parts.push(`${warningCount} ${warningCount === 1 ? 'warning' : 'warnings'}`);
+        } else {
+            parts.push('Ready');
+        }
+        if (this.showCompareCostBanner) {
+            parts.push(`~${(this.comparePromptTokenEstimate * 2).toLocaleString()} tokens`);
+            parts.push(`~${this.comparePromptCreditEstimate.toLocaleString()} credits`);
+        } else if (this.showContextPreviewCard) {
+            parts.push(this.contextPreview.tokenLabel);
+        }
+        return parts.join(' · ');
     }
 
     get contextPreviewToggleIcon() {
@@ -531,6 +708,10 @@ export default class ChatPanel extends LightningElement {
 
     handleModelPickerToggle() {
         this.isModelPickerOpen = !this.isModelPickerOpen;
+        if (this.isModelPickerOpen) {
+            this.isAnswerDensityPickerOpen = false;
+            this.isCompareSettingsOpen = false;
+        }
     }
 
     handleModelPickerClose() {
@@ -547,6 +728,39 @@ export default class ChatPanel extends LightningElement {
         this.isModelPickerOpen = false;
     }
 
+    handleAnswerDensityToggle() {
+        this.isAnswerDensityPickerOpen = !this.isAnswerDensityPickerOpen;
+        if (this.isAnswerDensityPickerOpen) {
+            this.isModelPickerOpen = false;
+            this.isCompareSettingsOpen = false;
+        }
+    }
+
+    handleAnswerDensityClose() {
+        this.isAnswerDensityPickerOpen = false;
+    }
+
+    handleAnswerDensitySelect(event) {
+        const value = event.currentTarget?.dataset?.densityValue;
+        if (!value) {
+            return;
+        }
+        this.selectedAnswerDensity = value;
+        this.isAnswerDensityPickerOpen = false;
+    }
+
+    handleCompareSettingsToggle() {
+        this.isCompareSettingsOpen = !this.isCompareSettingsOpen;
+        if (this.isCompareSettingsOpen) {
+            this.isModelPickerOpen = false;
+            this.isAnswerDensityPickerOpen = false;
+        }
+    }
+
+    handleCompareSettingsClose() {
+        this.isCompareSettingsOpen = false;
+    }
+
     handleModelComparisonToggle(event) {
         this.useModelComparison = event.target.checked;
         this.ensureSecondaryModelSelection();
@@ -560,8 +774,51 @@ export default class ChatPanel extends LightningElement {
         this.isContextPreviewExpanded = !this.isContextPreviewExpanded;
     }
 
+    handleTogglePromptReadiness() {
+        this.isPromptReadinessExpanded = !this.isPromptReadinessExpanded;
+    }
+
     handleToggleFollowUps() {
         this.isFollowUpExpanded = !this.isFollowUpExpanded;
+    }
+
+    handleToggleMessageSources(event) {
+        const messageId = event.currentTarget?.dataset?.messageId;
+        if (!messageId) {
+            return;
+        }
+
+        this.messages = this.messages.map(message => {
+            if (message.id !== messageId) {
+                return message;
+            }
+            const sourcesExpanded = !message.sourcesExpanded;
+            return this.withSourceDisclosureState(message, sourcesExpanded);
+        });
+    }
+
+    handleToggleComparisonSources(event) {
+        const messageId = event.currentTarget?.dataset?.messageId;
+        const cardId = event.currentTarget?.dataset?.cardId;
+        if (!messageId || !cardId) {
+            return;
+        }
+
+        this.messages = this.messages.map(message => {
+            if (message.id !== messageId || !Array.isArray(message.comparisonCards)) {
+                return message;
+            }
+            return {
+                ...message,
+                comparisonCards: message.comparisonCards.map(card => {
+                    if (card.id !== cardId) {
+                        return card;
+                    }
+                    const sourcesExpanded = !card.sourcesExpanded;
+                    return this.withSourceDisclosureState(card, sourcesExpanded);
+                })
+            };
+        });
     }
 
     handleInputChange(event) {
@@ -637,13 +894,14 @@ export default class ChatPanel extends LightningElement {
         try {
             const historyJson = this.buildConversationHistory();
             const modelToUse = this.selectedModel || undefined;
+            const promptText = this.buildPromptWithAnswerDensity(text);
             let result;
 
             if (this.useModelComparison && this.showModelComparisonControls) {
                 this.ensureSecondaryModelSelection();
                 result = await compareModels({
                     contextJson: this.getRequestContextJson(),
-                    userMessage: text,
+                    userMessage: promptText,
                     conversationHistoryJson: historyJson,
                     primaryModelApiName: modelToUse,
                     secondaryModelApiName: this.secondarySelectedModel,
@@ -652,14 +910,14 @@ export default class ChatPanel extends LightningElement {
             } else if (this.mode === 'compare') {
                 result = await sendCompareMessage({
                     comparisonContextJson: this.getRequestContextJson(),
-                    userMessage: text,
+                    userMessage: promptText,
                     conversationHistoryJson: historyJson,
                     modelApiName: modelToUse
                 });
             } else {
                 result = await sendMessage({
                     recordContextJson: this.getRequestContextJson(),
-                    userMessage: text,
+                    userMessage: promptText,
                     conversationHistoryJson: historyJson,
                     modelApiName: modelToUse
                 });
@@ -777,6 +1035,10 @@ export default class ChatPanel extends LightningElement {
     }
 
     estimateContextTokens() {
+        if (this.mode !== 'compare' && this.normalizedContextTokenEstimate) {
+            return this.normalizedContextTokenEstimate;
+        }
+
         let contextSize = 0;
         if (this.mode === 'compare' && this.comparisonContextJson) {
             contextSize = this.comparisonContextJson.length;
@@ -791,6 +1053,24 @@ export default class ChatPanel extends LightningElement {
         const historyTokens = historyJson ? Math.ceil(historyJson.length / 4) : 0;
         const userTokens = userText ? Math.ceil(userText.length / 4) : 0;
         return this.estimateContextTokens() + historyTokens + userTokens + PROMPT_OVERHEAD_TOKENS;
+    }
+
+    estimateCreditsForModel(tokens, modelApiName) {
+        const chunks = Math.max(1, Math.ceil((Number(tokens) || 0) / 2000));
+        const model = this._modelData.find(item => item.apiName === modelApiName);
+        const creditType = model?.creditType || MODEL_CREDIT_MAP[modelApiName] || 'standard';
+        const costPerChunk = creditType === 'advanced' ? 16 : (creditType === 'basic' ? 2 : 4);
+        return chunks * costPerChunk;
+    }
+
+    buildPromptWithAnswerDensity(text) {
+        if (!this.showAnswerDensityToggleEnabled || this.selectedAnswerDensity === 'standard') {
+            return text;
+        }
+        const instruction = this.selectedAnswerDensity === 'brief'
+            ? 'Answer length preference: Brief. Keep the response concise and prioritize only the most important facts and next steps.'
+            : 'Answer length preference: Detailed. Include more rationale, relevant caveats, and supporting context while staying grounded in the provided data.';
+        return `${instruction}\n\nUser question: ${text}`;
     }
 
     shouldWarnAboutLargePrompt(promptTokenEstimate) {
@@ -819,6 +1099,8 @@ export default class ChatPanel extends LightningElement {
     addMessage(role, text, metadata = {}) {
         this._messageCounter++;
         const citationItems = this.buildCitationItems(metadata.citations || []);
+        const sourceDisclosureId = `${role}_sources_${this._messageCounter}`;
+        const hasCitations = citationItems.length > 0;
         const formatted = {
             id: `msg_${this._messageCounter}_${Date.now()}`,
             role,
@@ -832,7 +1114,12 @@ export default class ChatPanel extends LightningElement {
             isError: role === 'assistant' && this.isErrorMessage(text),
             htmlContent: role === 'assistant' ? this.renderMarkdown(text, citationItems) : null,
             citations: citationItems,
-            hasCitations: citationItems.length > 0,
+            hasCitations,
+            sourcesExpanded: false,
+            sourcesToggleIcon: 'utility:chevronright',
+            sourcesToggleLabel: hasCitations ? this.buildSourcesToggleLabel(citationItems) : null,
+            sourcesAriaLabel: 'Show grounding sources',
+            sourceDisclosureId,
             modelLabel: metadata.modelLabel,
             metricsLabel: this.buildMetricsLabel(metadata),
             hasMetrics: Boolean(this.buildMetricsLabel(metadata)),
@@ -854,6 +1141,7 @@ export default class ChatPanel extends LightningElement {
         const cards = results.map((result, index) => {
             const responseText = result.response || result.error || 'No response returned.';
             const citationItems = this.buildCitationItems(result.citations || []);
+            const hasCitations = citationItems.length > 0;
             return {
                 id: `${result.modelApiName || 'model'}_${index}`,
                 modelLabel: result.modelLabel || result.modelApiName || `Model ${index + 1}`,
@@ -861,7 +1149,12 @@ export default class ChatPanel extends LightningElement {
                 cardClass: result.success ? 'model-comparison-card' : 'model-comparison-card model-comparison-card-error',
                 htmlContent: this.renderMarkdown(responseText, citationItems),
                 citations: citationItems,
-                hasCitations: citationItems.length > 0,
+                hasCitations,
+                sourcesExpanded: false,
+                sourcesToggleIcon: 'utility:chevronright',
+                sourcesToggleLabel: hasCitations ? this.buildSourcesToggleLabel(citationItems) : null,
+                sourcesAriaLabel: 'Show grounding sources',
+                sourceDisclosureId: `compare_sources_${this._messageCounter}_${index}`,
                 metricsLabel: this.buildMetricsLabel(result)
             };
         });
@@ -1089,6 +1382,22 @@ export default class ChatPanel extends LightningElement {
         }));
     }
 
+    buildSourcesToggleLabel(citations = []) {
+        const count = Array.isArray(citations) ? citations.length : 0;
+        return count === 1 ? 'Sources · 1 source' : `Sources · ${count} sources`;
+    }
+
+    withSourceDisclosureState(item, sourcesExpanded = false) {
+        const citations = Array.isArray(item.citations) ? item.citations : [];
+        return {
+            ...item,
+            sourcesExpanded,
+            sourcesToggleIcon: sourcesExpanded ? 'utility:chevrondown' : 'utility:chevronright',
+            sourcesToggleLabel: this.buildSourcesToggleLabel(citations),
+            sourcesAriaLabel: sourcesExpanded ? 'Hide grounding sources' : 'Show grounding sources'
+        };
+    }
+
     buildCitationHref(citation = {}) {
         if (!citation.recordId) {
             return null;
@@ -1301,26 +1610,7 @@ export default class ChatPanel extends LightningElement {
     }
 
     renderInlineCitations(html, citations = []) {
-        if (!Array.isArray(citations) || citations.length === 0) {
-            return html.replace(/\[((?:src\d+\s*,\s*)*src\d+)\]/g, '');
-        }
-
-        const citationsById = new Map(citations.map(citation => [citation.sourceId, citation]));
-        return html.replace(/\[((?:src\d+\s*,\s*)*src\d+)\]/g, (match, sourceGroup) => {
-            const links = sourceGroup
-                .split(',')
-                .map(sourceId => sourceId.trim())
-                .filter((sourceId, index, sourceIds) => sourceIds.indexOf(sourceId) === index)
-                .map(sourceId => citationsById.get(sourceId))
-                .filter(Boolean)
-                .map(citation => {
-                    const title = this.escapeHtml(citation.label || citation.sourceId || 'Source');
-                    return `<a href="${citation.href}" target="_blank" rel="noopener" class="inline-citation" title="${title}">${citation.sourceId}</a>`;
-                })
-                .join('');
-
-            return links ? `<span class="inline-citation-group">${links}</span>` : '';
-        });
+        return html.replace(/\s*\[((?:src\d+\s*,\s*)*src\d+)\]/g, '');
     }
 
     normalizeSectionHeadings(html) {

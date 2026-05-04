@@ -157,12 +157,16 @@ public with sharing class RecordContextService {
         @AuraEnabled public String label { get; set; }
         @AuraEnabled public String fieldType { get; set; }
         @AuraEnabled public String helpText { get; set; }
+        @AuraEnabled public Boolean isCalculated { get; set; }
+        @AuraEnabled public Boolean isCustom { get; set; }
 
         public FieldInfo(Schema.DescribeFieldResult dfr) {
             this.apiName = dfr.getName();
             this.label = dfr.getLabel();
             this.fieldType = dfr.getType().name();
             this.helpText = dfr.getInlineHelpText();
+            this.isCalculated = dfr.isCalculated();
+            this.isCustom = dfr.isCustom();
         }
     }
 
@@ -214,12 +218,18 @@ public with sharing class RecordContextService {
         @AuraEnabled public String relationshipName { get; set; }
         @AuraEnabled public String childObjectApiName { get; set; }
         @AuraEnabled public String childObjectLabel { get; set; }
+        @AuraEnabled public Integer recordCount { get; set; }
+        @AuraEnabled public String countStatus { get; set; }
+        @AuraEnabled public Boolean selected { get; set; }
         @AuraEnabled public List<Map<String, Object>> records { get; set; }
 
         public RelatedRecordSet(String relationshipName, String childObjectApiName, String childObjectLabel) {
             this.relationshipName = relationshipName;
             this.childObjectApiName = childObjectApiName;
             this.childObjectLabel = childObjectLabel;
+            this.recordCount = 0;
+            this.countStatus = COUNT_STATUS_KNOWN;
+            this.selected = true;
             this.records = new List<Map<String, Object>>();
         }
     }
@@ -496,10 +506,7 @@ public with sharing class RecordContextService {
 
                 if (fieldMap.containsKey(fn)) {
                     Schema.DescribeFieldResult dfr = fieldMap.get(fn).getDescribe();
-                    fieldData.put('label', dfr.getLabel());
-                    if (String.isNotBlank(dfr.getInlineHelpText())) {
-                        fieldData.put('helpText', dfr.getInlineHelpText());
-                    }
+                    addFieldMetadata(fieldData, dfr);
                 }
                 ctx.fields.put(fn, fieldData);
             } catch (Exception e) {
@@ -526,10 +533,10 @@ public with sharing class RecordContextService {
                     RelatedRecordSet rrs = fetchRelatedRecords(
                         cr, recordId, childDescribe, maxRelatedRecords
                     );
-                    if (rrs != null && !rrs.records.isEmpty()) {
+                    if (rrs != null) {
                         ctx.relatedRecordSets.add(rrs);
 
-                        if (depth >= 2) {
+                        if (depth >= 2 && !rrs.records.isEmpty()) {
                             fetchDescendants(rrs, ctx, childDescribe, 2, depth, ctx.completeness);
                         }
                     }
@@ -1246,6 +1253,7 @@ public with sharing class RecordContextService {
         for (SObject rec : records) {
             rrs.records.add(buildRecordMap(rec, childFieldMap, queryFields));
         }
+        rrs.recordCount = rrs.records.size();
 
         return rrs;
     }
@@ -1492,10 +1500,7 @@ public with sharing class RecordContextService {
                 fieldData.put('value', RecordSchemaUtils.normalizeValue(val));
                 if (parentFieldMap.containsKey(fn)) {
                     Schema.DescribeFieldResult dfr = parentFieldMap.get(fn).getDescribe();
-                    fieldData.put('label', dfr.getLabel());
-                    if (String.isNotBlank(dfr.getInlineHelpText())) {
-                        fieldData.put('helpText', dfr.getInlineHelpText());
-                    }
+                    addFieldMetadata(fieldData, dfr);
                 }
                 parentCtx.fields.put(fn, fieldData);
             } catch (Exception e) {
@@ -1684,7 +1689,7 @@ public with sharing class RecordContextService {
 
                 if (fieldMap.containsKey(fieldName)) {
                     Schema.DescribeFieldResult dfr = fieldMap.get(fieldName).getDescribe();
-                    fieldData.put('label', dfr.getLabel());
+                    addFieldMetadata(fieldData, dfr);
                 }
 
                 result.put(fieldName, fieldData);
@@ -1694,6 +1699,16 @@ public with sharing class RecordContextService {
         }
 
         return result;
+    }
+
+    private static void addFieldMetadata(Map<String, Object> fieldData, Schema.DescribeFieldResult dfr) {
+        fieldData.put('label', dfr.getLabel());
+        fieldData.put('fieldType', dfr.getType().name());
+        fieldData.put('isCalculated', dfr.isCalculated());
+        fieldData.put('isCustom', dfr.isCustom());
+        if (String.isNotBlank(dfr.getInlineHelpText())) {
+            fieldData.put('helpText', dfr.getInlineHelpText());
+        }
     }
 
     private static void noteSkippedField(ContextCompleteness completeness) {

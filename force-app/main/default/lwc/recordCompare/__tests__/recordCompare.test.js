@@ -215,6 +215,9 @@ describe('c-record-compare', () => {
         element.enableSourceGrounding = true;
         element.enableModelComparison = true;
         element.showContextPreview = true;
+        element.showAnswerDensityToggle = true;
+        element.answerDensityLabel = 'Answer depth';
+        element.answerDensityHelpText = 'Choose answer detail.';
         element.sessionTokenWarningThreshold = 25;
         element.sessionCreditWarningThreshold = 5;
         element.maxCompareRecords = 4;
@@ -273,9 +276,14 @@ describe('c-record-compare', () => {
         expect(element.shadowRoot.querySelector('c-chat-panel')).not.toBeNull();
         expect(element.shadowRoot.querySelector('c-chat-panel').showInlineUsageStatus).toBe(true);
         expect(element.shadowRoot.querySelector('c-chat-panel').comparisonContextJson).toContain('"sourceRegistry"');
+        expect(element.shadowRoot.querySelector('c-chat-panel').comparisonContextJson).toContain('"comparisonSignals"');
+        expect(element.shadowRoot.querySelector('c-chat-panel').comparisonContextJson).toContain('selectedEmptyRelationship');
         expect(element.shadowRoot.querySelector('c-chat-panel').enableSourceGrounding).toBe(true);
         expect(element.shadowRoot.querySelector('c-chat-panel').enableModelComparison).toBe(true);
         expect(element.shadowRoot.querySelector('c-chat-panel').showContextPreview).toBe(true);
+        expect(element.shadowRoot.querySelector('c-chat-panel').showAnswerDensityToggle).toBe(true);
+        expect(element.shadowRoot.querySelector('c-chat-panel').answerDensityLabel).toBe('Answer depth');
+        expect(element.shadowRoot.querySelector('c-chat-panel').answerDensityHelpText).toBe('Choose answer detail.');
         expect(element.shadowRoot.querySelector('c-chat-panel').sessionTokenWarningThreshold).toBe(25);
         expect(element.shadowRoot.querySelector('c-chat-panel').sessionCreditWarningThreshold).toBe(5);
     });

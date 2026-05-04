@@ -132,6 +132,11 @@ private class RecordAdvisorController_Test {
         System.assert(guidelines.contains('Today\'s date: ' + Datetime.now().format('yyyy-MM-dd')));
         System.assert(guidelines.contains('not provided in the current context selection'));
         System.assert(guidelines.contains('blank on the record'));
+        System.assert(guidelines.contains('contextSignals'));
+        System.assert(guidelines.contains('selected-empty context'));
+        System.assert(guidelines.contains('not interpret expected, weighted, forecast, or calculated financial values as discounts'));
+        System.assert(guidelines.contains('Do not treat generic record age or days-since-created fields as time in the current stage/status'));
+        System.assert(guidelines.contains('Do not attribute recommendations to Einstein, predictive, scoring, or discovery fields unless those fields contain explicit nonblank'));
     }
 
     @IsTest
@@ -139,7 +144,8 @@ private class RecordAdvisorController_Test {
         String prompt = RecordAdvisorController.buildCompareSystemPrompt('{"selectionSummary":{},"comparisonContext":{}}');
 
         System.assert(prompt.contains('selectionSummary'));
-        System.assert(prompt.contains('active or open records over closed or completed ones'));
+        System.assert(prompt.contains('comparisonSignals'));
+        System.assert(prompt.contains('active/open records over closed/completed records only when those fields exist'));
         System.assert(prompt.contains('Use markdown tables only for compact scalar field comparisons.'));
     }
 
@@ -149,6 +155,7 @@ private class RecordAdvisorController_Test {
 
         System.assert(prompt.contains('No record data provided.'));
         System.assert(prompt.contains('selectionSummary'));
+        System.assert(prompt.contains('contextSignals'));
         System.assert(prompt.contains('If completeness metadata indicates warnings'));
     }
 
@@ -180,16 +187,14 @@ private class RecordAdvisorController_Test {
 
         Map<String, RecordAdvisorController.GroundingCitation> registry =
             RecordAdvisorController.extractSourceRegistry(contextJson);
-        String sanitized = RecordAdvisorController.sanitizeCitationMarkers(
-            'Supported [src1, src2, src99]. Unsupported only [src99].',
-            registry
-        );
+        String rawResponse = 'Supported [src1, src2, src99]. Unsupported only [src99].';
+        String sanitized = RecordAdvisorController.sanitizeCitationMarkers(rawResponse, registry);
         List<RecordAdvisorController.GroundingCitation> citations =
-            RecordAdvisorController.extractCitations(sanitized + ' Duplicate [src1].', registry);
+            RecordAdvisorController.extractCitations(rawResponse + ' Duplicate [src1].', registry);
 
         System.assertEquals(true, RecordAdvisorController.hasSourceRegistry(contextJson));
         System.assertEquals(2, registry.size(), 'Expected two sources from the registry');
-        System.assertEquals('Supported [src1, src2]. Unsupported only .', sanitized);
+        System.assertEquals('Supported. Unsupported only.', sanitized);
         System.assertEquals(2, citations.size(), 'Only valid unique citation markers should survive');
         System.assertEquals('Acme · Account Name', citations[0].displayLabel);
         System.assertEquals('001000000000001AAA', citations[0].recordId);

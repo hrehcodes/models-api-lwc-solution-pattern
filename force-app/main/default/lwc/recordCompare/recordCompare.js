@@ -4,6 +4,7 @@ import searchRecords from '@salesforce/apex/RecordCompareService.searchRecords';
 import getSuggestedRecords from '@salesforce/apex/RecordCompareService.getSuggestedRecords';
 import getAvailableCompareObjects from '@salesforce/apex/RecordCompareService.getAvailableCompareObjects';
 import getAvailableContextForObject from '@salesforce/apex/RecordContextService.getAvailableContextForObject';
+import { buildComparisonSignals } from 'c/contextSignalUtils';
 
 const OBJECT_ICON_MAP = {
     Account: 'standard:account',
@@ -44,6 +45,9 @@ export default class RecordCompare extends LightningElement {
     @api enableSourceGrounding;
     @api enableModelComparison = false;
     @api showContextPreview;
+    @api showAnswerDensityToggle;
+    @api answerDensityLabel = 'Answer length';
+    @api answerDensityHelpText = 'Controls how much detail the AI asks the model to include. Brief is shorter, while Detailed includes more rationale and caveats.';
     @api sessionTokenWarningThreshold = 50000;
     @api sessionCreditWarningThreshold = 100;
 
@@ -1269,31 +1273,36 @@ export default class RecordCompare extends LightningElement {
         const warningMessages = this.extractCompletenessMessages(ctx.completeness);
         const sourceRegistry = this.buildSourceRegistryFromComparisonContext(ctx);
 
+        const selectionSummary = {
+            mode: 'compare',
+            objectApiName: this.activeObjectType || ctx.objectApiName,
+            objectLabel: ctx.objectLabel,
+            comparedRecordCount: ctx.recordCount,
+            depth: this.currentDepth,
+            selectedCategories: [...this.includedCategories],
+            selectedRelationships: [...this.includedRelationships],
+            selectedFields:
+                this.activeFieldSelectionMode === 'fields'
+                    ? [...(this.includedFields || [])]
+                    : [],
+            fieldSelectionMode: this.activeFieldSelectionMode,
+            selectedParentReferenceFields: [...(this.includedParentReferenceFields || [])],
+            selectedParentReferences: [...(this.includedParentReferenceFields || [])],
+            sameObjectSiblingsEnabled: !!this.includeSameObjectSiblingsThroughParents,
+            includeSameObjectSiblingsThroughParents: !!this.includeSameObjectSiblingsThroughParents,
+            parentSiblingRelationshipByReferenceField: { ...(this.parentSiblingRelationshipByReferenceField || {}) },
+            contextStatus: warningMessages.length ? 'partial' : 'ready',
+            sourceCount: sourceRegistry.length,
+            warningSummary: warningMessages.length
+                ? 'Some compared record context was skipped or truncated. AI responses may be incomplete.'
+                : null,
+            warningMessages
+        };
+
         return {
-            selectionSummary: {
-                mode: 'compare',
-                objectApiName: this.activeObjectType || ctx.objectApiName,
-                objectLabel: ctx.objectLabel,
-                comparedRecordCount: ctx.recordCount,
-                depth: this.currentDepth,
-                selectedCategories: [...this.includedCategories],
-                selectedRelationships: [...this.includedRelationships],
-                selectedFields:
-                    this.activeFieldSelectionMode === 'fields'
-                        ? [...(this.includedFields || [])]
-                        : [],
-                fieldSelectionMode: this.activeFieldSelectionMode,
-                selectedParentReferences: [...(this.includedParentReferenceFields || [])],
-                includeSameObjectSiblingsThroughParents: !!this.includeSameObjectSiblingsThroughParents,
-                parentSiblingRelationshipByReferenceField: { ...(this.parentSiblingRelationshipByReferenceField || {}) },
-                contextStatus: warningMessages.length ? 'partial' : 'ready',
-                sourceCount: sourceRegistry.length,
-                warningSummary: warningMessages.length
-                    ? 'Some compared record context was skipped or truncated. AI responses may be incomplete.'
-                    : null,
-                warningMessages
-            },
+            selectionSummary,
             sourceRegistry,
+            comparisonSignals: buildComparisonSignals({ comparisonContext: ctx, selectionSummary }),
             comparisonContext: ctx
         };
     }

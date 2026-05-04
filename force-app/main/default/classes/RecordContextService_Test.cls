@@ -154,6 +154,10 @@ private class RecordContextService_Test {
         System.assertNotEquals(null, ctx.completeness, 'Completeness metadata should be returned');
         System.assertEquals(true, ctx.completeness.isComplete, 'Default context should be complete');
         System.assertEquals(false, ctx.completeness.hasWarnings, 'Default context should not warn');
+        Map<String, Object> nameField = (Map<String, Object>) ctx.fields.get('Name');
+        System.assertEquals('STRING', nameField.get('fieldType'), 'Field metadata should include display type');
+        System.assertEquals(false, nameField.get('isCalculated'), 'Field metadata should include calculated flag');
+        System.assertEquals(false, nameField.get('isCustom'), 'Field metadata should include custom flag');
     }
 
     @IsTest
@@ -223,6 +227,31 @@ private class RecordContextService_Test {
         System.assertNotEquals(null, ctx);
         System.assertEquals(false, ctx.completeness.hasWarnings, 'Unsupported relationship noise should be filtered out');
         System.assertEquals(0, ctx.completeness.skippedRelationshipCount, 'Unsupported relationships should be skipped before fetch');
+    }
+
+    @IsTest
+    static void testGetRecordContext_SelectedEmptyRelationshipIsPreserved() {
+        Opportunity opp = [SELECT Id FROM Opportunity WITH SYSTEM_MODE LIMIT 1];
+
+        Test.startTest();
+        RecordContextService.RecordContext ctx = RecordContextService.getRecordContext(
+            opp.Id,
+            1,
+            new List<String>{ 'core' },
+            new List<String>{ 'OpportunityContactRoles' },
+            null,
+            null,
+            false,
+            null,
+            null
+        );
+        Test.stopTest();
+
+        System.assertEquals(1, ctx.relatedRecordSets.size(), 'Selected supported relationships should be represented even when empty');
+        System.assertEquals('OpportunityContactRoles', ctx.relatedRecordSets[0].relationshipName);
+        System.assertEquals(0, ctx.relatedRecordSets[0].records.size(), 'No related rows should be represented as selected-empty context');
+        System.assertEquals(0, ctx.relatedRecordSets[0].recordCount);
+        System.assertEquals(true, ctx.relatedRecordSets[0].selected);
     }
 
     @IsTest

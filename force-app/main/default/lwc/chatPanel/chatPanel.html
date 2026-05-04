@@ -2,90 +2,181 @@
     <!-- Model Selector (collapsed into bar) -->
     <template lwc:if={showModelBar}>
         <div class="model-bar">
-            <template lwc:if={showModelPicker}>
-                <div class="model-picker-shell">
-                    <button
-                        class={modelPickerButtonClass}
-                        type="button"
-                        onclick={handleModelPickerToggle}
-                        aria-haspopup="listbox"
-                        aria-expanded={isModelPickerOpen}
-                        title="Switch AI model"
-                    >
-                        <span class="model-avatar" aria-hidden="true">
-                            <img src={selectedModelLogo} alt={selectedModelLogoAlt} class="model-logo-img" />
-                        </span>
-                        <span class="model-button-copy">
-                            <span class="model-button-label">{selectedModelLabel}</span>
-                            <span class="model-button-meta">{selectedModelMeta}</span>
-                        </span>
-                        <lightning-icon icon-name="utility:chevrondown" size="xx-small" class="model-chevron"></lightning-icon>
-                    </button>
-                    <template lwc:if={isModelPickerOpen}>
-                        <div class="model-picker-backdrop" onclick={handleModelPickerClose}></div>
-                        <div class="model-picker-popover" role="listbox" aria-label="Choose Model">
-                            <div class="model-picker-title">Choose Model</div>
-                            <template for:each={modelPickerItems} for:item="model">
-                                <button
-                                    key={model.id}
-                                    class={model.itemClass}
-                                    data-model-id={model.id}
-                                    onclick={handleModelSelect}
-                                    type="button"
-                                    role="option"
-                                    aria-selected={model.isActive}
-                                >
-                                    <span class="model-option-check" aria-hidden="true">
-                                        <template lwc:if={model.isActive}>
-                                            <lightning-icon icon-name="utility:check" size="xx-small"></lightning-icon>
-                                        </template>
-                                    </span>
-                                    <span class="model-option-logo" aria-hidden="true">
-                                        <img src={model.logo} alt={model.logoAlt} class="model-logo-img" />
-                                    </span>
-                                    <span class="model-option-copy">
-                                        <span class="model-option-label">{model.label}</span>
-                                        <span class="model-option-meta">{model.provider}</span>
-                                    </span>
-                                    <span class="model-tier-badge">{model.creditLabel}</span>
-                                </button>
-                            </template>
-                        </div>
-                    </template>
-                </div>
-            </template>
-            <template lwc:if={showModelComparisonControls}>
-                <div class="model-comparison-controls">
-                    <lightning-input
-                        type="toggle"
-                        label={modelComparisonLabel}
-                        checked={useModelComparison}
-                        onchange={handleModelComparisonToggle}
-                        message-toggle-active="On"
-                        message-toggle-inactive="Off"
-                    ></lightning-input>
-                    <template lwc:if={showSecondaryModelPicker}>
-                        <lightning-combobox
-                            label="Second model"
-                            variant="label-hidden"
-                            value={secondarySelectedModel}
-                            options={secondaryModelOptions}
-                            onchange={handleSecondaryModelChange}
-                            class="secondary-model-picker"
-                        ></lightning-combobox>
-                    </template>
-                </div>
-            </template>
-            <template lwc:if={hasMessages}>
-                <lightning-button-icon
-                    icon-name="utility:clear"
-                    alternative-text="Clear conversation"
-                    title="Clear conversation"
-                    onclick={handleClearConversation}
-                    class="clear-conversation-btn"
-                    size="small"
-                ></lightning-button-icon>
-            </template>
+            <div class="model-bar-primary">
+                <template lwc:if={showModelPicker}>
+                    <div class="model-picker-shell">
+                        <button
+                            class={modelPickerButtonClass}
+                            type="button"
+                            onclick={handleModelPickerToggle}
+                            aria-haspopup="listbox"
+                            aria-expanded={isModelPickerOpen}
+                            title="Switch AI model"
+                        >
+                            <span class="model-avatar" aria-hidden="true">
+                                <img src={selectedModelLogo} alt={selectedModelLogoAlt} class="model-logo-img" />
+                            </span>
+                            <span class="model-button-copy">
+                                <span class="model-button-label">{selectedModelLabel}</span>
+                                <span class="model-button-meta">{selectedModelMeta}</span>
+                            </span>
+                            <lightning-icon icon-name="utility:chevrondown" size="xx-small" class="model-chevron"></lightning-icon>
+                        </button>
+                        <template lwc:if={isModelPickerOpen}>
+                            <div class="model-picker-backdrop" onclick={handleModelPickerClose}></div>
+                            <div class="model-picker-popover" role="listbox" aria-label="Choose Model">
+                                <div class="model-picker-title">Choose Model</div>
+                                <template for:each={modelPickerItems} for:item="model">
+                                    <button
+                                        key={model.id}
+                                        class={model.itemClass}
+                                        data-model-id={model.id}
+                                        onclick={handleModelSelect}
+                                        type="button"
+                                        role="option"
+                                        aria-selected={model.isActive}
+                                    >
+                                        <span class="model-option-check" aria-hidden="true">
+                                            <template lwc:if={model.isActive}>
+                                                <lightning-icon icon-name="utility:check" size="xx-small"></lightning-icon>
+                                            </template>
+                                        </span>
+                                        <span class="model-option-logo" aria-hidden="true">
+                                            <img src={model.logo} alt={model.logoAlt} class="model-logo-img" />
+                                        </span>
+                                        <span class="model-option-copy">
+                                            <span class="model-option-label">{model.label}</span>
+                                            <span class="model-option-meta">{model.provider}</span>
+                                        </span>
+                                        <span class="model-tier-badge">{model.creditLabel}</span>
+                                    </button>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+                <template lwc:if={showAnswerDensityToggleEnabled}>
+                    <div class="answer-density-picker-shell">
+                        <button
+                            class={answerDensityButtonClass}
+                            type="button"
+                            onclick={handleAnswerDensityToggle}
+                            aria-haspopup="listbox"
+                            aria-expanded={isAnswerDensityPickerOpen}
+                            aria-label={answerDensityButtonLabel}
+                            title="Choose answer length"
+                        >
+                            <span class="answer-density-avatar" aria-hidden="true">
+                                <lightning-icon icon-name="utility:text" size="x-small"></lightning-icon>
+                            </span>
+                            <span class="answer-density-button-copy">
+                                <span class="answer-density-button-meta">{normalizedAnswerDensityLabel}</span>
+                                <span class="answer-density-button-label">{selectedAnswerDensityLabel}</span>
+                            </span>
+                            <lightning-icon icon-name="utility:chevrondown" size="xx-small" class="model-chevron"></lightning-icon>
+                        </button>
+                        <lightning-helptext content={normalizedAnswerDensityHelpText} class="answer-density-help"></lightning-helptext>
+                        <template lwc:if={isAnswerDensityPickerOpen}>
+                            <div class="model-picker-backdrop" onclick={handleAnswerDensityClose}></div>
+                            <div class="answer-density-popover" role="listbox" aria-label={normalizedAnswerDensityLabel}>
+                                <template for:each={answerDensityPickerItems} for:item="option">
+                                    <button
+                                        key={option.id}
+                                        class={option.itemClass}
+                                        type="button"
+                                        data-density-value={option.value}
+                                        onclick={handleAnswerDensitySelect}
+                                        role="option"
+                                        aria-selected={option.isActive}
+                                    >
+                                        <span class="model-option-check" aria-hidden="true">
+                                            <template lwc:if={option.isActive}>
+                                                <lightning-icon icon-name="utility:check" size="xx-small"></lightning-icon>
+                                            </template>
+                                        </span>
+                                        <span>
+                                            <span class="answer-density-option-label">{option.label}</span>
+                                            <span class="answer-density-option-description">{option.description}</span>
+                                        </span>
+                                    </button>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+            <div class="model-bar-secondary">
+                <template lwc:if={showModelComparisonControls}>
+                    <div class="compare-settings-shell">
+                        <button
+                            class={compareSettingsButtonClass}
+                            type="button"
+                            onclick={handleCompareSettingsToggle}
+                            aria-haspopup="dialog"
+                            aria-expanded={isCompareSettingsOpen}
+                            aria-label={compareSettingsButtonLabel}
+                            title="Configure model comparison"
+                        >
+                            <span class="compare-settings-avatar" aria-hidden="true">
+                                <lightning-icon icon-name="utility:side_list" size="x-small"></lightning-icon>
+                            </span>
+                            <span class="compare-settings-copy">
+                                <span class="compare-settings-label">{compareSettingsLabel}</span>
+                                <span class="compare-settings-meta">{compareSettingsMeta}</span>
+                            </span>
+                            <lightning-icon icon-name="utility:chevrondown" size="xx-small" class="model-chevron"></lightning-icon>
+                        </button>
+                        <template lwc:if={isCompareSettingsOpen}>
+                            <div class="model-picker-backdrop" onclick={handleCompareSettingsClose}></div>
+                            <div class="compare-settings-popover" role="dialog" aria-label="Compare settings">
+                                <div class="compare-settings-popover-header">
+                                    <span class="compare-settings-popover-title">Compare settings</span>
+                                    <span class="compare-settings-popover-summary">{compareSettingsCostLabel}</span>
+                                </div>
+                                <div class="compare-settings-toggle-row">
+                                    <lightning-input
+                                        type="toggle"
+                                        label={modelComparisonLabel}
+                                        checked={useModelComparison}
+                                        onchange={handleModelComparisonToggle}
+                                        message-toggle-active="On"
+                                        message-toggle-inactive="Off"
+                                    ></lightning-input>
+                                </div>
+                                <div class="compare-settings-model-card">
+                                    <span class="compare-settings-model-kicker">Primary model</span>
+                                    <span class="compare-settings-model-name">{selectedModelLabel}</span>
+                                    <span class="compare-settings-model-meta">{selectedModelMeta}</span>
+                                </div>
+                                <template lwc:if={showSecondaryModelPicker}>
+                                    <lightning-combobox
+                                        label="Second model"
+                                        value={secondarySelectedModel}
+                                        options={secondaryModelOptions}
+                                        onchange={handleSecondaryModelChange}
+                                        class="secondary-model-picker"
+                                    ></lightning-combobox>
+                                    <div class="compare-settings-model-card compare-settings-model-card-secondary">
+                                        <span class="compare-settings-model-kicker">Comparing against</span>
+                                        <span class="compare-settings-model-name">{secondaryModelLabel}</span>
+                                        <span class="compare-settings-model-meta">{secondaryModelMeta}</span>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+                <template lwc:if={hasMessages}>
+                    <lightning-button-icon
+                        icon-name="utility:clear"
+                        alternative-text="Clear conversation"
+                        title="Clear conversation"
+                        onclick={handleClearConversation}
+                        class="clear-conversation-btn"
+                        size="small"
+                    ></lightning-button-icon>
+                </template>
+            </div>
         </div>
     </template>
 
@@ -163,12 +254,28 @@
                                             </template>
                                             <lightning-formatted-rich-text value={card.htmlContent} class="message-text"></lightning-formatted-rich-text>
                                             <template lwc:if={card.hasCitations}>
-                                                <div class="citation-list" aria-label="Grounding sources">
-                                                    <span class="citation-list-label">Sources</span>
-                                                    <template for:each={card.citations} for:item="citation">
-                                                        <a key={citation.id} href={citation.href} target="_blank" rel="noopener" class={citation.className} title={citation.summary}>
-                                                            {citation.label}
-                                                        </a>
+                                                <div class="source-disclosure">
+                                                    <button
+                                                        class="source-disclosure-toggle"
+                                                        type="button"
+                                                        data-message-id={msg.id}
+                                                        data-card-id={card.id}
+                                                        onclick={handleToggleComparisonSources}
+                                                        aria-label={card.sourcesAriaLabel}
+                                                        aria-controls={card.sourceDisclosureId}
+                                                        aria-expanded={card.sourcesExpanded}
+                                                    >
+                                                        <lightning-icon icon-name={card.sourcesToggleIcon} size="xx-small"></lightning-icon>
+                                                        <span>{card.sourcesToggleLabel}</span>
+                                                    </button>
+                                                    <template lwc:if={card.sourcesExpanded}>
+                                                        <div class="citation-list" id={card.sourceDisclosureId} aria-label="Grounding sources">
+                                                            <template for:each={card.citations} for:item="citation">
+                                                                <a key={citation.id} href={citation.href} target="_blank" rel="noopener" class={citation.className} title={citation.summary}>
+                                                                    {citation.label}
+                                                                </a>
+                                                            </template>
+                                                        </div>
                                                     </template>
                                                 </div>
                                             </template>
@@ -182,12 +289,27 @@
                                 </template>
                                 <lightning-formatted-rich-text value={msg.htmlContent} class="message-text"></lightning-formatted-rich-text>
                                 <template lwc:if={msg.hasCitations}>
-                                    <div class="citation-list" aria-label="Grounding sources">
-                                        <span class="citation-list-label">Sources</span>
-                                        <template for:each={msg.citations} for:item="citation">
-                                            <a key={citation.id} href={citation.href} target="_blank" rel="noopener" class={citation.className} title={citation.summary}>
-                                                {citation.label}
-                                            </a>
+                                    <div class="source-disclosure">
+                                        <button
+                                            class="source-disclosure-toggle"
+                                            type="button"
+                                            data-message-id={msg.id}
+                                            onclick={handleToggleMessageSources}
+                                            aria-label={msg.sourcesAriaLabel}
+                                            aria-controls={msg.sourceDisclosureId}
+                                            aria-expanded={msg.sourcesExpanded}
+                                        >
+                                            <lightning-icon icon-name={msg.sourcesToggleIcon} size="xx-small"></lightning-icon>
+                                            <span>{msg.sourcesToggleLabel}</span>
+                                        </button>
+                                        <template lwc:if={msg.sourcesExpanded}>
+                                            <div class="citation-list" id={msg.sourceDisclosureId} aria-label="Grounding sources">
+                                                <template for:each={msg.citations} for:item="citation">
+                                                    <a key={citation.id} href={citation.href} target="_blank" rel="noopener" class={citation.className} title={citation.summary}>
+                                                        {citation.label}
+                                                    </a>
+                                                </template>
+                                            </div>
                                         </template>
                                     </div>
                                 </template>
@@ -274,38 +396,54 @@
 
     <!-- Input Area -->
     <div class="input-area slds-p-around_small">
-        <template lwc:if={showUsageGuardrail}>
-            <div class="usage-guardrail" role="status">
-                <strong>Usage guardrail</strong>
-                <ul>
-                    <template for:each={usageGuardrailMessages} for:item="warning">
-                        <li key={warning.id}>{warning.message}</li>
-                    </template>
-                </ul>
-            </div>
-        </template>
-        <template lwc:if={showContextPreviewCard}>
-            <div class="context-preview-card">
-                <button class="collapsible-toggle context-preview-toggle" type="button" onclick={handleToggleContextPreview} aria-label={contextPreviewToggleLabel}>
-                    <span class="collapsible-title">{contextPreview.title}</span>
-                    <span class="collapsible-summary">{contextPreviewSummaryLabel}</span>
-                    <lightning-icon icon-name={contextPreviewToggleIcon} size="xx-small"></lightning-icon>
+        <template lwc:if={showPromptReadinessPanel}>
+            <div class={promptReadinessClass}>
+                <button class="collapsible-toggle prompt-readiness-toggle" type="button" onclick={handleTogglePromptReadiness} aria-label={promptReadinessToggleLabel}>
+                    <span class="collapsible-title">Prompt readiness</span>
+                    <span class="collapsible-summary">{promptReadinessSummaryLabel}</span>
+                    <lightning-icon icon-name={promptReadinessToggleIcon} size="xx-small"></lightning-icon>
                 </button>
-                <template lwc:if={isContextPreviewExpanded}>
-                    <div class="context-preview-details">
-                        <div class="context-preview-header">
-                            <span class="context-preview-record">{contextPreview.objectLabel} · {contextPreview.recordLabel}</span>
-                            <span class="context-preview-mode">{contextPreview.modeLabel}</span>
-                        </div>
-                        <div class="context-preview-grid">
-                            <span>{contextPreview.fieldLabel}</span>
-                            <span>{contextPreview.relationshipLabel}</span>
-                            <span>{contextPreview.parentLabel}</span>
-                            <span>{contextPreview.sourceLabel}</span>
-                            <span>{contextPreview.tokenLabel}</span>
-                        </div>
-                        <template lwc:if={contextPreview.warningLabel}>
-                            <div class="context-preview-warning">{contextPreview.warningLabel}</div>
+                <template lwc:if={isPromptReadinessExpanded}>
+                    <div class="prompt-readiness-details">
+                        <template lwc:if={showUsageGuardrail}>
+                            <div class="usage-guardrail" role="status">
+                                <strong>Usage guardrail</strong>
+                                <ul>
+                                    <template for:each={usageGuardrailMessages} for:item="warning">
+                                        <li key={warning.id}>{warning.message}</li>
+                                    </template>
+                                </ul>
+                            </div>
+                        </template>
+                        <template lwc:if={showCompareCostBanner}>
+                            <div class="compare-cost-banner" role="status">{compareCostEstimateLabel}</div>
+                        </template>
+                        <template lwc:if={showContextPreviewCard}>
+                            <div class="context-preview-card">
+                                <button class="collapsible-toggle context-preview-toggle" type="button" onclick={handleToggleContextPreview} aria-label={contextPreviewToggleLabel}>
+                                    <span class="collapsible-title">{contextPreview.title}</span>
+                                    <span class="collapsible-summary">{contextPreviewSummaryLabel}</span>
+                                    <lightning-icon icon-name={contextPreviewToggleIcon} size="xx-small"></lightning-icon>
+                                </button>
+                                <template lwc:if={isContextPreviewExpanded}>
+                                    <div class="context-preview-details">
+                                        <div class="context-preview-header">
+                                            <span class="context-preview-record">{contextPreview.objectLabel} · {contextPreview.recordLabel}</span>
+                                            <span class="context-preview-mode">{contextPreview.modeLabel}</span>
+                                        </div>
+                                        <div class="context-preview-grid">
+                                            <span>{contextPreview.fieldLabel}</span>
+                                            <span>{contextPreview.relationshipLabel}</span>
+                                            <span>{contextPreview.parentLabel}</span>
+                                            <span>{contextPreview.sourceLabel}</span>
+                                            <span>{contextPreview.tokenLabel}</span>
+                                        </div>
+                                        <template lwc:if={contextPreview.warningLabel}>
+                                            <div class="context-preview-warning">{contextPreview.warningLabel}</div>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
                         </template>
                     </div>
                 </template>

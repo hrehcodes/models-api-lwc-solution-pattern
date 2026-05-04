@@ -138,8 +138,8 @@ public with sharing class RecordAdvisorController {
 
             String selectedModel = String.isNotBlank(modelApiName) ? modelApiName : DEFAULT_MODEL;
             ModelCallResult modelResult = callModelsAPIDetailed(messages, selectedModel);
+            List<GroundingCitation> citations = extractCitations(modelResult.content, sourceRegistry);
             result.response = sanitizeCitationMarkers(modelResult.content, sourceRegistry);
-            List<GroundingCitation> citations = extractCitations(result.response, sourceRegistry);
             result.citations = citations;
             result.modelApiName = modelResult.modelApiName;
             result.modelLabel = getModelDisplayLabel(modelResult.modelApiName);
@@ -190,8 +190,8 @@ public with sharing class RecordAdvisorController {
 
             String selectedModel = String.isNotBlank(modelApiName) ? modelApiName : DEFAULT_MODEL;
             ModelCallResult modelResult = callModelsAPIDetailed(messages, selectedModel);
+            List<GroundingCitation> citations = extractCitations(modelResult.content, sourceRegistry);
             result.response = sanitizeCitationMarkers(modelResult.content, sourceRegistry);
-            List<GroundingCitation> citations = extractCitations(result.response, sourceRegistry);
             result.citations = citations;
             result.modelApiName = modelResult.modelApiName;
             result.modelLabel = getModelDisplayLabel(modelResult.modelApiName);
@@ -378,6 +378,14 @@ public with sharing class RecordAdvisorController {
         guidelines += '- Only the fields listed in the provided record payload are available; do not assume other fields exist, are missing, or contain any particular value.\n';
         guidelines += '- If a question cannot be answered from the available data, say so clearly and explain what data would be needed.\n\n';
 
+        guidelines += '--- Generic Context Signals ---\n';
+        guidelines += '- `contextSignals` and `comparisonSignals`, when present, are deterministic summaries derived from the selected fields and relationships. Use them as an evidence index, not as hidden data.\n';
+        guidelines += '- Apply signals object-agnostically. Do not assume Opportunity, Case, Account, or any other object-specific process unless the payload includes fields or relationships that support that process.\n';
+        guidelines += '- Distinguish absent context from selected-empty context: if a selected relationship returned zero records, you may mention that zero records were included; if a relationship is absent, say it was not provided.\n';
+        guidelines += '- Do not interpret expected, weighted, forecast, or calculated financial values as discounts or pricing concessions unless an explicit discount, rebate, or pricing field is present.\n\n';
+        guidelines += '- Do not treat generic record age or days-since-created fields as time in the current stage/status. Only say a record has been in a stage/status for N days when a field label or API name explicitly indicates days in stage, status age, or last stage/status change.\n';
+        guidelines += '- Do not attribute recommendations to Einstein, predictive, scoring, or discovery fields unless those fields contain explicit nonblank recommendation, prescription, cause, score, or prediction values in the payload.\n\n';
+
         if (includeSourceGrounding) {
             guidelines += '--- Source Citations ---\n';
             guidelines += '- Use only source IDs that appear in `sourceRegistry`.\n';
@@ -410,10 +418,11 @@ public with sharing class RecordAdvisorController {
         Boolean includeSourceGrounding = hasSourceRegistry(recordContextJson);
         String prompt = 'You are Agentforce Record Insights, an AI advisor that helps Salesforce users '
             + 'understand their CRM data.\n\n';
-        prompt += 'You have been given a JSON payload with `selectionSummary` and `recordContext`. '
+        prompt += 'You have been given a JSON payload with `selectionSummary`, optional `contextSignals`, and `recordContext`. '
             + '`selectionSummary` describes which categories, relationships, parent references, '
             + 'and depth were included. '
             + '`sourceRegistry`, when present, lists stable source IDs that can be cited in the final answer. '
+            + '`contextSignals`, when present, summarizes object-agnostic data-quality, timing, status, field, and relationship coverage observations derived from the payload. '
             + '`recordContext` contains the actual grounded field values, related records, parent records, '
             + 'sibling records, and completeness metadata. '
             + 'Field API names map to objects containing a human-readable `label` and `value`. '
@@ -441,7 +450,7 @@ public with sharing class RecordAdvisorController {
         prompt += '=== INSIGHTS-SPECIFIC GUIDELINES ===\n';
         prompt += '- Start with a short fact-grounded executive summary of the most important current state.\n';
         prompt += '- Then provide a `Key observations` section and a separate `Recommended next steps` section.\n';
-        prompt += '- Prioritize actionable insights — surface risks, opportunities, overdue items, and anomalies.\n';
+        prompt += '- Prioritize actionable insights from the object and fields provided — surface risks, opportunities, overdue items, missing data, selected-empty relationships, and anomalies when supported by the context.\n';
         prompt += '- When related records are available, draw connections across them '
             + '(e.g., open cases on an account, recent activities on an opportunity).\n';
         prompt += '- When parent records or sibling records are available, use them to enrich the summary '
@@ -458,10 +467,11 @@ public with sharing class RecordAdvisorController {
         Boolean includeSourceGrounding = hasSourceRegistry(comparisonContextJson);
         String prompt = 'You are Agentforce Record Insights in comparison mode. '
             + 'You help users compare multiple Salesforce records of the same type.\n\n';
-        prompt += 'The JSON payload includes `selectionSummary` and `comparisonContext`. '
+        prompt += 'The JSON payload includes `selectionSummary`, optional `comparisonSignals`, and `comparisonContext`. '
             + '`selectionSummary` describes which categories, relationships, parent references, '
             + 'and depth were included. '
             + '`sourceRegistry`, when present, lists stable source IDs that can be cited in the final answer. '
+            + '`comparisonSignals`, when present, summarizes object-agnostic per-record and cross-record differences derived from the payload. '
             + '`comparisonContext` contains the comparison-level metadata and the list of records. '
             + 'Each record contains `fields` with field API names mapped to objects with a human-readable `label` and `value`. '
             + 'Records may also contain `relatedRecordSets`, `parentRecordContexts`, and `completeness` metadata. '
@@ -494,7 +504,7 @@ public with sharing class RecordAdvisorController {
             + 'Use `relatedRecordSets` only when the user\'s question depends on related-record context.\n';
         prompt += '- If comparison-level or record-level `completeness` metadata indicates warnings, mention that the answer may be incomplete.\n';
         prompt += '- If a field is absent from the payload, treat it as not provided in the current context selection. If it is present with a null or empty value, call that out explicitly — missing data is itself an insight.\n';
-        prompt += '- For prioritization or triage questions, prefer active or open records over closed or completed ones, and weigh urgency, deadlines, business impact, risk signals, next-step clarity, and blockers. If all compared records are closed or completed, say there may be no current execution priority unless the user wants a retrospective comparison.\n';
+        prompt += '- For prioritization or triage questions, prefer records with supported urgency, deadline, status, action-field, related-record, missing-data, or numeric outlier signals. Prefer active/open records over closed/completed records only when those fields exist in the payload. If all compared records are closed or completed, say there may be no current execution priority unless the user wants a retrospective comparison.\n';
         prompt += '- Provide actionable recommendations (e.g., which to prioritize, which needs attention).\n';
 
         return prompt;
@@ -755,8 +765,8 @@ public with sharing class RecordAdvisorController {
             ModelCallResult modelResult = callModelsAPIDetailed(messages, modelApiName);
             result.modelApiName = modelResult.modelApiName;
             result.modelLabel = getModelDisplayLabel(modelResult.modelApiName);
+            result.citations = extractCitations(modelResult.content, sourceRegistry);
             result.response = sanitizeCitationMarkers(modelResult.content, sourceRegistry);
-            result.citations = extractCitations(result.response, sourceRegistry);
             result.latencyMs = modelResult.latencyMs;
             result.estimatedTokens = estimateTokens(contextJson, conversationHistoryJson, userMessage, result.response);
             result.estimatedCredits = estimateCredits(result.estimatedTokens, modelResult.modelApiName);
@@ -849,33 +859,7 @@ public with sharing class RecordAdvisorController {
         if (String.isBlank(responseText)) {
             return responseText;
         }
-        if (sourceRegistry == null || sourceRegistry.isEmpty()) {
-            return responseText.replaceAll('\\s*\\[((?:src\\d+\\s*,\\s*)*src\\d+)\\]', '').trim();
-        }
-
-        Pattern citationGroupPattern = Pattern.compile('\\[((?:src\\d+\\s*,\\s*)*src\\d+)\\]');
-        Matcher matcher = citationGroupPattern.matcher(responseText);
-        String sanitized = '';
-        Integer cursor = 0;
-
-        while (matcher.find()) {
-            sanitized += responseText.substring(cursor, matcher.start());
-            List<String> validSourceIds = new List<String>();
-            Set<String> seen = new Set<String>();
-            for (String token : matcher.group(1).split(',')) {
-                String sourceId = token == null ? null : token.trim();
-                if (String.isNotBlank(sourceId) && sourceRegistry.containsKey(sourceId) && seen.add(sourceId)) {
-                    validSourceIds.add(sourceId);
-                }
-            }
-            if (!validSourceIds.isEmpty()) {
-                sanitized += '[' + String.join(validSourceIds, ', ') + ']';
-            }
-            cursor = matcher.end();
-        }
-
-        sanitized += responseText.substring(cursor);
-        return sanitized.trim();
+        return responseText.replaceAll('\\s*\\[((?:src\\d+\\s*,\\s*)*src\\d+)\\]', '').trim();
     }
 
     private static String stringValue(Object value) {

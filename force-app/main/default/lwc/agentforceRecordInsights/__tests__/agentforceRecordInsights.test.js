@@ -148,6 +148,8 @@ describe('c-agentforce-record-insights', () => {
         element.enableSourceGrounding = true;
         element.enableModelComparison = true;
         element.showContextPreview = true;
+        element.showAnswerDensityToggle = true;
+        element.answerDensityLabel = 'Answer depth';
         element.sessionTokenWarningThreshold = 25;
         element.sessionCreditWarningThreshold = 5;
         element.relatedRecordsPerRelationship = 7;
@@ -177,6 +179,10 @@ describe('c-agentforce-record-insights', () => {
         expect(chatPanel.recordContextJson).toContain('"sourceRegistry"');
         expect(chatPanel.recordContextJson).toContain('"sourceCount"');
         expect(chatPanel.recordContextJson).toContain('"completeness"');
+        expect(chatPanel.recordContextJson).toContain('"contextSignals"');
+        const sharedContextEstimate = Math.max(1, Math.ceil(chatPanel.recordContextJson.length / 4));
+        expect(contextPanel.contextTokenEstimate).toBe(sharedContextEstimate);
+        expect(chatPanel.contextTokenEstimate).toBe(sharedContextEstimate);
         expect(chatPanel.showInlineUsageStatus).toBe(true);
         expect(chatPanel.enableSourceGrounding).toBe(true);
         expect(chatPanel.enableModelComparison).toBe(true);
@@ -186,6 +192,27 @@ describe('c-agentforce-record-insights', () => {
         expect(element.shadowRoot.querySelector('c-record-compare')).not.toBeNull();
         expect(element.shadowRoot.querySelector('c-record-compare').showInlineUsageStatus).toBe(true);
         expect(element.shadowRoot.querySelector('c-record-compare').enableModelComparison).toBe(true);
+        expect(element.shadowRoot.querySelector('c-record-compare').showAnswerDensityToggle).toBe(true);
+        expect(element.shadowRoot.querySelector('c-record-compare').answerDensityLabel).toBe('Answer depth');
+    });
+
+    it('defaults the context panel closed while still passing context to chat', async () => {
+        const element = createElement('c-agentforce-record-insights', {
+            is: AgentforceRecordInsights
+        });
+        element.recordId = '001000000000001AAA';
+        element.objectApiName = 'Account';
+        document.body.appendChild(element);
+
+        getAvailableModelsAdapter.emit([]);
+        await flushPromises();
+
+        expect(element.shadowRoot.querySelector('c-context-panel')).toBeNull();
+        const chatPanel = element.shadowRoot.querySelector('c-chat-panel');
+        expect(chatPanel).not.toBeNull();
+        expect(chatPanel.recordContextJson).toContain('"selectionSummary"');
+        expect(chatPanel.recordContextJson).toContain('"contextSignals"');
+        expect(chatPanel.contextTokenEstimate).toBe(Math.max(1, Math.ceil(chatPanel.recordContextJson.length / 4)));
     });
 
     it('does not mount compare mode in the background when preload compare mode is turned off', async () => {
