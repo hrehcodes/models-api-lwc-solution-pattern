@@ -28,6 +28,12 @@ AI-powered conversational insights grounded in live Salesforce record data. Uses
 | Multi-turn conversation | No | Yes — persistent chat |
 | Works on any object | Per Prompt Template | Broad insights support; compare uses a safe supported-object subset |
 
+## Updates
+
+### UI/UX Refresh
+
+The refreshed experience improves trust and readability with cleaner answer formatting, collapsible source disclosures, context-size visibility, model controls, and a more polished comparison workflow. Special thanks to [Dylan Anderson](https://github.com/dylandersen) for the inspiration behind the UI/UX refresh. Check out Dylan's [Agentforce Workspace](https://github.com/dylandersen/agentforce-workspace) repo to explore more of his incredible solutions and innovations.
+
 ## Architecture
 
 ```text
