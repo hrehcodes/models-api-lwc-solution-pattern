@@ -229,8 +229,8 @@ This source is structured for a namespaced 2GP managed package built from `force
 - Packaging Dev Hub alias: `sflabs`
 - Namespace: `sfpalabs`
 - Package alias: `Agentforce Record Insights` -> `0Hoao0000003KBtCAM`
-- Latest created version: `Agentforce Record Insights@1.3.0-2` -> `04tao000005CUXJAA4`
-- Current package version config in `sfdx-project.json`: `versionName: ver 1.3`, `versionNumber: 1.3.0.NEXT`, `ancestorVersion: 1.2.0.1`
+- Latest created version: `Agentforce Record Insights@2.0.0-1` -> `04tao000005PnCLAA0`
+- Current package version config in `sfdx-project.json`: `versionName: ver 2.0`, `versionNumber: 2.0.0.NEXT`, `ancestorVersion: 1.3.0.1`
 
 ### Packaging prerequisites
 
@@ -278,9 +278,9 @@ sf package version create \
   --definition-file config/project-package-def.json \
   --code-coverage \
   --installation-key-bypass \
-  --version-name "ver 1.3" \
-  --version-number 1.3.0.NEXT \
-  --branch main \
+  --version-name "ver 2.0" \
+  --version-number 2.0.0.NEXT \
+  --branch feature/2gp-managed-packaging \
   --wait 120 \
   --language en_US \
   --target-dev-hub sflabs \
@@ -289,7 +289,7 @@ sf package version create \
 
 After version creation, copy the returned `04t...` version ID into `sfdx-project.json` as the next `Agentforce Record Insights@<major>.<minor>.<patch>-<build>` alias.
 
-This package starts with `1.0.0.1` in `sflabs`. Because patch versioning is not enabled for this namespace, use a new major or minor line such as `1.4.0.NEXT` for future updates unless patch versioning is enabled through Salesforce Partner Support.
+This package starts with `1.0.0.1` in `sflabs`. Because patch versioning is not enabled for this namespace, use a new major or minor line such as `2.1.0.NEXT` for future updates unless patch versioning is enabled through Salesforce Partner Support.
 
 ### Create a clean validation scratch org
 
